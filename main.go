@@ -2512,7 +2512,7 @@ func serveHTML(htmlPath string, port int) error {
 	// Try to open browser
 	go func() {
 		time.Sleep(500 * time.Millisecond)
-		openBrowser(url)
+		openURL(url)
 	}()
 
 	// Setup HTTP handler
@@ -2532,27 +2532,44 @@ func serveHTML(htmlPath string, port int) error {
 	return nil
 }
 
-// openBrowser tries to open the URL in the default browser
-func openBrowser(url string) {
-	var cmd *exec.Cmd
+// https://stackoverflow.com/questions/39320371/how-start-web-server-to-open-page-in-browser-in-golang
+// openURL opens the specified URL in the default browser of the user.
+func openURL(url string) error {
+	var cmd string
+	var args []string
 
-	switch {
-	case fileExists("/usr/bin/xdg-open"):
-		cmd = exec.Command("xdg-open", url)
-	case fileExists("/usr/bin/open"):
-		cmd = exec.Command("open", url)
-	case fileExists("/mnt/c/Windows/System32/cmd.exe"):
-		// WSL
-		cmd = exec.Command("/mnt/c/Windows/System32/cmd.exe", "/c", "start", url)
-	default:
-		log.Printf("Could not detect browser opener. Please open manually: %s", url)
-		return
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start"}
+	case "darwin":
+		cmd = "open"
+	default: // "linux", "freebsd", "openbsd", "netbsd"
+		// Check if running under WSL
+		if isWSL() {
+			// Use 'cmd.exe /c start' to open the URL in the default Windows browser
+			cmd = "cmd.exe"
+			args = []string{"/c", "start", url}
+		} else {
+			// Use xdg-open on native Linux environments
+			cmd = "xdg-open"
+			args = []string{url}
+		}
 	}
+	if len(args) > 1 {
+		// args[0] is used for 'start' command argument, to prevent issues with URLs starting with a quote
+		args = append(args[:1], append([]string{""}, args[1:]...)...)
+	}
+	return exec.Command(cmd, args...).Start()
+}
 
-	if err := cmd.Start(); err != nil {
-		log.Printf("Failed to open browser: %v", err)
-		log.Printf("Please open manually: %s", url)
+// isWSL checks if the Go program is running inside Windows Subsystem for Linux
+func isWSL() bool {
+	releaseData, err := exec.Command("uname", "-r").Output()
+	if err != nil {
+		return false
 	}
+	return strings.Contains(strings.ToLower(string(releaseData)), "microsoft")
 }
 
 // fileExists checks if a file exists
@@ -2757,7 +2774,7 @@ func serveHTMLInteractive(htmlPath string, port int, initialMsg string, skipBrow
 	if !skipBrowserOpen {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
-			openBrowser(url)
+			openURL(url)
 		}()
 	}
 
