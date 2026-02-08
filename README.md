@@ -40,7 +40,7 @@ Two steps, both open in your browser:
 1. **LiveReview API key** — sign in with Hexmos
 2. **Free Gemini API key** — grab one from Google AI Studio
 
-**~1 minute.** After this, *every git repo* on your machine triggers review on commit. No per-repo config needed.
+**~1 minute. One-time setup, machine-wide.** After this, *every git repo* on your machine triggers review on commit. No per-repo config needed.
 
 ## How It Works
 
@@ -126,7 +126,7 @@ No AI review. No personal attestation. The git log will record `skipped`.
 
 ## Git Log Tracking
 
-Every commit gets a **trailer** recording its review status:
+Every commit gets a **review status line** appended to its git log message:
 
 ```
 LiveReview Pre-Commit Check: ran (iter:3, coverage:85%)
@@ -152,7 +152,7 @@ Your team sees *exactly* which commits were reviewed, vouched, or skipped — ri
 | AI reviews the diff? | ✅ Yes | ❌ No | ❌ No |
 | Takes responsibility? | ✅ Yes | ✅ Yes, explicitly | ⚠️ No |
 | Tracks iterations? | ✅ Yes | ✅ Records prior coverage | ❌ No |
-| Git log trailer | `ran (iter:N, coverage:X%)` | `vouched (iter:N, coverage:X%)` | `skipped` |
+| Git log message | `ran (iter:N, coverage:X%)` | `vouched (iter:N, coverage:X%)` | `skipped` |
 | When to use | Each review cycle | Done iterating, ready to commit | Not reviewing this commit |
 
 **Review** is the default. AI analyzes your staged diff and gives inline feedback. Each review is one iteration in the change–review cycle.
@@ -207,10 +207,6 @@ If it helps you — **share it with your developer friends.** The more people re
 
 ⭐ **[Star this repo](https://github.com/HexmosTech/git-lrc)** to help others discover it.
 
-## For Teams: LiveReview
-
-> Using `git-lrc` solo? Great. Building with a team? Check out **[LiveReview](https://hexmos.com/livereview)** — the full suite for team-wide AI code review, with dashboards, org-level policies, and review analytics. Everything `git-lrc` does, plus team coordination.
-
 
 ## License
 
@@ -229,3 +225,9 @@ If it helps you — **share it with your developer friends.** The more people re
 
 For detailed terms, examples of permitted and prohibited uses, and definitions, see the full
 [LICENSE.md](LICENSE.md).
+
+---
+
+## For Teams: LiveReview
+
+> Using `git-lrc` solo? Great. Building with a team? Check out **[LiveReview](https://hexmos.com/livereview)** — the full suite for team-wide AI code review, with dashboards, org-level policies, and review analytics. Everything `git-lrc` does, plus team coordination.
