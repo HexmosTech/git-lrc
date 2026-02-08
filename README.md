@@ -15,8 +15,6 @@ AI agents write code fast. They also *silently remove logic*, change behavior, a
 - 🔁 **Build a habit, ship better code.** Regular review → fewer bugs → more robust code → better results in your team.
 - 🔗 **Why git?** Git is universal. Every editor, every IDE, every AI toolkit uses it. Committing is mandatory. So there's *no chance of missing a review* — regardless of your stack.
 
----
-
 ## Install
 
 **Linux / macOS:**
@@ -33,8 +31,6 @@ iwr -useb https://hexmos.com/lrc-install.ps1 | iex
 
 Binary installed. Hooks set up globally. Done.
 
----
-
 ## Setup
 
 ```bash
@@ -47,8 +43,6 @@ Two steps, both open in your browser:
 2. **Free Gemini API key** — grab one from Google AI Studio
 
 **~1 minute.** After this, *every git repo* on your machine triggers review on commit. No per-repo config needed.
-
----
 
 ## How It Works
 
@@ -99,8 +93,6 @@ Either way, a web UI opens in your browser.
 📎 Screenshot: Pre-commit bar showing Commit / Commit & Push / Skip buttons
 ```
 
----
-
 ## The Review Cycle
 
 Typical workflow with AI-generated code:
@@ -134,8 +126,6 @@ lrc review --skip
 
 No AI review. No personal attestation. The git log will record `skipped`.
 
----
-
 ## Git Log Tracking
 
 Every commit gets a **trailer** recording its review status:
@@ -154,8 +144,6 @@ LiveReview Pre-Commit Check: skipped
 - **`coverage`** — percentage of the final diff already AI-reviewed in prior iterations. `coverage:85%` = only 15% of the code is unreviewed.
 
 Your team sees *exactly* which commits were reviewed, vouched, or skipped — right in `git log`.
-
----
 
 ## FAQ
 
@@ -193,8 +181,6 @@ lrc review --commit HEAD       # review the last commit
 lrc review --commit HEAD~3..HEAD  # review a range
 ```
 
----
-
 ## Quick Reference
 
 | Command | Description |
@@ -211,8 +197,6 @@ lrc review --commit HEAD~3..HEAD  # review a range
 
 > **Tip:** `git lrc <command>` and `lrc <command>` are interchangeable.
 
----
-
 ## It's Free. Share It.
 
 `git-lrc` is **completely free.** No credit card. No trial. No catch.
@@ -220,8 +204,6 @@ lrc review --commit HEAD~3..HEAD  # review a range
 If it helps you — **share it with your developer friends.** The more people review AI-generated code, the fewer bugs make it to production.
 
 ⭐ **[Star this repo](https://github.com/HexmosTech/git-lrc)** to help others discover it.
-
----
 
 ## For Teams: LiveReview
 
