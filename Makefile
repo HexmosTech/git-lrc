@@ -1,10 +1,13 @@
-.PHONY: build build-all build-local run bump release clean test
+.PHONY: build build-all build-local run bump release clean test upload-secrets download-secrets
 
 # Go parameters
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOTEST=$(GOCMD) test
 BINARY_NAME=lrc
+GH_REPO=HexmosTech/git-lrc
+GH=/usr/bin/gh
+ENV_VARS=B2_KEY_ID B2_APP_KEY B2_BUCKET_NAME B2_BUCKET_ID
 
 # Build lrc for the current platform
 build:
@@ -51,3 +54,35 @@ clean:
 # Run tests
 test:
 	$(GOTEST) -count=1 ./...
+
+# Upload .env variables to GitHub repo variables
+upload-secrets:
+	@if [ ! -f .env ]; then echo "Error: .env file not found"; exit 1; fi
+	@echo "Uploading .env to GitHub variables for $(GH_REPO)..."
+	@$(GH) variable set -f .env --repo $(GH_REPO)
+	@echo "✅ Uploaded. Current GitHub variables:"
+	@$(GH) variable list --repo $(GH_REPO)
+
+# Download GitHub repo variables to .env
+download-secrets:
+	@if [ -f .env ]; then \
+		echo "⚠️  .env already exists (modified: $$(stat -c '%y' .env 2>/dev/null || stat -f '%Sm' .env 2>/dev/null))"; \
+		printf "Overwrite? [y/N]: "; \
+		read ans; \
+		if [ "$$ans" != "y" ] && [ "$$ans" != "Y" ]; then \
+			echo "Aborted."; \
+			exit 1; \
+		fi; \
+	fi
+	@echo "Downloading GitHub variables for $(GH_REPO) to .env..."
+	@rm -f .env.tmp
+	@for var in $(ENV_VARS); do \
+		val=$$($(GH) variable get $$var --repo $(GH_REPO) 2>/dev/null); \
+		if [ $$? -eq 0 ]; then \
+			echo "$$var=$$val" >> .env.tmp; \
+		else \
+			echo "⚠️  Variable $$var not found on GitHub"; \
+		fi; \
+	done
+	@mv .env.tmp .env
+	@echo "✅ Downloaded to .env"

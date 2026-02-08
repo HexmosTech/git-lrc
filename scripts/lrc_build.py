@@ -36,13 +36,12 @@ PLATFORMS = [
     ("windows", "amd64"),
 ]
 
-# B2 configuration (hardcoded for hexmos/lrc)
+# B2 configuration
 B2_API_BASE = "https://api.backblazeb2.com"
-B2_KEY_ID = "REDACTED_B2_KEY_ID"  # Application Key ID
-B2_APP_KEY = "REDACTED_B2_APP_KEY"  # Application Key (secret)
-B2_BUCKET_NAME = "hexmos"
-B2_BUCKET_ID = "REDACTED_B2_BUCKET_ID"  # Bucket ID (key has write access to lrc/ folder only)
 B2_UPLOAD_PATH_PREFIX = "lrc"  # Files go to hexmos/lrc/<version>/
+
+# These are loaded from .env file (see .env.example)
+B2_ENV_VARS = ["B2_KEY_ID", "B2_APP_KEY", "B2_BUCKET_NAME", "B2_BUCKET_ID"]
 
 
 class LRCBuilder:
@@ -53,6 +52,34 @@ class LRCBuilder:
         self.project_root = Path(__file__).parent.parent.resolve()
         self.lrc_path = self.project_root / LRC_SOURCE_PATH
         self.dist_dir = self.project_root / BUILD_OUTPUT_DIR
+        self._load_dotenv()
+
+    def _load_dotenv(self):
+        """Load .env file from project root into os.environ (existing vars take precedence)"""
+        env_file = self.project_root / ".env"
+        if not env_file.exists():
+            return
+        with open(env_file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+                # Don't override existing environment variables
+                if key not in os.environ:
+                    os.environ[key] = value
+
+    def _validate_b2_config(self):
+        """Validate that all required B2 env vars are set"""
+        missing = [v for v in B2_ENV_VARS if not os.environ.get(v)]
+        if missing:
+            print(f"Error: Missing B2 configuration: {', '.join(missing)}")
+            print(f"Create a .env file in the project root (see .env.example)")
+            sys.exit(1)
 
     def log(self, message: str, force: bool = False):
         """Print message if verbose or force"""
@@ -297,7 +324,7 @@ class LRCBuilder:
         
         return built_files
 
-    def authorize_b2(self, app_key: str) -> Dict:
+    def authorize_b2(self) -> Dict:
         """Authorize with B2 and get auth token"""
         self.log("Authorizing with Backblaze B2...")
         
@@ -305,7 +332,7 @@ class LRCBuilder:
         
         response = requests.get(
             url,
-            auth=(B2_KEY_ID, app_key),
+            auth=(os.environ["B2_KEY_ID"], os.environ["B2_APP_KEY"]),
             timeout=30
         )
         
@@ -403,31 +430,19 @@ class LRCBuilder:
         return response.json()
 
     def upload_to_b2(self, files: List[Tuple[Path, str]], version: str):
-        """Upload all built files to B2 using hardcoded credentials
+        """Upload all built files to B2 using credentials from .env
         
         Args:
             files: List of (binary_path, platform_dir) tuples
             version: Semantic version string (e.g., "v1.0.0")
         """
+        self._validate_b2_config()
         self.log("Starting B2 upload...", force=True)
         
-        # Get application key (from environment or hardcoded value)
-        app_key = os.environ.get("B2_APP_KEY") or B2_APP_KEY
-        if not app_key:
-            print("Error: B2_APP_KEY not set")
-            print("Either set environment variable: export B2_APP_KEY=your_secret_key")
-            print("Or update B2_APP_KEY in scripts/lrc_build.py")
-            sys.exit(1)
+        # Authorize with credentials from .env
+        auth_data = self.authorize_b2()
         
-        # Authorize with credentials
-        auth_data = self.authorize_b2(app_key)
-        
-        # Use hardcoded bucket ID (key doesn't have listBuckets permission)
-        bucket_id = B2_BUCKET_ID
-        if not bucket_id:
-            print("Error: B2_BUCKET_ID not set in scripts/lrc_build.py")
-            sys.exit(1)
-        
+        bucket_id = os.environ["B2_BUCKET_ID"]
         self.log(f"Using bucket ID: {bucket_id}")
         
         # Upload each platform's files (binary + SHA256SUMS)
@@ -449,7 +464,7 @@ class LRCBuilder:
                 self.upload_file_to_b2(upload_data, sums_file, b2_sums_name)
         
         # Construct public download URLs
-        download_base = f"https://f005.backblazeb2.com/file/{B2_BUCKET_NAME}/{B2_UPLOAD_PATH_PREFIX}/{version}"
+        download_base = f"https://f005.backblazeb2.com/file/{os.environ['B2_BUCKET_NAME']}/{B2_UPLOAD_PATH_PREFIX}/{version}"
         
         self.log(f"\n✓ Upload complete! Files available at:", force=True)
         self.log(f"  {download_base}/", force=True)
