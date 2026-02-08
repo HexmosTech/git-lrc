@@ -241,8 +241,8 @@ func runSetup(c *cli.Context) error {
 	slog := newSetupLog()
 
 	fmt.Println()
-	fmt.Printf("  %s%s🔧 LiveReview CLI Setup%s\n", clr(cBold), clr(cCyan), clr(cReset))
-	fmt.Printf("  %s─────────────────────────%s\n", clr(cDim), clr(cReset))
+	fmt.Printf("  %s%s🔧 git-lrc setup%s\n", clr(cBold), clr(cCyan), clr(cReset))
+	fmt.Printf("  %s───────────────────%s\n", clr(cDim), clr(cReset))
 	fmt.Println()
 
 	// Phase 0: Backup existing config if present
@@ -275,7 +275,7 @@ func runSetup(c *cli.Context) error {
 	fmt.Println()
 	slog.write("phase 2: prompting for gemini key")
 
-	openBrowser(geminiKeysURL)
+	openURL(geminiKeysURL)
 
 	geminiKey, err := promptGeminiKey(result, slog)
 	if err != nil {
@@ -435,7 +435,7 @@ func runHexmosLoginFlow(slog *setupLog) (*setupResult, error) {
 	fmt.Println()
 	slog.write("local server on port %d, signin url: %s", port, signinURL)
 
-	openBrowser(localURL)
+	openURL(localURL)
 
 	// Wait for callback or timeout
 	var cbData *hexmosCallbackData
@@ -752,8 +752,9 @@ func printSetupSuccess(result *setupResult) {
 	if result.OrgName != "" {
 		fmt.Printf("  %s🏢 Org:%s      %s\n", clr(cBold), clr(cReset), result.OrgName)
 	}
-	fmt.Printf("  %s🔑 API Key:%s  %s%s%s %s(~/.lrc.toml)%s\n", clr(cBold), clr(cReset), clr(cYellow), keyPreview, clr(cReset), clr(cDim), clr(cReset))
+	fmt.Printf("  %s🔑 API Key:%s  %s%s%s\n", clr(cBold), clr(cReset), clr(cYellow), keyPreview, clr(cReset))
 	fmt.Printf("  %s🤖 AI:%s       Gemini connector %s(%s)%s\n", clr(cBold), clr(cReset), clr(cDim), defaultGeminiModel, clr(cReset))
+	fmt.Printf("  %s📁 Config:%s   %s~/.lrc.toml%s\n", clr(cBold), clr(cReset), clr(cCyan), clr(cReset))
 	fmt.Println()
 	fmt.Printf("  %sIn a git repo with staged changes:%s\n", clr(cDim), clr(cReset))
 	fmt.Println()
