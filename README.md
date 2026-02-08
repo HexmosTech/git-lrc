@@ -2,7 +2,7 @@
 
 **Check AI-Generated Code With Git Hooks**
 
-AI agents write code fast. They also *silently remove logic*, change behavior, and introduce bugs — without telling you. You often find out in production.
+AI agents write code fast. They also *silently remove logic*, change behavior, and introduce bugs -- without telling you. You often find out in production.
 
 **`git-lrc` fixes this.** It hooks into `git commit` and reviews every diff *before* it lands. 60-second setup. Completely free.
 
@@ -174,15 +174,15 @@ Only the **staged diff** is analyzed. No full repository context is uploaded, an
 ### Can I disable it for a specific repo?
 
 ```bash
-lrc hooks disable   # disable for current repo
-lrc hooks enable    # re-enable later
+git lrc hooks disable   # disable for current repo
+git lrc hooks enable    # re-enable later
 ```
 
 ### Can I review an older commit?
 
 ```bash
-lrc review --commit HEAD       # review the last commit
-lrc review --commit HEAD~3..HEAD  # review a range
+git lrc review --commit HEAD       # review the last commit
+git lrc review --commit HEAD~3..HEAD  # review a range
 ```
 
 ## Quick Reference
