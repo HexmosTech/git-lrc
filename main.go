@@ -376,6 +376,11 @@ func main() {
 				Hidden: true,
 				Action: runAttestationTrailer,
 			},
+			{
+				Name:   "setup",
+				Usage:  "Guided onboarding — authenticate with Hexmos and configure LiveReview + AI",
+				Action: runSetup,
+			},
 		},
 		Action: runReviewSimple,
 	}
