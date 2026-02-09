@@ -6,6 +6,12 @@ AI agents write code fast. They also *silently remove logic*, change behavior, a
 
 **`git-lrc` fixes this.** It hooks into `git commit` and reviews every diff *before* it lands. 60-second setup. Completely free.
 
+## See It In Action
+
+> A deliberately invalid Go line is staged for commit. **`git lrc` catches it and blocks the commit** before it ever lands.
+
+https://github.com/user-attachments/assets/b01e375a-2159-4bad-8987-0609e3746017
+
 ## Why
 
 - 🤖 **AI agents silently break things.** Code removed. Logic changed. Edge cases gone. You won't notice until production.
