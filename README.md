@@ -44,6 +44,10 @@ Binary installed. Hooks set up globally. Done.
 git lrc setup
 ```
 
+Here's a quick video of how setup works:
+
+https://github.com/user-attachments/assets/392a4605-6e45-42ad-b2d9-6435312444b5
+
 Two steps, both open in your browser:
 
 1. **LiveReview API key** — sign in with Hexmos
