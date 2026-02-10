@@ -544,17 +544,18 @@ func applyDefaultHTMLServe(opts *reviewOptions) (string, error) {
 }
 
 // pickServePort tries the requested port, then increments by 1 up to maxTries to find a free port.
-func pickServePort(preferredPort, maxTries int) (int, error) {
+// It returns the listener itself (kept open) to avoid TOCTOU races where another
+// process grabs the port between the check and the actual server start.
+func pickServePort(preferredPort, maxTries int) (net.Listener, int, error) {
 	for i := 0; i < maxTries; i++ {
 		candidate := preferredPort + i
 		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", candidate))
 		if err == nil {
-			ln.Close()
-			return candidate, nil
+			return ln, candidate, nil
 		}
 	}
 
-	return 0, fmt.Errorf("no available port found starting from %d", preferredPort)
+	return nil, 0, fmt.Errorf("no available port found starting from %d", preferredPort)
 }
 
 func runReviewWithOptions(opts reviewOptions) error {
@@ -832,7 +833,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 		reviewStateMu.Unlock()
 
 		// Start serving immediately in background
-		selectedPort, err := pickServePort(opts.port, 10)
+		serveListener, selectedPort, err := pickServePort(opts.port, 10)
 		if err != nil {
 			return fmt.Errorf("failed to find available port: %w", err)
 		}
@@ -978,10 +979,9 @@ func runReviewWithOptions(opts reviewOptions) error {
 				w.Write(bodyBytes)
 			})
 			server := &http.Server{
-				Addr:    fmt.Sprintf(":%d", opts.port),
 				Handler: mux,
 			}
-			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			if err := server.Serve(serveListener); err != nil && err != http.ErrServerClosed {
 				if verbose {
 					log.Printf("Background server error: %v", err)
 				}
@@ -1222,8 +1222,11 @@ func runReviewWithOptions(opts reviewOptions) error {
 		htmlPath := opts.saveHTML
 
 		// Only pick a new port if progressive loading is NOT active (server not already running)
+		var nonProgressiveListener net.Listener
 		if !progressiveLoadingActive {
-			selectedPort, err := pickServePort(opts.port, 10)
+			var selectedPort int
+			var err error
+			nonProgressiveListener, selectedPort, err = pickServePort(opts.port, 10)
 			if err != nil {
 				return fmt.Errorf("failed to find available port: %w", err)
 			}
@@ -1316,7 +1319,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 				}
 			} else {
 				// No progressive loading - use normal serveHTMLInteractive
-				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.port, initialMsg, false)
+				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.port, nonProgressiveListener, initialMsg, false)
 				if err != nil {
 					return err
 				}
@@ -1382,7 +1385,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 		if !progressiveLoadingActive {
 			serveURL := fmt.Sprintf("http://localhost:%d", opts.port)
 			fmt.Printf("Serving HTML review at: %s\n", highlightURL(serveURL))
-			if err := serveHTML(htmlPath, opts.port); err != nil {
+			if err := serveHTML(htmlPath, opts.port, nonProgressiveListener); err != nil {
 				return fmt.Errorf("failed to serve HTML: %w", err)
 			}
 		} else {
@@ -2496,7 +2499,7 @@ func saveHTMLOutput(path string, result *diffReviewResponse, verbose bool, inter
 // renderHTMLFile renders a single file's diff and comments as HTML
 
 // serveHTML starts an HTTP server to serve the HTML file
-func serveHTML(htmlPath string, port int) error {
+func serveHTML(htmlPath string, port int, ln net.Listener) error {
 	absPath, err := filepath.Abs(htmlPath)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %w", err)
@@ -2526,9 +2529,9 @@ func serveHTML(htmlPath string, port int) error {
 		http.ServeFile(w, r, absPath)
 	})
 
-	// Start server
-	addr := fmt.Sprintf(":%d", port)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	// Start server using the already-open listener to avoid TOCTOU port races
+	server := &http.Server{Handler: mux}
+	if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("server error: %w", err)
 	}
 
@@ -2757,7 +2760,7 @@ func readCommitMessageFromRequest(r *http.Request) string {
 // serveHTMLInteractive serves HTML and waits for user decision
 // Returns decision details (code: 0 commit, 1 abort, 2 skip-from-terminal, 3 skip-from-HTML)
 // skipBrowserOpen: set to true if browser is already open (e.g., from progressive loading)
-func serveHTMLInteractive(htmlPath string, port int, initialMsg string, skipBrowserOpen bool) (int, string, bool, error) {
+func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, skipBrowserOpen bool) (int, string, bool, error) {
 	absPath, err := filepath.Abs(htmlPath)
 	if err != nil {
 		return 1, "", false, fmt.Errorf("failed to get absolute path: %w", err)
@@ -2836,15 +2839,14 @@ func serveHTMLInteractive(htmlPath string, port int, initialMsg string, skipBrow
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// Start server in background
+	// Start server in background using the already-open listener
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
 		Handler: mux,
 	}
 
 	serverReady := make(chan bool, 1)
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Printf("Server error: %v", err)
 		}
 	}()
