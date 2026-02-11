@@ -11,7 +11,7 @@ AI agents write code fast. They also *silently remove logic*, change behavior, a
 > See git-lrc catch serious security issues such as leaked credentials, expensive cloud
 > operations, and sensitive material in log statements
 
-https://github.com/user-attachments/assets/534f9630-5f52-4031-9157-2614e1dc6d47
+https://github.com/user-attachments/assets/1b4984c9-b21b-4bad-9d39-1ace6ee4e054
 
 
 
