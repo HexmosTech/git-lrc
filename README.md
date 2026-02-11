@@ -8,9 +8,11 @@ AI agents write code fast. They also *silently remove logic*, change behavior, a
 
 ## See It In Action
 
-> A deliberately invalid Go line is staged for commit. **`git lrc` catches it and blocks the commit** before it ever lands.
+> See git-lrc catch serious security issues such as leaked credentials, expensive cloud
+> operations, and sensitive material in log statements
 
-https://github.com/user-attachments/assets/1f1c2cc6-2679-4eba-b2ab-d597ed2907f8
+https://github.com/user-attachments/assets/534f9630-5f52-4031-9157-2614e1dc6d47
+
 
 
 ## Why
