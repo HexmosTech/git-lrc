@@ -45,6 +45,15 @@ var (
 	reviewStateMu      sync.RWMutex
 )
 
+// Decision codes for interactive review flow.
+const (
+	decisionCommit  = 0 // proceed with commit
+	decisionAbort   = 1 // abort commit
+	decisionSkip    = 2 // skip review, proceed with commit
+	decisionSkipWeb = 3 // skip requested from web UI, abort commit
+	decisionVouch   = 4 // vouch for changes, proceed with commit
+)
+
 // diffReviewRequest models the POST payload to /api/v1/diff-review
 type diffReviewRequest struct {
 	DiffZipBase64 string `json:"diff_zip_base64"`
@@ -194,7 +203,7 @@ var baseFlags = []cli.Flag{
 	},
 	&cli.BoolFlag{
 		Name:    "precommit",
-		Usage:   "pre-commit mode: interactive prompts for commit decision (Ctrl-C=abort, Ctrl-S=skip+commit, Enter=commit)",
+		Usage:   "pre-commit mode: interactive prompts for commit decision (Ctrl-C=abort, Ctrl-S=skip+commit, Ctrl-V=vouch+commit, Enter=commit)",
 		Value:   false,
 		EnvVars: []string{"LRC_PRECOMMIT"},
 	},
@@ -901,7 +910,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 					return
 				}
 				msg := readCommitMessageFromRequest(r)
-				progressiveDecide(0, msg, false)
+				progressiveDecide(decisionCommit, msg, false)
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("ok"))
 			})
@@ -911,7 +920,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 					return
 				}
 				msg := readCommitMessageFromRequest(r)
-				progressiveDecide(0, msg, true)
+				progressiveDecide(decisionCommit, msg, true)
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("ok"))
 			})
@@ -920,7 +929,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
 				}
-				progressiveDecide(3, "", false)
+				progressiveDecide(decisionSkipWeb, "", false)
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("ok"))
 			})
@@ -1035,7 +1044,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-		decisionChan := make(chan int, 1) // 0 commit, 1 abort, 2 skip-review (proceed)
+		decisionChan := make(chan int, 1)
 		stopCtrlS := make(chan struct{})
 		var stopCtrlSOnce sync.Once
 		stopCtrlSFn := func() { stopCtrlSOnce.Do(func() { close(stopCtrlS) }) }
@@ -1043,7 +1052,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 		// Ctrl-C -> abort commit
 		go func() {
 			<-sigChan
-			decisionChan <- 1
+			decisionChan <- decisionAbort
 		}()
 
 		// Ctrl-S -> skip review but still commit; Ctrl-C captured in raw mode fallback
@@ -1054,7 +1063,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 			}
 		}()
 
-		fmt.Println("💡 Press Ctrl-C to abort commit, or Ctrl-S to skip review and commit")
+		fmt.Println("💡 Press Ctrl-C to abort, Ctrl-S to skip, or Ctrl-V to vouch and commit")
 		os.Stdout.Sync()
 
 		// Poll concurrently and race with decisions
@@ -1116,49 +1125,37 @@ func runReviewWithOptions(opts reviewOptions) error {
 				reviewStateMu.Unlock()
 			}
 			attestationAction = "reviewed"
-			// Record review in DB and compute coverage
-			var reviewCov coverageResult
-			parsedFilesForCov, parseFilesErr := parseDiffToFiles(diffContent)
-			if parseFilesErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not parse diff for coverage tracking: %v\n", parseFilesErr)
-			} else {
-				var covErr error
-				reviewCov, covErr = recordAndComputeCoverage("reviewed", parsedFilesForCov, reviewID, verbose)
-				if covErr != nil {
-					fmt.Fprintf(os.Stderr, "Warning: coverage computation failed: %v\n", covErr)
-				}
-			}
-			if reviewCov.Iterations == 0 {
-				reviewCov.Iterations = 1
-			}
-			if err := ensureAttestationFull(attestationPayload{
-				Action:           attestationAction,
-				Iterations:       reviewCov.Iterations,
-				PriorAICovPct:    reviewCov.PriorAICovPct,
-				PriorReviewCount: reviewCov.PriorReviewCount,
-			}, verbose, &attestationWritten); err != nil {
-				return err
+			if err := recordCoverageAndAttest("reviewed", diffContent, reviewID, verbose, &attestationWritten); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 			}
 		}
 
 		// If a decision happened before we proceed, act now
 		if decisionCode != -1 {
 			switch decisionCode {
-			case 1:
+			case decisionAbort:
 				fmt.Println("\n❌ Review and commit aborted by user")
 				fmt.Println()
-				return cli.Exit("", decisionCode)
-			case 2:
+				return cli.Exit("", decisionAbort)
+			case decisionSkip:
 				fmt.Println("\n⏭️  Review skipped, proceeding with commit")
 				if err := ensureAttestation("skipped", verbose, &attestationWritten); err != nil {
 					return err
 				}
 				fmt.Println()
-				return cli.Exit("", decisionCode)
-			case 3:
+				return cli.Exit("", decisionSkip)
+			case decisionSkipWeb:
 				fmt.Println("\n⏭️  Skip requested from review page; aborting commit")
 				fmt.Println()
-				return cli.Exit("", decisionCode)
+				return cli.Exit("", decisionSkipWeb)
+			case decisionVouch:
+				fmt.Println("\n✅ Vouched — proceeding with commit")
+				if err := recordCoverageAndAttest("vouched", diffContent, reviewID, verbose, &attestationWritten); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: vouch failed: %v\n", err)
+					return cli.Exit("", decisionAbort)
+				}
+				fmt.Println()
+				return cli.Exit("", decisionSkip) // exit code 2: proceed with commit
 			}
 		}
 	}
@@ -1257,13 +1254,13 @@ func runReviewWithOptions(opts reviewOptions) error {
 
 				go func() {
 					<-sigChan
-					progressiveDecide(1, "", false) // abort
+					progressiveDecide(decisionAbort, "", false) // abort
 				}()
 
 				go func() {
 					tty, err := os.Open("/dev/tty")
 					if err != nil {
-						progressiveDecide(1, "", false) // fail on terminal error
+						progressiveDecide(decisionAbort, "", false) // fail on terminal error
 						return
 					}
 					defer tty.Close()
@@ -1277,7 +1274,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 						reader := bufio.NewReader(tty)
 						input, err := reader.ReadString('\n')
 						if err != nil {
-							progressiveDecide(1, "", false) // abort on read error
+							progressiveDecide(decisionAbort, "", false) // abort on read error
 							return
 						}
 						msg = strings.TrimSpace(input)
@@ -1286,11 +1283,11 @@ func runReviewWithOptions(opts reviewOptions) error {
 						reader := bufio.NewReader(tty)
 						_, err := reader.ReadString('\n')
 						if err != nil {
-							progressiveDecide(1, "", false) // abort on read error
+							progressiveDecide(decisionAbort, "", false) // abort on read error
 							return
 						}
 					}
-					progressiveDecide(0, msg, false) // commit with entered/initial message
+					progressiveDecide(decisionCommit, msg, false) // commit with entered/initial message
 				}()
 
 				// Wait for decision from either HTTP endpoint or terminal
@@ -1301,10 +1298,10 @@ func runReviewWithOptions(opts reviewOptions) error {
 				}
 
 				switch decision.code {
-				case 1:
+				case decisionAbort:
 					fmt.Println("\n❌ Commit aborted by user")
 					return cli.Exit("", decision.code)
-				case 0:
+				case decisionCommit:
 					finalMsg := strings.TrimSpace(decision.message)
 					if finalMsg == "" {
 						finalMsg = strings.TrimSpace(initialMsg)
@@ -1576,6 +1573,30 @@ type attestationPayload struct {
 
 func ensureAttestation(action string, verbose bool, written *bool) error {
 	return ensureAttestationFull(attestationPayload{Action: action}, verbose, written)
+}
+
+// recordCoverageAndAttest parses the diff, records a review session with coverage stats,
+// and writes a full attestation. Used by both the "reviewed" and "vouched" interactive paths.
+func recordCoverageAndAttest(action string, diffContent []byte, reviewID string, verbose bool, attestationWritten *bool) error {
+	parsedFiles, parseErr := parseDiffToFiles(diffContent)
+	if parseErr != nil {
+		return fmt.Errorf("could not parse diff for coverage tracking: %w", parseErr)
+	}
+	cov, covErr := recordAndComputeCoverage(action, parsedFiles, reviewID, verbose)
+	if covErr != nil {
+		return fmt.Errorf("coverage computation failed: %w", covErr)
+	}
+	// Iterations may be 0 when this is the first session on the branch
+	// (no prior history); ensure at least 1 so attestation reflects the current action.
+	if cov.Iterations == 0 {
+		cov.Iterations = 1
+	}
+	return ensureAttestationFull(attestationPayload{
+		Action:           action,
+		Iterations:       cov.Iterations,
+		PriorAICovPct:    cov.PriorAICovPct,
+		PriorReviewCount: cov.PriorReviewCount,
+	}, verbose, attestationWritten)
 }
 
 func ensureAttestationFull(payload attestationPayload, verbose bool, written *bool) error {
@@ -2614,8 +2635,8 @@ func sanitizeInitialMessage(msg string) string {
 	return result
 }
 
-// handleCtrlKeyWithCancel sets up raw terminal mode to detect Ctrl-S (skip) and Ctrl-C (abort)
-// Returns decision codes: 2 for Ctrl-S, 1 for Ctrl-C, 0 if nothing, or error on cancellation/failure
+// handleCtrlKeyWithCancel sets up raw terminal mode to detect Ctrl-S (skip), Ctrl-V (vouch), and Ctrl-C (abort).
+// Returns a decision code constant or 0 on cancellation/failure.
 func handleCtrlKeyWithCancel(stop <-chan struct{}) (int, error) {
 	// Try to open /dev/tty directly
 	tty, err := os.Open("/dev/tty")
@@ -2634,39 +2655,37 @@ func handleCtrlKeyWithCancel(stop <-chan struct{}) (int, error) {
 	// Ensure restoration on exit
 	defer term.Restore(fd, oldState)
 
-	// Read bytes looking for Ctrl-S (0x13) or cancellation
 	buf := make([]byte, 1)
-	readChan := make(chan error, 1)
+	codeChan := make(chan int, 1)
+	errChan := make(chan error, 1)
 
 	go func() {
 		for {
 			n, err := tty.Read(buf)
 			if err != nil || n == 0 {
-				readChan <- err
+				errChan <- err
 				return
 			}
 			switch buf[0] {
-			case 0x13: // Ctrl-S (XOFF)
-				readChan <- nil
-				return
 			case 0x03: // Ctrl-C (ETX)
-				readChan <- fmt.Errorf("ctrl-c")
+				codeChan <- decisionAbort
+				return
+			case 0x13: // Ctrl-S (XOFF)
+				codeChan <- decisionSkip
+				return
+			case 0x16: // Ctrl-V (SYN)
+				codeChan <- decisionVouch
 				return
 			}
 		}
 	}()
 
 	select {
-	case err := <-readChan:
-		if err == nil {
-			return 2, nil
-		}
-		if err.Error() == "ctrl-c" {
-			return 1, nil
-		}
+	case code := <-codeChan:
+		return code, nil
+	case err := <-errChan:
 		return 0, err
 	case <-stop:
-		// Cancelled - restore terminal and return error
 		return 0, fmt.Errorf("cancelled")
 	}
 }
@@ -2798,7 +2817,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		push    bool
 	}
 
-	decisionChan := make(chan precommitDecision, 1) // 0=commit,2=skip-from-terminal,1=abort,3=skip-from-HTML-abort, push flag handled separately
+	decisionChan := make(chan precommitDecision, 1)
 	var decideOnce sync.Once
 	decide := func(code int, message string, push bool) {
 		decideOnce.Do(func() {
@@ -2813,7 +2832,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			return
 		}
 		msg := readCommitMessageFromRequest(r)
-		decide(0, msg, false)
+		decide(decisionCommit, msg, false)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -2824,7 +2843,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			return
 		}
 		msg := readCommitMessageFromRequest(r)
-		decide(0, msg, true)
+		decide(decisionCommit, msg, true)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -2834,7 +2853,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		decide(3, "", false)
+		decide(decisionSkipWeb, "", false)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -2874,7 +2893,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		if err != nil {
 			fmt.Println("Warning: Could not open terminal, auto-proceeding")
 			time.Sleep(2 * time.Second)
-			decide(0, initialMsg, false)
+			decide(decisionCommit, initialMsg, false)
 			return
 		}
 		defer tty.Close()
@@ -2904,23 +2923,23 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 
 		_, err = reader.ReadString('\n')
 		if err != nil {
-			decide(0, typedMessage, false)
+			decide(decisionCommit, typedMessage, false)
 			return
 		}
-		decide(0, typedMessage, false)
+		decide(decisionCommit, typedMessage, false)
 	}()
 
 	// Wait for any decision source
 	decision := <-decisionChan
 
 	switch decision.code {
-	case 0:
+	case decisionCommit:
 		fmt.Println("\n✅ Proceeding with commit")
-	case 2:
+	case decisionSkip:
 		fmt.Println("\n⏭️  Review skipped from terminal; proceeding with commit")
-	case 3:
+	case decisionSkipWeb:
 		fmt.Println("\n⏭️  Skip requested from review page; aborting commit")
-	case 1:
+	case decisionAbort:
 		fmt.Println("\n❌ Commit aborted by user")
 	}
 	fmt.Println()
