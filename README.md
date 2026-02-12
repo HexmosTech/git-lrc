@@ -79,20 +79,22 @@ git commit -m "add payment validation"
 
 Either way, a web UI opens in your browser.
 
-```
-📎 GIF: git add + git commit triggering review, browser opening
-```
+https://github.com/user-attachments/assets/ae063e39-379f-4815-9954-f0e2ab5b9cde
+
 
 ### The Review UI
 
 - 📄 **GitHub-style diff** — color-coded additions/deletions
 - 💬 **Inline AI comments** — at the exact lines that matter, with severity badges
 - 📝 **Review summary** — high-level overview of what the AI found
-- 📁 **File sidebar** — jump between files, see comment counts
+- 📁 **Staged file list** — see all staged files at a glance, jump between them
+- 📊 **Diff summary** — lines added/removed per file for a quick sense of change scope
+- 📋 **Copy issues** — one click to copy all AI-flagged issues, ready to paste back into your AI agent
+- 🔄 **Cycle through issues** — navigate between comments one by one without scrolling
+- 📜 **Event log** — track review events, iterations, and status changes in one place
 
-```
-📎 GIF: Web UI with diff view, inline comments, file sidebar, summary
-```
+https://github.com/user-attachments/assets/b579d7c6-bdf6-458b-b446-006ca41fe47d
+
 
 ### The Decision
 
