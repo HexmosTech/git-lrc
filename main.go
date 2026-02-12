@@ -1064,6 +1064,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 		}()
 
 		fmt.Println("💡 Press Ctrl-C to abort, Ctrl-S to skip, or Ctrl-V to vouch and commit")
+		fmt.Println("")
 		os.Stdout.Sync()
 
 		// Poll concurrently and race with decisions
