@@ -547,10 +547,10 @@ body {
     text-transform: uppercase;
 }
 
-.badge-info { background: rgba(96,165,250,0.2); color: #bfdbfe; border: 1px solid rgba(96,165,250,0.35); }
-.badge-warning { background: rgba(234,179,8,0.2); color: #fef08a; border: 1px solid rgba(234,179,8,0.35); }
-.badge-error { background: rgba(239,68,68,0.2); color: #fecaca; border: 1px solid rgba(239,68,68,0.35); }
-.badge-critical { background: rgba(239,68,68,0.3); color: #fecaca; border: 1px solid rgba(239,68,68,0.5); }
+.badge-info { background: rgba(55,148,255,0.2); color: #93c5fd; border: 1px solid rgba(55,148,255,0.35); }
+.badge-warning { background: rgba(204,167,0,0.2); color: #fef08a; border: 1px solid rgba(204,167,0,0.35); }
+.badge-error { background: rgba(227,127,46,0.2); color: #fdd0a2; border: 1px solid rgba(227,127,46,0.35); }
+.badge-critical { background: rgba(241,76,76,0.25); color: #fecaca; border: 1px solid rgba(241,76,76,0.45); }
 
 .comment-category {
     color: #cbd5e1;
@@ -984,99 +984,54 @@ body {
     color: #f87171;
 }
 
-/* Copy Issues - uses .action-btn styling from Toolbar */
-
-/* Issues Panel */
-.issues-toolbar { margin: 8px 0 0 0; }
-
-.issues-panel {
-    background: #0f1724;
-    border: 1px solid #1f2a3a;
-    border-radius: 8px;
-    padding: 12px;
-}
-
-.issues-panel.hidden { display: none; }
-
-.issues-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 10px;
-}
-
-.issues-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.issues-count {
-    color: var(--text-muted);
-    font-size: 12px;
-    margin-left: 4px;
-}
-
-.issues-close-btn {
+/* Severity Filter Bar — VS Code dark theme */
+.severity-filter-bar {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: transparent;
+    gap: 10px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
     border: 1px solid var(--border-subtle);
     border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    flex-shrink: 0;
 }
 
-.issues-close-btn:hover {
-    background: rgba(239, 68, 68, 0.15);
-    border-color: rgba(239, 68, 68, 0.4);
-    color: #ef4444;
-}
-
-.issues-empty {
-    padding: 20px;
-    text-align: center;
+.severity-filter-summary {
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 .severity-filters {
     display: flex;
-    gap: 4px;
-    padding: 3px;
-    background: rgba(255,255,255,0.02);
-    border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.05);
+    gap: 6px;
 }
 
 .severity-filter-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 10px;
+    padding: 5px 12px;
     background: transparent;
     color: var(--text-muted);
-    border: 1px solid transparent;
+    border: 1px solid var(--border-subtle);
     border-radius: 4px;
     cursor: pointer;
-    font-size: 11px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 12px;
     font-weight: 600;
-    text-transform: uppercase;
-    transition: all 0.15s ease;
+    transition: all 0.1s ease;
+    line-height: 20px;
 }
 
 .severity-filter-btn:hover {
-    background: rgba(255,255,255,0.05);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
 }
 
 .severity-filter-btn.active {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
     border-color: currentColor;
 }
 
@@ -1084,129 +1039,42 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    background: currentColor;
-    color: var(--bg-primary);
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
     border-radius: 10px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
+    line-height: 1;
+    color: #fff;
 }
 
 .severity-filter-btn.active .filter-badge {
-    background: var(--bg-primary);
-    color: currentColor;
-    border: 1.5px solid currentColor;
+    color: #fff;
 }
 
-.severity-filter-btn.all { color: var(--accent-blue); }
-.severity-filter-btn.all.active { background: rgba(96,165,250,0.15); }
-.severity-filter-btn.critical { color: #f97316; }
-.severity-filter-btn.critical.active { background: rgba(249,115,22,0.15); }
-.severity-filter-btn.error { color: #ef4444; }
-.severity-filter-btn.error.active { background: rgba(239,68,68,0.15); }
-.severity-filter-btn.warning { color: #eab308; }
-.severity-filter-btn.warning.active { background: rgba(234,179,8,0.15); }
-.severity-filter-btn.info { color: var(--accent-teal); }
-.severity-filter-btn.info.active { background: rgba(34,211,238,0.15); }
+/* Severity colors — critical=red, error=orange, warning=yellow, info=blue */
+.severity-filter-btn.critical { --sev-color: #f14c4c; }
+.severity-filter-btn.critical.active { color: #f14c4c; background: rgba(241, 76, 76, 0.12); border-color: rgba(241, 76, 76, 0.5); }
+.severity-filter-btn.critical .filter-badge { background: #f14c4c; }
 
-.issues-list {
-    max-height: 220px;
-    overflow: auto;
-    border-top: 1px solid #1f2a3a;
-    padding-top: 8px;
-    display: grid;
-    gap: 6px;
+.severity-filter-btn.error { --sev-color: #e37f2e; }
+.severity-filter-btn.error.active { color: #e37f2e; background: rgba(227, 127, 46, 0.12); border-color: rgba(227, 127, 46, 0.5); }
+.severity-filter-btn.error .filter-badge { background: #e37f2e; }
+
+.severity-filter-btn.warning { --sev-color: #cca700; }
+.severity-filter-btn.warning.active { color: #cca700; background: rgba(204, 167, 0, 0.12); border-color: rgba(204, 167, 0, 0.5); }
+.severity-filter-btn.warning .filter-badge { background: #b8960a; }
+
+.severity-filter-btn.info { --sev-color: #3794ff; }
+.severity-filter-btn.info.active { color: #3794ff; background: rgba(55, 148, 255, 0.12); border-color: rgba(55, 148, 255, 0.5); }
+.severity-filter-btn.info .filter-badge { background: #2b7bd4; }
+
+/* Copy Visible Issues button — primary action, pushed to far right */
+.copy-visible-btn {
+    margin-left: auto;
+    flex-shrink: 0;
 }
-
-.issue-item {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 8px;
-    padding: 8px;
-    background: var(--bg-tertiary);
-    border: 1px solid #1f2a3a;
-    border-radius: 6px;
-}
-
-.issue-item.hidden { display: none; }
-
-.issue-nav-link {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: rgba(139,92,246,0.15);
-    border: 1px solid rgba(139,92,246,0.3);
-    border-radius: 6px;
-    color: #a78bfa;
-    cursor: pointer;
-    font-size: 16px;
-    transition: all 0.15s ease;
-    text-decoration: none;
-}
-
-.issue-nav-link:hover {
-    background: rgba(139,92,246,0.25);
-    border-color: rgba(139,92,246,0.5);
-    transform: scale(1.1);
-}
-
-.issue-nav-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: rgba(139,92,246,0.15);
-    border: 1px solid rgba(139,92,246,0.3);
-    border-radius: 6px;
-    color: #a78bfa;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.issue-nav-btn:hover {
-    background: rgba(139,92,246,0.3);
-    border-color: rgba(139,92,246,0.5);
-    transform: translateX(2px);
-}
-
-.issue-nav-btn svg {
-    width: 16px;
-    height: 16px;
-}
-
-/* Action button error state */
-.action-btn.error-state {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: rgba(239, 68, 68, 0.4);
-    color: #fca5a5;
-}
-
-/* Copy Issues button primary action styling */
-.copy-issues-btn.copied {
-    background: rgba(76, 175, 80, 0.9) !important;
-    border-color: rgba(76, 175, 80, 1) !important;
-    color: #fff !important;
-}
-
-.copy-issues-btn.error-state {
-    background: rgba(239, 68, 68, 0.9) !important;
-    border-color: rgba(239, 68, 68, 1) !important;
-    color: #fff !important;
-}
-
-.issue-path {
-    font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    color: #c9d1d9;
-    font-size: 12px;
-}
-
-.issue-message { color: #e6edf3; font-size: 13px; }
-.issues-status { color: #8b949e; font-size: 12px; }
 
 /* Loader */
 .loader-container {

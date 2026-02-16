@@ -6,7 +6,7 @@ export async function createDiffTable() {
     const { html } = await waitForPreact();
     const Comment = await getComment();
     
-    return function DiffTable({ hunks, filePath, fileId }) {
+    return function DiffTable({ hunks, filePath, fileId, visibleSeverities }) {
         if (!hunks || hunks.length === 0) {
             return html`
                 <div style="padding: 20px; text-align: center; color: #57606a;">
@@ -35,14 +35,18 @@ export async function createDiffTable() {
                                 <td class="line-num">${line.NewNum}</td>
                                 <td class="line-content">${line.Content}</td>
                             </tr>
-                            ${line.IsComment && line.Comments && line.Comments.map((comment, commentIdx) => html`
-                                <${Comment} 
-                                    comment=${comment} 
-                                    filePath=${filePath}
-                                    codeExcerpt=${codeExcerpt}
-                                    commentId=${`comment-${resolvedFileId}-${comment.Line}-${commentIdx}`}
-                                />
-                            `)}
+                            ${line.IsComment && line.Comments && line.Comments.map((comment, commentIdx) => {
+                                const sev = (comment.Severity || '').toLowerCase();
+                                if (visibleSeverities && !visibleSeverities.has(sev)) return null;
+                                return html`
+                                    <${Comment} 
+                                        comment=${comment} 
+                                        filePath=${filePath}
+                                        codeExcerpt=${codeExcerpt}
+                                        commentId=${`comment-${resolvedFileId}-${comment.Line}-${commentIdx}`}
+                                    />
+                                `;
+                            })}
                         `;
                     })}
                 `)}

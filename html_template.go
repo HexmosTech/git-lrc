@@ -197,7 +197,7 @@ func prepareComments(comments []diffReviewComment, filePath string) []HTMLCommen
 		}
 
 		badgeClass := "badge-" + severity
-		if severity != "info" && severity != "warning" && severity != "error" {
+		if severity != "info" && severity != "warning" && severity != "error" && severity != "critical" {
 			badgeClass = "badge-info"
 		}
 

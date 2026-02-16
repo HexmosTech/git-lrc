@@ -9,7 +9,6 @@ export async function createToolbar() {
         onTabChange, 
         allExpanded, 
         onToggleAll, 
-        onCopyIssues,
         eventCount,
         showEventBadge,
         onTailLog,
@@ -55,12 +54,6 @@ export async function createToolbar() {
                                 }
                             </svg>
                             ${allExpanded ? 'Collapse All' : 'Expand All'}
-                        </button>
-                        <button class="btn btn-primary" onClick=${onCopyIssues} title="Copy all issues to clipboard">
-                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                            Copy Issues
                         </button>
                     </div>
                 `}

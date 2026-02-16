@@ -1,7 +1,7 @@
 // LiveReview App - Main Entry Point
 // Fetches data from /api/review and updates reactively
 
-import { waitForPreact, filePathToId, transformEvent, getBadgeClass } from './components/utils.js';
+import { waitForPreact, filePathToId, transformEvent, getBadgeClass, formatIssueForCopy } from './components/utils.js';
 import { getHeader } from './components/Header.js';
 import { getSidebar } from './components/Sidebar.js';
 import { getSummary } from './components/Summary.js';
@@ -9,7 +9,7 @@ import { getStats } from './components/Stats.js';
 import { getPrecommitBar } from './components/PrecommitBar.js';
 import { getFileBlock } from './components/FileBlock.js';
 import { getEventLog } from './components/EventLog.js';
-import { getIssuesPanel } from './components/IssuesPanel.js';
+import { getSeverityFilter } from './components/SeverityFilter.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 
@@ -152,7 +152,7 @@ async function initApp() {
     const PrecommitBar = await getPrecommitBar();
     const FileBlock = await getFileBlock();
     const EventLog = await getEventLog();
-    const IssuesPanel = await getIssuesPanel();
+    const SeverityFilter = await getSeverityFilter();
     const Toolbar = await getToolbar();
     const CommentNav = await getCommentNav();
     
@@ -167,7 +167,7 @@ async function initApp() {
         const [expandedFiles, setExpandedFiles] = useState(new Set());
         const [allExpanded, setAllExpanded] = useState(false);
         const [activeFileId, setActiveFileId] = useState(null);
-        const [issuesPanelVisible, setIssuesPanelVisible] = useState(false);
+        const [visibleSeverities, setVisibleSeverities] = useState(new Set(['critical', 'error', 'warning', 'info']));
         const [events, setEvents] = useState([]);
         const [newEventCount, setNewEventCount] = useState(0);
         const [isTailing, setIsTailing] = useState(false);
@@ -470,7 +470,45 @@ async function initApp() {
         const summary = reviewData?.summary || '';
         const files = reviewData?.Files || [];
         
-        // Build flat ordered list of all comments for navigation
+        // Toggle severity visibility
+        const toggleSeverity = useCallback((severity) => {
+            setVisibleSeverities(prev => {
+                const next = new Set(prev);
+                if (next.has(severity)) {
+                    next.delete(severity);
+                } else {
+                    next.add(severity);
+                }
+                return next;
+            });
+        }, []);
+        
+        // Copy all visible issues to clipboard
+        const handleCopyVisibleIssues = useCallback(async () => {
+            const lines = [];
+            files.forEach(file => {
+                if (!file.HasComments) return;
+                file.Hunks.forEach(hunk => {
+                    hunk.Lines.forEach(line => {
+                        if (line.IsComment && line.Comments) {
+                            line.Comments.forEach(comment => {
+                                const sev = (comment.Severity || '').toLowerCase();
+                                if (!visibleSeverities.has(sev)) return;
+                                lines.push(formatIssueForCopy(file.FilePath, comment));
+                            });
+                        }
+                    });
+                });
+            });
+            if (lines.length === 0) return;
+            try {
+                await navigator.clipboard.writeText(lines.join('\n'));
+            } catch (err) {
+                console.error('Failed to copy issues:', err);
+            }
+        }, [files, visibleSeverities]);
+        
+        // Build flat ordered list of VISIBLE comments for navigation
         const allComments = [];
         const commentIds = [];
         files.forEach(file => {
@@ -478,6 +516,8 @@ async function initApp() {
                 hunk.Lines.forEach(line => {
                     if (line.IsComment && line.Comments) {
                         line.Comments.forEach((comment, commentIdx) => {
+                            const sev = (comment.Severity || '').toLowerCase();
+                            if (!visibleSeverities.has(sev)) return;
                             const cid = `comment-${file.ID}-${comment.Line}-${commentIdx}`;
                             allComments.push({
                                 filePath: file.FilePath,
@@ -523,6 +563,7 @@ async function initApp() {
                 files=${files}
                 activeFileId=${activeFileId}
                 onFileClick=${handleFileClick}
+                visibleSeverities=${visibleSeverities}
             />
             <div class="main-content">
                 <div class="container">
@@ -566,7 +607,6 @@ async function initApp() {
                         onTabChange=${handleTabChange}
                         allExpanded=${allExpanded}
                         onToggleAll=${toggleAll}
-                        onCopyIssues=${() => setIssuesPanelVisible(!issuesPanelVisible)}
                         eventCount=${newEventCount}
                         showEventBadge=${activeTab !== 'events'}
                         onTailLog=${handleTailLog}
@@ -575,14 +615,12 @@ async function initApp() {
                         logsCopied=${logsCopied}
                     />
                     
-                    <div class="issues-toolbar">
-                        <${IssuesPanel}
-                            files=${files}
-                            visible=${issuesPanelVisible}
-                            onNavigate=${navigateToComment}
-                            onClose=${() => setIssuesPanelVisible(false)}
-                        />
-                    </div>
+                    <${SeverityFilter}
+                        files=${files}
+                        visibleSeverities=${visibleSeverities}
+                        onToggleSeverity=${toggleSeverity}
+                        onCopyVisibleIssues=${handleCopyVisibleIssues}
+                    />
                     
                     <!-- Files Tab -->
                     <div id="files-tab" class="tab-content ${activeTab === 'files' ? 'active' : ''}" style="display: ${activeTab === 'files' ? 'block' : 'none'}">
@@ -593,6 +631,7 @@ async function initApp() {
                                     file=${file}
                                     expanded=${expandedFiles.has(file.ID)}
                                     onToggle=${toggleFile}
+                                    visibleSeverities=${visibleSeverities}
                                 />
                             `)
                             : html`
