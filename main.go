@@ -555,9 +555,37 @@ func applyDefaultHTMLServe(opts *reviewOptions) (string, error) {
 // pickServePort tries the requested port, then increments by 1 up to maxTries to find a free port.
 // It returns the listener itself (kept open) to avoid TOCTOU races where another
 // process grabs the port between the check and the actual server start.
+//
+// On Windows, 0.0.0.0:<port> and 127.0.0.1:<port> are treated as separate bindings,
+// so we must check both to detect if a port is truly occupied. On Linux/Mac,
+// binding 0.0.0.0 already conflicts with 127.0.0.1, so a single check suffices.
 func pickServePort(preferredPort, maxTries int) (net.Listener, int, error) {
 	for i := 0; i < maxTries; i++ {
 		candidate := preferredPort + i
+
+		if runtime.GOOS == "windows" {
+			// On Windows, check both addresses. If either is occupied, the port is busy.
+			lnLocal, errLocal := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
+			lnAll, errAll := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", candidate))
+
+			if errLocal != nil || errAll != nil {
+				// Port is busy on at least one address — close whichever succeeded
+				if lnLocal != nil {
+					lnLocal.Close()
+				}
+				if lnAll != nil {
+					lnAll.Close()
+				}
+				continue
+			}
+
+			// Both succeeded — port is free. Close the 0.0.0.0 listener,
+			// keep 127.0.0.1 (lrc only serves on localhost).
+			lnAll.Close()
+			return lnLocal, candidate, nil
+		}
+
+		// Linux/Mac: single bind on all interfaces is sufficient
 		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", candidate))
 		if err == nil {
 			return ln, candidate, nil
