@@ -1287,9 +1287,10 @@ func runReviewWithOptions(opts reviewOptions) error {
 				}()
 
 				go func() {
-					tty, err := os.Open("/dev/tty")
+					tty, err := openTTY()
 					if err != nil {
-						progressiveDecide(decisionAbort, "", false) // fail on terminal error
+						// Cannot open terminal (e.g. no console attached).
+						// Don't abort — let the web UI buttons be the decision source.
 						return
 					}
 					defer tty.Close()
@@ -2660,11 +2661,19 @@ func sanitizeInitialMessage(msg string) string {
 	return result
 }
 
+// openTTY opens the controlling terminal for reading.
+// On Unix this is /dev/tty; on Windows it is CONIN$ (the console input buffer).
+func openTTY() (*os.File, error) {
+	if runtime.GOOS == "windows" {
+		return os.OpenFile("CONIN$", os.O_RDWR, 0)
+	}
+	return os.Open("/dev/tty")
+}
+
 // handleCtrlKeyWithCancel sets up raw terminal mode to detect Ctrl-S (skip), Ctrl-V (vouch), and Ctrl-C (abort).
 // Returns a decision code constant or 0 on cancellation/failure.
 func handleCtrlKeyWithCancel(stop <-chan struct{}) (int, error) {
-	// Try to open /dev/tty directly
-	tty, err := os.Open("/dev/tty")
+	tty, err := openTTY()
 	if err != nil {
 		return 0, err
 	}
@@ -2912,9 +2921,9 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		decide(1, "", false)
 	}()
 
-	// Read from /dev/tty directly to avoid stdin issues in git hooks (Enter fallback, cooked mode)
+	// Read from terminal directly to avoid stdin issues in git hooks (Enter fallback, cooked mode)
 	go func() {
-		tty, err := os.Open("/dev/tty")
+		tty, err := openTTY()
 		if err != nil {
 			fmt.Println("Warning: Could not open terminal, auto-proceeding")
 			time.Sleep(2 * time.Second)
