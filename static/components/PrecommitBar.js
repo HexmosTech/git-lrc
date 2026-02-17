@@ -1,13 +1,39 @@
 // PrecommitBar component - commit/push/skip actions
 import { waitForPreact } from './utils.js';
 
+// Extract the first markdown heading as a commit message suggestion
+function extractTitleFromSummary(markdown) {
+    if (!markdown) return '';
+    const lines = markdown.split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        // Match any markdown heading (# Title, ## Title, etc.)
+        const match = trimmed.match(/^#+\s+(.+)$/);
+        if (match) {
+            return match[1].trim();
+        }
+    }
+    return '';
+}
+
 export async function createPrecommitBar() {
-    const { html, useState } = await waitForPreact();
+    const { html, useState, useEffect, useRef } = await waitForPreact();
     
-    return function PrecommitBar({ interactive, isPostCommitReview, initialMsg }) {
+    return function PrecommitBar({ interactive, isPostCommitReview, initialMsg, summary, status: reviewStatus }) {
         const [message, setMessage] = useState(initialMsg || '');
         const [status, setStatus] = useState('');
         const [disabled, setDisabled] = useState(false);
+        const userHasTyped = useRef(!!(initialMsg && initialMsg.trim()));
+        
+        // Auto-fill commit message from AI summary title when review completes
+        useEffect(() => {
+            if (reviewStatus === 'completed' && !userHasTyped.current && !message.trim()) {
+                const title = extractTitleFromSummary(summary);
+                if (title) {
+                    setMessage(title);
+                }
+            }
+        }, [reviewStatus, summary]);
         
         if (!interactive) return null;
         
@@ -91,7 +117,10 @@ export async function createPrecommitBar() {
                         placeholder="Enter your commit message"
                         value=${message}
                         disabled=${disabled}
-                        onInput=${(e) => setMessage(e.target.value)}
+                        onInput=${(e) => {
+                            setMessage(e.target.value);
+                            userHasTyped.current = true;
+                        }}
                     ></textarea>
                     <div class="precommit-message-hint">Required for commit actions; ignored on Skip.</div>
                 </div>

@@ -600,6 +600,8 @@ async function initApp() {
                         interactive=${reviewData?.interactive || reviewData?.Interactive}
                         isPostCommitReview=${reviewData?.isPostCommitReview || reviewData?.IsPostCommitReview}
                         initialMsg=${reviewData?.initialMsg || reviewData?.InitialMsg || ''}
+                        summary=${summary}
+                        status=${status}
                     />
                     
                     <${Toolbar}
