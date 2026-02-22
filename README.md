@@ -2,11 +2,12 @@
 
 <img width="60" alt="git-lrc logo" src="https://hexmos.com/freedevtools/public/lr_logo.svg" />
 
-# git-lrc
+<strong style="font-size:2em; display:block; margin:0.67em 0;">git-lrc</strong>
 
-[Site](https://hexmos.com/livereview/git-lrc/) · [LiveReview Cloud](https://hexmos.com/livereview/)
 
-### **Free, Unlimited AI Code Reviews That Run on Commit**
+<strong style="font-size:1.5em; display:block; margin:0.67em 0;">Free, Unlimited AI Code Reviews That Run on Commit</strong>
+
+<br />
 
 </div>
 
@@ -16,6 +17,7 @@
 <a href="https://www.producthunt.com/products/git-lrc?embed=true&amp;utm_source=badge-top-post-badge&amp;utm_medium=badge&amp;utm_campaign=badge-git-lrc" target="_blank" rel="noopener noreferrer"><img alt="git-lrc - Free, unlimited AI code reviews that run on commit | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=1079262&amp;theme=light&amp;period=daily&amp;t=1771749170868"></a>
 </div>
 
+<br />
 <br />
 
 ---
