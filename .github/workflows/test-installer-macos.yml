@@ -1,0 +1,45 @@
+name: Test lrc Installer (macOS)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-macos-install:
+    name: Test installer on macOS (arm64)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run lrc installer via pipe
+        run: cat lrc-install.sh | sudo bash
+
+      - name: Verify binary locations
+        run: |
+          set -e
+          echo "Checking /usr/local/bin/lrc..."
+          test -x /usr/local/bin/lrc
+          echo "OK: /usr/local/bin/lrc exists and is executable"
+
+          echo "Checking /usr/local/bin/git-lrc..."
+          test -x /usr/local/bin/git-lrc
+          echo "OK: /usr/local/bin/git-lrc exists and is executable"
+
+      - name: Verify lrc version
+        run: lrc version
+
+      - name: Verify lrc --help
+        run: lrc --help
+
+      - name: Verify git lrc subcommand
+        run: git lrc version
+
+      - name: Verify hooks install
+        run: |
+          set -e
+          HOOKS_PATH=$(git config --global core.hooksPath || true)
+          if [ -z "$HOOKS_PATH" ]; then
+            echo "WARNING: core.hooksPath not set (hooks install may have been skipped)"
+          else
+            echo "OK: core.hooksPath = $HOOKS_PATH"
+          fi
