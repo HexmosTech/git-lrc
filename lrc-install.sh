@@ -34,7 +34,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo "ðŸš€ lrc Installer"
+echo "🚀 lrc Installer"
 echo "================"
 echo ""
 
@@ -72,25 +72,25 @@ case "$ARCH" in
 esac
 
 PLATFORM="${PLATFORM_OS}-${PLATFORM_ARCH}"
-echo -e "${GREEN}âœ“${NC} Detected platform: ${PLATFORM}"
+echo -e "${GREEN}✓${NC} Detected platform: ${PLATFORM}"
 
 # Try to obtain sudo early so we can install into /usr/local/bin
 SUDO_AVAILABLE=false
 if [ "$(id -u)" -eq 0 ]; then
     SUDO_AVAILABLE=true
-    echo -e "${GREEN}âœ“${NC} Running as root; will install to /usr/local/bin"
+    echo -e "${GREEN}✓${NC} Running as root; will install to /usr/local/bin"
 elif command -v sudo >/dev/null 2>&1; then
     echo -n "Requesting sudo for install to /usr/local/bin... "
     if sudo -v >/dev/null 2>&1; then
         SUDO_AVAILABLE=true
-        echo -e "${GREEN}âœ“${NC}"
+        echo -e "${GREEN}✓${NC}"
     else
-        echo -e "${RED}âœ—${NC} Could not acquire sudo permissions."
+        echo -e "${RED}✗${NC} Could not acquire sudo permissions."
         print_sudo_help
         exit 1
     fi
 else
-    echo -e "${RED}âœ—${NC} sudo is not available on this system."
+    echo -e "${RED}✗${NC} sudo is not available on this system."
     print_sudo_help
     exit 1
 fi
@@ -101,7 +101,7 @@ AUTH_RESPONSE=$(curl -s -u "${B2_KEY_ID}:${B2_APP_KEY}" \
     "https://api.backblazeb2.com/b2api/v2/b2_authorize_account")
 
 if [ $? -ne 0 ] || [ -z "$AUTH_RESPONSE" ]; then
-    echo -e "${RED}âœ—${NC}"
+    echo -e "${RED}✗${NC}"
     echo -e "${RED}Error: Failed to authorize with B2${NC}"
     exit 1
 fi
@@ -112,12 +112,12 @@ API_URL=$(echo "$AUTH_RESPONSE" | tr -d '\n' | sed -n 's/.*"apiUrl": "\([^"]*\)"
 DOWNLOAD_URL=$(echo "$AUTH_RESPONSE" | tr -d '\n' | sed -n 's/.*"downloadUrl": "\([^"]*\)".*/\1/p')
 
 if [ -z "$AUTH_TOKEN" ] || [ -z "$API_URL" ]; then
-    echo -e "${RED}âœ—${NC}"
+    echo -e "${RED}✗${NC}"
     echo -e "${RED}Error: Failed to parse B2 authorization response${NC}"
     echo "Response: $AUTH_RESPONSE"
     exit 1
 fi
-echo -e "${GREEN}âœ“${NC}"
+echo -e "${GREEN}✓${NC}"
 
 # List files in the lrc/ folder to find versions
 echo -n "Finding latest version... "
@@ -132,7 +132,7 @@ LIST_RESPONSE=$(curl -s -X POST "${API_URL}/b2api/v2/b2_list_file_names" \
     }")
 
 if [ $? -ne 0 ] || [ -z "$LIST_RESPONSE" ]; then
-    echo -e "${RED}âœ—${NC}"
+    echo -e "${RED}✗${NC}"
     echo -e "${RED}Error: Failed to list files from B2${NC}"
     exit 1
 fi
@@ -148,13 +148,13 @@ if [ -z "$VERSIONS" ]; then
 fi
 
 if [ -z "$VERSIONS" ]; then
-    echo -e "${RED}âœ—${NC}"
+    echo -e "${RED}✗${NC}"
     echo -e "${RED}Error: No versions found in ${B2_BUCKET_NAME}/${B2_PREFIX}/${NC}"
     exit 1
 fi
 
 LATEST_VERSION="$VERSIONS"
-echo -e "${GREEN}âœ“${NC} Latest version: ${LATEST_VERSION}"
+echo -e "${GREEN}✓${NC} Latest version: ${LATEST_VERSION}"
 
 # Construct download URL
 BINARY_NAME="lrc"
@@ -166,7 +166,7 @@ TMP_FILE=$(mktemp)
 HTTP_CODE=$(curl -s -w "%{http_code}" -o "$TMP_FILE" -H "Authorization: ${AUTH_TOKEN}" "$FULL_URL")
 
 if [ "$HTTP_CODE" != "200" ]; then
-    echo -e "${RED}âœ—${NC}"
+    echo -e "${RED}✗${NC}"
     echo -e "${RED}Error: Failed to download (HTTP $HTTP_CODE)${NC}"
     echo -e "${RED}URL: $FULL_URL${NC}"
     rm -f "$TMP_FILE"
@@ -174,12 +174,12 @@ if [ "$HTTP_CODE" != "200" ]; then
 fi
 
 if [ ! -s "$TMP_FILE" ]; then
-    echo -e "${RED}âœ—${NC}"
+    echo -e "${RED}✗${NC}"
     echo -e "${RED}Error: Downloaded file is empty${NC}"
     rm -f "$TMP_FILE"
     exit 1
 fi
-echo -e "${GREEN}âœ“${NC}"
+echo -e "${GREEN}✓${NC}"
 
 # Install to /usr/local/bin/lrc first
 INSTALL_PATH="/usr/local/bin/lrc"
@@ -187,19 +187,19 @@ echo -n "Installing to ${INSTALL_PATH}... "
 if [ "$SUDO_AVAILABLE" = true ]; then
     sudo mkdir -p "/usr/local/bin"
     if ! sudo mv "$TMP_FILE" "$INSTALL_PATH" 2>/dev/null; then
-        echo -e "${RED}âœ—${NC}"
+        echo -e "${RED}✗${NC}"
         echo -e "${RED}Error: Failed to install to ${INSTALL_PATH}${NC}"
         print_sudo_help
         exit 1
     fi
     sudo chmod +x "$INSTALL_PATH"
 else
-    echo -e "${RED}âœ—${NC}"
+    echo -e "${RED}✗${NC}"
     echo -e "${RED}Error: sudo is required to install to /usr/local/bin${NC}"
     print_sudo_help
     exit 1
 fi
-echo -e "${GREEN}âœ“${NC}"
+echo -e "${GREEN}✓${NC}"
 
 # Copy as git-lrc (git subcommand)
 # On macOS, /usr/bin is SIP-protected (read-only), so install to /usr/local/bin instead.
@@ -212,17 +212,17 @@ fi
 echo -n "Installing to ${GIT_INSTALL_PATH} (git subcommand)... "
 if [ "$SUDO_AVAILABLE" = true ]; then
     if ! sudo cp "$INSTALL_PATH" "$GIT_INSTALL_PATH" 2>/dev/null; then
-        echo -e "${RED}âœ—${NC}"
+        echo -e "${RED}✗${NC}"
         echo -e "${RED}Error: Failed to install to ${GIT_INSTALL_PATH}${NC}"
         exit 1
     fi
     sudo chmod +x "$GIT_INSTALL_PATH"
 else
-    echo -e "${RED}âœ—${NC}"
+    echo -e "${RED}✗${NC}"
     echo -e "${RED}Error: sudo is required to install to ${GIT_DIR}${NC}"
     exit 1
 fi
-echo -e "${GREEN}âœ“${NC}"
+echo -e "${GREEN}✓${NC}"
 
 # Create config file if API key and URL are provided
 if [ -n "$LRC_API_KEY" ] && [ -n "$LRC_API_URL" ]; then
@@ -247,7 +247,7 @@ api_key = "$LRC_API_KEY"
 api_url = "$LRC_API_URL"
 EOF
             chmod 600 "$CONFIG_FILE"
-            echo -e "${GREEN}âœ“${NC}"
+            echo -e "${GREEN}✓${NC}"
             echo -e "${GREEN}Config file replaced with your API credentials${NC}"
         else
             echo -e "${YELLOW}Skipping config creation to preserve existing settings${NC}"
@@ -260,7 +260,7 @@ api_key = "$LRC_API_KEY"
 api_url = "$LRC_API_URL"
 EOF
         chmod 600 "$CONFIG_FILE"
-        echo -e "${GREEN}âœ“${NC}"
+        echo -e "${GREEN}✓${NC}"
         echo -e "${GREEN}Config file created with your API credentials${NC}"
     fi
 fi
@@ -268,7 +268,7 @@ fi
 # Install global hooks via lrc
 echo -n "Running 'lrc hooks install' to set up global hooks... "
 if "$INSTALL_PATH" hooks install >/dev/null 2>&1; then
-    echo -e "${GREEN}âœ“${NC}"
+    echo -e "${GREEN}✓${NC}"
 else
     echo -e "${YELLOW}(warning)${NC} Failed to run 'lrc hooks install'. You may need to run it manually."
 fi
@@ -281,7 +281,7 @@ if [ -n "$LRC_API_KEY" ] && [ -n "$LRC_API_URL" ]; then
         -H "Content-Type: application/json" 2>&1)
     
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}âœ“${NC}"
+        echo -e "${GREEN}✓${NC}"
     else
         echo -e "${YELLOW}(skipped)${NC}"
     fi
@@ -295,7 +295,7 @@ if ! command -v lrc >/dev/null 2>&1; then
     echo -e "${YELLOW}  ${INSTALL_PATH} --version${NC}"
 else
     echo ""
-    echo -e "${GREEN}âœ“ Installation complete!${NC}"
+    echo -e "${GREEN}✓ Installation complete!${NC}"
     echo ""
     lrc version
 fi
