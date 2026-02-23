@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run lrc installer via pipe
-        run: cat lrc-install.sh | sudo bash
+        run: cat scripts/lrc-install.sh | sudo bash
 
       - name: Verify binary locations
         run: |
