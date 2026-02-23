@@ -1,0 +1,61 @@
+name: Test lrc Installer (Windows)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-windows-install:
+    name: Test installer on Windows (amd64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run lrc installer
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File scripts/lrc-install.ps1
+
+      - name: Verify binary locations
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "Checking C:\Program Files\lrc\lrc.exe..."
+          if (-not (Test-Path "C:\Program Files\lrc\lrc.exe")) {
+            throw "lrc.exe not found at C:\Program Files\lrc\lrc.exe"
+          }
+          Write-Host "OK: lrc.exe exists"
+
+          $gitDir = Split-Path -Parent (Get-Command git).Source
+          $gitLrcPath = Join-Path $gitDir "git-lrc.exe"
+          Write-Host "Checking $gitLrcPath..."
+          if (-not (Test-Path $gitLrcPath)) {
+            throw "git-lrc.exe not found at $gitLrcPath"
+          }
+          Write-Host "OK: git-lrc.exe exists"
+
+      - name: Verify lrc version
+        shell: powershell
+        run: |
+          $env:Path = "C:\Program Files\lrc;$env:Path"
+          lrc version
+
+      - name: Verify lrc --help
+        shell: powershell
+        run: |
+          $env:Path = "C:\Program Files\lrc;$env:Path"
+          lrc --help
+
+      - name: Verify git lrc subcommand
+        shell: powershell
+        run: git lrc version
+
+      - name: Verify hooks install
+        shell: powershell
+        run: |
+          $hooksPath = git config --global core.hooksPath 2>$null
+          if ($hooksPath) {
+            Write-Host "OK: core.hooksPath = $hooksPath"
+          } else {
+            Write-Host "WARNING: core.hooksPath not set (hooks install may have been skipped)"
+          }
