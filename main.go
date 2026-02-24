@@ -307,6 +307,10 @@ func main() {
 								Name:  "local",
 								Usage: "uninstall from the current repo hooks path",
 							},
+							&cli.StringFlag{
+								Name:  "path",
+								Usage: "target a specific hooksPath directory for uninstall",
+							},
 						},
 						Action: runHooksUninstall,
 					},
@@ -3111,6 +3115,7 @@ func runHooksInstall(c *cli.Context) error {
 	localInstall := c.Bool("local")
 	requestedPath := strings.TrimSpace(c.String("path"))
 	var hooksPath string
+	var prevGlobalPath string // original core.hooksPath before install (empty if unset)
 	setConfig := false
 
 	if localInstall {
@@ -3128,7 +3133,8 @@ func runHooksInstall(c *cli.Context) error {
 			return err
 		}
 	} else {
-		currentPath, _ := currentHooksPath()
+		prevGlobalPath, _ = currentHooksPath()
+		currentPath := prevGlobalPath
 		defaultPath, err := defaultGlobalHooksPath()
 		if err != nil {
 			return fmt.Errorf("failed to determine default hooks path: %w", err)
@@ -3184,7 +3190,7 @@ func runHooksInstall(c *cli.Context) error {
 	}
 
 	if !localInstall {
-		writeHooksMeta(absHooksPath, hooksMeta{Path: absHooksPath, PrevPath: hooksPath, SetByLRC: setConfig})
+		writeHooksMeta(absHooksPath, hooksMeta{Path: absHooksPath, PrevPath: prevGlobalPath, SetByLRC: setConfig})
 	}
 	_ = cleanOldBackups(backupDir, 5)
 
@@ -3202,6 +3208,7 @@ func runHooksInstall(c *cli.Context) error {
 // runHooksUninstall removes lrc-managed sections from dispatchers and managed scripts (global or local)
 func runHooksUninstall(c *cli.Context) error {
 	localUninstall := c.Bool("local")
+	requestedPath := strings.TrimSpace(c.String("path"))
 	var hooksPath string
 
 	if localUninstall {
@@ -3218,12 +3225,16 @@ func runHooksUninstall(c *cli.Context) error {
 			return err
 		}
 	} else {
-		hooksPath, _ = currentHooksPath()
-		if hooksPath == "" {
-			var err error
-			hooksPath, err = defaultGlobalHooksPath()
-			if err != nil {
-				return fmt.Errorf("failed to determine hooks path: %w", err)
+		if requestedPath != "" {
+			hooksPath = requestedPath
+		} else {
+			hooksPath, _ = currentHooksPath()
+			if hooksPath == "" {
+				var err error
+				hooksPath, err = defaultGlobalHooksPath()
+				if err != nil {
+					return fmt.Errorf("failed to determine hooks path: %w", err)
+				}
 			}
 		}
 	}
@@ -3233,10 +3244,15 @@ func runHooksUninstall(c *cli.Context) error {
 		return fmt.Errorf("failed to resolve hooks path: %w", err)
 	}
 
+	// Read current core.hooksPath before any changes
+	currentGlobalPath, _ := currentHooksPath()
+
 	var meta *hooksMeta
 	if !localUninstall {
 		meta, _ = readHooksMeta(absHooksPath)
 	}
+
+	// Remove lrc sections from each managed hook dispatcher
 	removed := 0
 	for _, hookName := range managedHooks {
 		hookPath := filepath.Join(absHooksPath, hookName)
@@ -3247,18 +3263,59 @@ func runHooksUninstall(c *cli.Context) error {
 		}
 	}
 
+	// Remove managed scripts directory and backups
 	_ = os.RemoveAll(filepath.Join(absHooksPath, "lrc"))
-	_ = cleanOldBackups(filepath.Join(absHooksPath, ".lrc_backups"), 5)
+	_ = os.RemoveAll(filepath.Join(absHooksPath, ".lrc_backups"))
 	if !localUninstall {
 		_ = removeHooksMeta(absHooksPath)
 	}
 
-	if !localUninstall && meta != nil && meta.SetByLRC && meta.Path == absHooksPath {
-		if meta.PrevPath == "" {
-			_ = unsetGlobalHooksPath()
-		} else {
-			_ = setGlobalHooksPath(meta.PrevPath)
+	// Restore core.hooksPath for global uninstall
+	if !localUninstall {
+		restoredHooksPath := false
+
+		if meta != nil && meta.SetByLRC {
+			// Meta exists and says lrc set core.hooksPath — use stored PrevPath
+			if meta.PrevPath == "" {
+				if err := unsetGlobalHooksPath(); err != nil {
+					fmt.Printf("⚠️  Warning: failed to unset core.hooksPath: %v\n", err)
+				} else {
+					fmt.Println("✅ Unset core.hooksPath (was set by lrc)")
+					restoredHooksPath = true
+				}
+			} else {
+				if err := setGlobalHooksPath(meta.PrevPath); err != nil {
+					fmt.Printf("⚠️  Warning: failed to restore core.hooksPath to %s: %v\n", meta.PrevPath, err)
+				} else {
+					fmt.Printf("✅ Restored core.hooksPath to %s\n", meta.PrevPath)
+					restoredHooksPath = true
+				}
+			}
+		} else if meta == nil && currentGlobalPath != "" && pathsEqual(currentGlobalPath, absHooksPath) {
+			// No meta file but core.hooksPath points to this directory.
+			// This is a recovery path: the meta was lost but core.hooksPath
+			// still points to the lrc hooks dir. Unset it to avoid leaving
+			// git in a broken state.
+			if err := unsetGlobalHooksPath(); err != nil {
+				fmt.Printf("⚠️  Warning: failed to unset core.hooksPath: %v\n", err)
+			} else {
+				fmt.Println("✅ Unset core.hooksPath (was pointing to uninstalled hooks dir)")
+				restoredHooksPath = true
+			}
 		}
+
+		// Final safety check: verify core.hooksPath state after uninstall
+		postPath, _ := currentHooksPath()
+		if postPath != "" && pathsEqual(postPath, absHooksPath) && !restoredHooksPath {
+			fmt.Printf("⚠️  Warning: core.hooksPath is still set to %s\n", postPath)
+			fmt.Println("   This may prevent repo-local hooks from working.")
+			fmt.Println("   Run: git config --global --unset core.hooksPath")
+		}
+	}
+
+	// Clean up empty hooks directory if lrc created it
+	if !localUninstall {
+		cleanEmptyHooksDir(absHooksPath)
 	}
 
 	if removed > 0 {
@@ -3268,6 +3325,37 @@ func runHooksUninstall(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+// pathsEqual compares two filesystem paths robustly, resolving symlinks
+func pathsEqual(a, b string) bool {
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	if errA != nil || errB != nil {
+		return a == b
+	}
+	if absA == absB {
+		return true
+	}
+	// Try resolving symlinks
+	realA, errA := filepath.EvalSymlinks(absA)
+	realB, errB := filepath.EvalSymlinks(absB)
+	if errA != nil || errB != nil {
+		return absA == absB
+	}
+	return realA == realB
+}
+
+// cleanEmptyHooksDir removes the hooks directory if it's empty or contains only lrc artifacts
+func cleanEmptyHooksDir(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	// If directory is empty, remove it
+	if len(entries) == 0 {
+		_ = os.Remove(dir)
+	}
 }
 
 func runHooksDisable(c *cli.Context) error {
@@ -3594,24 +3682,26 @@ func replaceLrcSection(content, newSection string) string {
 
 // removeLrcSection removes the lrc-managed section from hook content
 func removeLrcSection(content string) string {
-	start := strings.Index(content, lrcMarkerBegin)
-	if start == -1 {
-		return content
-	}
+	for {
+		start := strings.Index(content, lrcMarkerBegin)
+		if start == -1 {
+			return content
+		}
 
-	end := strings.Index(content[start:], lrcMarkerEnd)
-	if end == -1 {
-		return content
-	}
-	end += start + len(lrcMarkerEnd)
+		end := strings.Index(content[start:], lrcMarkerEnd)
+		if end == -1 {
+			return content
+		}
+		end += start + len(lrcMarkerEnd)
 
-	// Find end of line after marker
-	if end < len(content) && content[end] == '\n' {
-		end++
-	}
+		// Find end of line after marker
+		if end < len(content) && content[end] == '\n' {
+			end++
+		}
 
-	// Remove the section, preserving content before and after
-	return content[:start] + content[end:]
+		// Remove the section, preserving content before and after
+		content = content[:start] + content[end:]
+	}
 }
 
 // generatePreCommitHook generates the pre-commit hook script
