@@ -580,3 +580,10 @@ if ($gitCheck.success) {
 
 Write-Host ""
 Write-Host "Run 'lrc --help' to get started"
+
+if ($env:LRC_INSTALL_MARKER) {
+    try {
+        Set-Content -Path $env:LRC_INSTALL_MARKER -Value "LRC_INSTALL_OK" -NoNewline -Encoding ascii
+    } catch {
+    }
+}

@@ -10,6 +10,8 @@
 # - PATH: creates ~/.lrc/env (idempotent PATH script) and sources it from
 #   shell rc files (~/.profile, ~/.bashrc, ~/.zshenv, etc.).
 # - No shell restart required: PATH is exported in-session.
+# On Windows Git Bash/MSYS/MINGW/CYGWIN, this script attempts to hand off to
+# PowerShell installer automatically.
 
 set -e
 
@@ -19,7 +21,20 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Require git to be present
+print_windows_handoff_help() {
+    local reason="$1"
+    echo ""
+    echo -e "${YELLOW}Windows + Git Bash detected.${NC}"
+    echo -e "${YELLOW}Could not automatically launch the PowerShell installer: ${reason}${NC}"
+    echo ""
+    echo "Run this in PowerShell (copy/paste):"
+    echo "  iwr -useb https://hexmos.com/lrc-install.ps1 | iex"
+    echo ""
+    echo "If needed, first open PowerShell manually, then run the command above."
+    echo ""
+}
+
+# Require git to be present; we also install lrc alongside the git binary
 if ! command -v git >/dev/null 2>&1; then
     echo -e "${RED}Error: git is not installed. Please install git and retry.${NC}"
     exit 1
@@ -52,22 +67,49 @@ case "$OS" in
         PLATFORM_OS="darwin"
         ;;
     msys*|mingw*|cygwin*)
-        echo -e "${YELLOW}Windows (Git Bash) detected.${NC}"
-        echo "Attempting to launch PowerShell installer..."
-        
-        # Try to run the PowerShell installer directly
-        if command -v powershell >/dev/null 2>&1; then
-            powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iwr -useb https://hexmos.com/lrc-install.ps1 | iex" || true
+        echo -e "${YELLOW}Windows shell detected (${OS}). Switching to PowerShell installer...${NC}"
+
+        PS_CMD=""
+        if command -v powershell.exe >/dev/null 2>&1; then
+            PS_CMD="powershell.exe"
+        elif command -v powershell >/dev/null 2>&1; then
+            PS_CMD="powershell"
+        elif command -v pwsh.exe >/dev/null 2>&1; then
+            PS_CMD="pwsh.exe"
+        elif command -v pwsh >/dev/null 2>&1; then
+            PS_CMD="pwsh"
         fi
 
-        # Provide fallback instructions in case the automatic launch didn't work
-        echo ""
-        echo "If the installation did not start or complete successfully,"
-        echo "please open PowerShell and run:"
-        echo ""
-        echo -e "  ${GREEN}iwr -useb https://hexmos.com/lrc-install.ps1 | iex${NC}"
-        echo ""
-        exit 0
+        if [ -z "$PS_CMD" ]; then
+            print_windows_handoff_help "PowerShell is not available in PATH"
+            exit 1
+        fi
+
+        MARKER_FILE="$(mktemp)"
+        MARKER_FILE_PS="$MARKER_FILE"
+        if command -v cygpath >/dev/null 2>&1; then
+            MARKER_FILE_PS="$(cygpath -w "$MARKER_FILE")"
+        fi
+
+        PS_INSTALL_CMD="\$ErrorActionPreference='Stop'; try { iwr -useb https://hexmos.com/lrc-install.ps1 | iex; \$marker = \$env:LRC_INSTALL_MARKER; if (-not [string]::IsNullOrWhiteSpace(\$marker)) { Set-Content -Path \$marker -Value 'LRC_INSTALL_OK' -NoNewline -Encoding ascii }; exit 0 } catch { Write-Host \$_.Exception.Message; exit 1 }"
+
+        PS_STATUS=1
+        LRC_INSTALL_MARKER="$MARKER_FILE_PS" "$PS_CMD" -NoProfile -ExecutionPolicy Bypass -Command "$PS_INSTALL_CMD" || PS_STATUS=$?
+
+        if [ -f "$MARKER_FILE" ] && grep -qx "LRC_INSTALL_OK" "$MARKER_FILE"; then
+            rm -f "$MARKER_FILE"
+            exit 0
+        fi
+
+        rm -f "$MARKER_FILE"
+
+        if [ "$PS_STATUS" -ne 0 ]; then
+            print_windows_handoff_help "PowerShell installer command failed"
+            exit 1
+        fi
+
+        print_windows_handoff_help "PowerShell installer did not report a success marker"
+        exit 1
         ;;
     *)
         echo -e "${RED}Error: Unsupported operating system: $OS${NC}"
