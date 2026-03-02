@@ -1,6 +1,6 @@
 # lrc installer for Windows PowerShell
-# Usage: iwr -useb https://your-domain/lrc-install.ps1 | iex
-#   or:  Invoke-WebRequest -Uri https://your-domain/lrc-install.ps1 -UseBasicParsing | Invoke-Expression
+# Usage: iwr -useb https://hexmos.com/lrc-install.ps1 | iex
+#   or:  Invoke-WebRequest -Uri https://hexmos.com/lrc-install.ps1 -UseBasicParsing | Invoke-Expression
 #
 # Install model (concise):
 # - Default: per-user install to %LOCALAPPDATA%\Programs\lrc (user-writable install dir; no admin needed).
