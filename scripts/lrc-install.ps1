@@ -1,6 +1,14 @@
 # lrc installer for Windows PowerShell
 # Usage: iwr -useb https://your-domain/lrc-install.ps1 | iex
 #   or:  Invoke-WebRequest -Uri https://your-domain/lrc-install.ps1 -UseBasicParsing | Invoke-Expression
+#
+# Install model (concise):
+# - Default: per-user install to %LOCALAPPDATA%\Programs\lrc (user-writable install dir; no admin needed).
+# - Migration: if legacy admin binaries exist (Program Files or Git bin), elevate once to delete them, then continue non-admin.
+# - Discovery: place lrc.exe + git-lrc.exe in the user install dir, add WindowsApps (%LOCALAPPDATA%\Microsoft\WindowsApps) cmd/exe shims, prepend PATH in-session; Git bin copy only when writable (no forced elevation).
+# - No shell restart required: PATH and PATHEXT adjusted in-session; shims + PATH prep give immediate git subcommand resolution.
+# - PATH persistence: user PATH is updated to include %LOCALAPPDATA%\Programs\lrc; current session PATH is also prepended so it works right away.
+# - Logging: migration cleanup logs to %TEMP%\lrc-cleanup.log when elevation is used.
 
 $ErrorActionPreference = "Stop"
 
@@ -17,40 +25,132 @@ function Print-ElevationHelp {
     Write-Host ""
 }
 
-# URL where this script is hosted (used for self-elevation when piped)
-$SCRIPT_URL = "https://hexmos.com/lrc-install.ps1"
-
-# Self-elevate to admin if not already running as admin (like bash script requires sudo upfront)
+# Detect admin status once; elevation is only needed for legacy cleanup, not for fresh installs
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $isAdmin) {
-    Write-Host "Requesting administrator privileges (required to install lrc)..." -ForegroundColor Yellow
+
+function Test-UserWritable {
+    param([string]$directory)
+    if (-not (Test-Path $directory)) { return $false }
+    $testPath = Join-Path $directory (".__lrc_write_test_" + [System.IO.Path]::GetRandomFileName())
     try {
-        # Always download a fresh copy to temp for elevation (works for both piped and file execution)
-        $scriptPath = "$env:TEMP\lrc-install-elevated.ps1"
-        Write-Host "Downloading installer for elevated execution..." -ForegroundColor Yellow
-        Invoke-WebRequest -Uri $SCRIPT_URL -OutFile $scriptPath -UseBasicParsing
-
-        # Prepend env vars and append pause directly into the temp file
-        # so we can use -File (most reliable parsing mode)
-        $prefix = ""
-        if ($env:LRC_API_KEY) { $prefix += "`$env:LRC_API_KEY = '$($env:LRC_API_KEY)'`r`n" }
-        if ($env:LRC_API_URL) { $prefix += "`$env:LRC_API_URL = '$($env:LRC_API_URL)'`r`n" }
-        $suffix = "`r`nWrite-Host ''`r`nWrite-Host 'Press any key to close...' -ForegroundColor Cyan`r`n`$null = `$Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')`r`n"
-        $scriptContent = [System.IO.File]::ReadAllText($scriptPath)
-        [System.IO.File]::WriteAllText($scriptPath, $prefix + $scriptContent + $suffix)
-
-        $p = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scriptPath `
-            -Verb RunAs -Wait -PassThru -ErrorAction Stop
-        Remove-Item $scriptPath -ErrorAction SilentlyContinue
-        exit $p.ExitCode
+        New-Item -ItemType File -Path $testPath -Force -ErrorAction Stop | Out-Null
+        Remove-Item -Path $testPath -Force -ErrorAction SilentlyContinue
+        return $true
     } catch {
-        Write-Host "$FAIL Could not elevate to administrator." -ForegroundColor Red
-        Print-ElevationHelp
-        exit 1
+        return $false
     }
 }
 
-# --- From here on, we are running as administrator ---
+# Require git to be present; we install a git subcommand alongside PATH
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Host "Error: git is not installed. Please install git and retry." -ForegroundColor Red
+    exit 1
+}
+$GIT_BIN = (Get-Command git).Source
+$GIT_DIR = Split-Path -Parent $GIT_BIN
+
+# Preferred install targets (user-writable)
+$INSTALL_DIR = "$env:LOCALAPPDATA\Programs\lrc"
+$INSTALL_PATH = "$INSTALL_DIR\lrc.exe"
+$GIT_INSTALL_PATH = "$INSTALL_DIR\git-lrc.exe"  # git discovers subcommands on PATH
+
+# Legacy admin-scope locations we want to remove (one-time migration)
+$ADMIN_INSTALL_DIR = "$env:ProgramFiles\lrc"
+$ADMIN_INSTALL_PATH = "$ADMIN_INSTALL_DIR\lrc.exe"
+$GIT_DIR_GIT_LRC_PATH = "$GIT_DIR\git-lrc.exe"
+
+$needsAdminCleanup = $false
+$cleanupTargets = @()
+if (Test-Path $ADMIN_INSTALL_PATH) {
+    $needsAdminCleanup = $true
+    $cleanupTargets += $ADMIN_INSTALL_PATH
+}
+if (Test-Path $GIT_DIR_GIT_LRC_PATH) {
+    if (Test-UserWritable -directory $GIT_DIR) {
+        try { Remove-Item -Path $GIT_DIR_GIT_LRC_PATH -Force -ErrorAction SilentlyContinue } catch { }
+    } else {
+        $needsAdminCleanup = $true
+        $cleanupTargets += $GIT_DIR_GIT_LRC_PATH
+    }
+}
+
+if ($needsAdminCleanup) {
+    if ($isAdmin) {
+        Write-Host "Removing legacy admin-installed binaries..." -ForegroundColor Yellow
+        foreach ($p in $cleanupTargets) {
+            if (Test-Path $p) {
+                try { Remove-Item -Path $p -Force -ErrorAction SilentlyContinue; Write-Host "Removed $p" -ForegroundColor Green } catch { }
+            }
+        }
+    } else {
+        function Invoke-ElevatedCleanup {
+            param([string[]]$paths)
+            $cleanupScript = Join-Path $env:TEMP "lrc-cleanup-elevated.ps1"
+            $targetsFile = Join-Path $env:TEMP "lrc-cleanup-targets.txt"
+            $logPath = Join-Path $env:TEMP "lrc-cleanup.log"
+
+            # Write targets to a file to preserve spaces
+            Set-Content -Path $targetsFile -Value ($paths -join "`n") -Encoding UTF8 -NoNewline
+
+            $scriptBody = @"
+param([string]`$targetsFile, [string]`$logPath)
+function Log([string]`$msg) { `$msg | Out-File -FilePath `$logPath -Encoding UTF8 -Append }
+Log "-----"
+Log "Cleanup start: $(Get-Date -Format o)"
+Log "Running as: $([Security.Principal.WindowsIdentity]::GetCurrent().Name) (Admin=$([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))"
+`$paths = Get-Content -Path `$targetsFile -ErrorAction SilentlyContinue
+foreach (`$p in `$paths) {
+    Log "Target: `$p"
+    Log "Exists(before): $(Test-Path `$p)"
+    try {
+        if (Test-Path `$p) { Remove-Item -Path `$p -Force -ErrorAction Stop; Log "Removed `$p" }
+    } catch {
+        Log "Error removing `$p : $($_.Exception.Message)"
+    }
+    Log "Exists(after): $(Test-Path `$p)"
+}
+Log "Cleanup end: $(Get-Date -Format o)"
+"@ 
+
+            Set-Content -Path $cleanupScript -Value $scriptBody -Encoding UTF8 -NoNewline
+            $cleanupArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $cleanupScript, "-targetsFile", $targetsFile, "-logPath", $logPath)
+            $p = Start-Process powershell -ArgumentList $cleanupArgs -Verb RunAs -Wait -PassThru -ErrorAction Stop
+            try { Remove-Item -Path $cleanupScript -Force -ErrorAction SilentlyContinue } catch { }
+            try { Remove-Item -Path $targetsFile -Force -ErrorAction SilentlyContinue } catch { }
+            return @{ ExitCode = $p.ExitCode; LogPath = $logPath }
+        }
+
+        Write-Host "Found legacy admin-installed binaries. Elevating once to remove them before reinstalling to a user-writable location..." -ForegroundColor Yellow
+        try {
+            $cleanupResult = Invoke-ElevatedCleanup -paths $cleanupTargets
+            if ($cleanupResult.ExitCode -ne 0) {
+                Write-Host "$FAIL Could not remove legacy admin binaries (exit $($cleanupResult.ExitCode))." -ForegroundColor Red
+                Write-Host "Cleanup log: $($cleanupResult.LogPath)" -ForegroundColor Yellow
+                try { Get-Content -Path $cleanupResult.LogPath -ErrorAction Stop | Select-Object -Last 200 | ForEach-Object { Write-Host $_ } } catch { }
+                Print-ElevationHelp
+                Read-Host "Press Enter to exit"
+                exit 1
+            }
+        } catch {
+            Write-Host "$FAIL Could not remove legacy admin binaries." -ForegroundColor Red
+            Print-ElevationHelp
+            Read-Host "Press Enter to exit"
+            exit 1
+        }
+    }
+
+    $remaining = @($cleanupTargets | Where-Object { Test-Path $_ })
+    if ($remaining.Count -gt 0) {
+        Write-Host "$FAIL Legacy admin binaries still present: $($remaining -join ', ')" -ForegroundColor Red
+        Print-ElevationHelp
+        Write-Host "Check cleanup log at $env:TEMP\lrc-cleanup.log" -ForegroundColor Yellow
+        try { Get-Content -Path (Join-Path $env:TEMP "lrc-cleanup.log") -ErrorAction Stop | Select-Object -Last 200 | ForEach-Object { Write-Host $_ } } catch { }
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+
+    Write-Host "$OK Legacy admin binaries removed." -ForegroundColor Green
+}
 
 # Require git to be present; we also install lrc alongside the git binary
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -84,16 +184,10 @@ switch ($ARCH) {
 $PLATFORM = "windows-$PLATFORM_ARCH"
 Write-Host "$OK Detected platform: $PLATFORM" -ForegroundColor Green
 
-# Install to Program Files (we have admin)
-$INSTALL_DIR = "$env:ProgramFiles\lrc"
-Write-Host "$OK Running as administrator; will install to $INSTALL_DIR" -ForegroundColor Green
-
-# Ensure install directory exists
+# Ensure install directory exists (user-writable by default)
 if (-not (Test-Path $INSTALL_DIR)) {
     New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
 }
-
-$INSTALL_PATH = "$INSTALL_DIR\lrc.exe"
 
 # Authorize with B2
 Write-Host -NoNewline "Authorizing with Backblaze B2... "
@@ -215,29 +309,57 @@ try {
     exit 1
 }
 
-# Copy to git directory as git-lrc.exe (git subcommand)
-# Git discovers subcommands by looking for git-<name>.exe in PATH
-$GIT_INSTALL_PATH = "$GIT_DIR\git-lrc.exe"
-Write-Host -NoNewline "Installing to $GIT_INSTALL_PATH (git subcommand)... "
+# Create git-lrc.exe alongside lrc.exe so Git can discover it via PATH
+Write-Host -NoNewline "Creating $GIT_INSTALL_PATH (git subcommand)... "
 try {
     Copy-Item -Path $INSTALL_PATH -Destination $GIT_INSTALL_PATH -Force
     Write-Host "$OK" -ForegroundColor Green
 } catch {
-    Write-Host "$FAIL" -ForegroundColor Red
-    Write-Host "Error: Failed to install git subcommand to $GIT_INSTALL_PATH" -ForegroundColor Red
-    Write-Host $_.Exception.Message -ForegroundColor Red
-    exit 1
+    Write-Host "(warning)" -ForegroundColor Yellow
+    Write-Host "Warning: Failed to create $GIT_INSTALL_PATH; git lrc may not resolve until PATH picks up lrc.exe." -ForegroundColor Yellow
 }
 
-# Clean up any stale git-lrc.exe from user-local fallback dir (prevents version mismatch)
-$userLocalFallback = "$env:LOCALAPPDATA\Programs\lrc\git-lrc.exe"
-if ((Test-Path $userLocalFallback) -and ($userLocalFallback -ne $GIT_INSTALL_PATH)) {
-    Remove-Item $userLocalFallback -Force -ErrorAction SilentlyContinue
+# Optionally copy git-lrc into the Git bin directory when writable (improves discovery)
+$gitBinWritable = Test-UserWritable -directory $GIT_DIR
+if ($gitBinWritable) {
+    $gitBinTarget = Join-Path $GIT_DIR "git-lrc.exe"
+    Write-Host -NoNewline "Copying git-lrc.exe to Git bin ($gitBinTarget)... "
+    try {
+        Copy-Item -Path $GIT_INSTALL_PATH -Destination $gitBinTarget -Force
+        Write-Host "$OK" -ForegroundColor Green
+    } catch {
+        Write-Host "(warning)" -ForegroundColor Yellow
+        Write-Host "Warning: Could not copy git-lrc.exe into Git bin; PATH-based discovery will be used." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Git bin not writable; relying on PATH-based discovery and WindowsApps shim." -ForegroundColor Yellow
 }
-$userLocalLrc = "$env:LOCALAPPDATA\Programs\lrc\lrc.exe"
-if ((Test-Path $userLocalLrc) -and ($userLocalLrc -ne $INSTALL_PATH)) {
-    Remove-Item $userLocalLrc -Force -ErrorAction SilentlyContinue
-}
+
+# Create a cmd shim as an additional fallback for git subcommand discovery
+$gitLrcCmdShim = Join-Path $INSTALL_DIR "git-lrc.cmd"
+try {
+    $shimContent = '@echo off`r`n"%~dp0lrc.exe" %*'
+    Set-Content -Path $gitLrcCmdShim -Value $shimContent -NoNewline -Encoding ASCII
+} catch { }
+
+# Create user WindowsApps shims to ensure immediate PATH resolution without shell restart
+$windowsApps = Join-Path $env:LocalAppData "Microsoft\WindowsApps"
+try {
+    if (-not (Test-Path $windowsApps)) { New-Item -ItemType Directory -Path $windowsApps -Force | Out-Null }
+    $lrcShimPath = Join-Path $windowsApps "lrc.cmd"
+    $gitLrcShimPath = Join-Path $windowsApps "git-lrc.cmd"
+    $shimBody = "@echo off`r`n`"$INSTALL_PATH`" %*"
+    $gitShimBody = "@echo off`r`n`"$GIT_INSTALL_PATH`" %*"
+    Set-Content -Path $lrcShimPath -Value $shimBody -Encoding ASCII -NoNewline
+    Set-Content -Path $gitLrcShimPath -Value $gitShimBody -Encoding ASCII -NoNewline
+    # Also drop git-lrc.exe into WindowsApps to help git subcommand discovery
+    $windowsAppsGitExe = Join-Path $windowsApps "git-lrc.exe"
+    Copy-Item -Path $GIT_INSTALL_PATH -Destination $windowsAppsGitExe -Force -ErrorAction SilentlyContinue
+    # Prepend WindowsApps for this session to ensure Git sees the exe immediately
+    if (-not ($env:Path.Split(';') -contains $windowsApps)) {
+        $env:Path = "$windowsApps;$env:Path"
+    }
+} catch { }
 
 # Create config file if API key and URL are provided
 if ($env:LRC_API_KEY -and $env:LRC_API_URL) {
@@ -325,8 +447,6 @@ if ($normalizedInstallDir -notin $pathEntries) {
     try {
         if ($currentPath -eq "") { $newPath = $INSTALL_DIR } else { $newPath = "$currentPath;$INSTALL_DIR" }
         [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-        # Update current session PATH
-        $env:Path = "$env:Path;$INSTALL_DIR"
         Write-Host "$OK" -ForegroundColor Green
         Write-Host ""
         Write-Host "Note: You may need to restart your terminal for PATH changes to take effect" -ForegroundColor Yellow
@@ -336,6 +456,10 @@ if ($normalizedInstallDir -notin $pathEntries) {
         Write-Host "Please add $INSTALL_DIR to your PATH manually" -ForegroundColor Yellow
     }
 }
+# Always prepend install dir to current session PATH to win over any lingering entries
+$env:Path = "$INSTALL_DIR;$env:Path"
+# Ensure PATHEXT contains .CMD so git picks up the cmd shim
+if (-not ($env:PATHEXT -match "\.CMD(;|$)")) { $env:PATHEXT = "$env:PATHEXT;.CMD" }
 
 # Install global hooks via lrc
 Write-Host -NoNewline "Running 'lrc hooks install' to set up global hooks... "
@@ -377,6 +501,44 @@ if ($lrcVer -and $gitLrcVer -and ($lrcVer -ne $gitLrcVer)) {
     Write-Host "WARNING: Version mismatch! lrc=$lrcVer but git-lrc=$gitLrcVer" -ForegroundColor Red
 } elseif ($lrcVer -and $gitLrcVer) {
     Write-Host "$OK lrc and git-lrc both at $lrcVer" -ForegroundColor Green
+}
+
+# If admin-scope binaries somehow remain, warn
+$adminLeftovers = @()
+if (Test-Path $ADMIN_INSTALL_PATH) { $adminLeftovers += $ADMIN_INSTALL_PATH }
+if ((Test-Path $GIT_DIR_GIT_LRC_PATH) -and (-not (Test-UserWritable -directory $GIT_DIR))) { $adminLeftovers += $GIT_DIR_GIT_LRC_PATH }
+if ($adminLeftovers.Count -gt 0) {
+    Write-Host "(warning) Admin-scope binaries still exist and may shadow the user install: $($adminLeftovers -join ', ')" -ForegroundColor Yellow
+    Write-Host "Please remove them manually or rerun this installer as Administrator to clean them." -ForegroundColor Yellow
+}
+
+# Verify git resolves the subcommand; if not, attempt a retry with the shim/copy
+function Test-GitLrc {
+    try {
+        $out = (& git lrc version 2>&1)
+        $ver = ($out | Select-String "v[0-9]+\.[0-9]+\.[0-9]+" | ForEach-Object { $_.Matches[0].Value }) 2>$null
+        if ($ver) { return @{ success = $true; version = $ver; output = $out } }
+        return @{ success = $false; version = $null; output = $out }
+    } catch {
+        return @{ success = $false; version = $null; output = $_.Exception.Message }
+    }
+}
+
+$gitCheck = Test-GitLrc
+if (-not $gitCheck.success) {
+    # Retry once after ensuring PATH is prefixed
+    $env:Path = "$INSTALL_DIR;$env:Path"
+    # If Git bin is writable, ensure the copy exists
+    if ($gitBinWritable -and -not (Test-Path (Join-Path $GIT_DIR "git-lrc.exe"))) {
+        try { Copy-Item -Path $GIT_INSTALL_PATH -Destination (Join-Path $GIT_DIR "git-lrc.exe") -Force } catch { }
+    }
+    $gitCheck = Test-GitLrc
+}
+
+if ($gitCheck.success) {
+    Write-Host "$OK git lrc resolves (version $($gitCheck.version))" -ForegroundColor Green
+} else {
+    Write-Host "(warning) git lrc did not resolve; git output: $($gitCheck.output)" -ForegroundColor Yellow
 }
 
 Write-Host ""
