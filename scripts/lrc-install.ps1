@@ -43,7 +43,7 @@ function Test-UserWritable {
 
 # Require git to be present; we install a git subcommand alongside PATH
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "Error: git is not installed. Please install git and retry." -ForegroundColor Red
+    Write-Host "Git is required for lrc. Please install Git using https://git-scm.com/install/windows, then rerun this installer. No changes were made." -ForegroundColor Yellow
     exit 1
 }
 $GIT_BIN = (Get-Command git).Source
@@ -154,7 +154,7 @@ Log "Cleanup end: $(Get-Date -Format o)"
 
 # Require git to be present; we also install lrc alongside the git binary
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "Error: git is not installed. Please install git and retry." -ForegroundColor Red
+    Write-Host "Git is required for lrc. Please install Git using https://git-scm.com/install/windows, then rerun this installer. No changes were made." -ForegroundColor Yellow
     exit 1
 }
 $GIT_BIN = (Get-Command git).Source
