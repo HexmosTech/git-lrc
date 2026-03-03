@@ -2,10 +2,10 @@
 import { waitForPreact, countIssuesBySeverity } from './utils.js';
 
 export async function createSeverityFilter() {
-    const { html, useCallback } = await waitForPreact();
+    const { html } = await waitForPreact();
 
-    return function SeverityFilter({ files, visibleSeverities, onToggleSeverity, onCopyVisibleIssues }) {
-        const counts = countIssuesBySeverity(files, visibleSeverities);
+    return function SeverityFilter({ files, visibleSeverities, onToggleSeverity, onCopyVisibleIssues, hiddenComments }) {
+        const counts = countIssuesBySeverity(files, visibleSeverities, hiddenComments);
         if (counts.total === 0) return null;
 
         const filterLabel = counts.visible === counts.total

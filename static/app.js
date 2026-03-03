@@ -171,6 +171,7 @@ async function initApp() {
         const [events, setEvents] = useState([]);
         const [newEventCount, setNewEventCount] = useState(0);
         const [isTailing, setIsTailing] = useState(false);
+        const [hiddenComments, setHiddenComments] = useState(new Set());
         
         const pollingRef = useRef(null);
         const eventsPollingRef = useRef(null);
@@ -398,6 +399,18 @@ async function initApp() {
                 setNewEventCount(0);
             }
         }, []);
+
+        const toggleCommentVisibility = useCallback((commentId) => {
+            setHiddenComments(prev => {
+                const next = new Set(prev);
+                if (next.has(commentId)) {
+                    next.delete(commentId);
+                } else {
+                    next.add(commentId);
+                }
+                return next;
+            });
+        }, []);
         
         // Tail log handler - toggle tailing on/off
         const handleTailLog = useCallback(() => {
@@ -488,12 +501,15 @@ async function initApp() {
             const lines = [];
             files.forEach(file => {
                 if (!file.HasComments) return;
+                const fileId = file.ID || filePathToId(file.FilePath);
                 file.Hunks.forEach(hunk => {
                     hunk.Lines.forEach(line => {
                         if (line.IsComment && line.Comments) {
-                            line.Comments.forEach(comment => {
+                            line.Comments.forEach((comment, commentIdx) => {
                                 const sev = (comment.Severity || '').toLowerCase();
                                 if (!visibleSeverities.has(sev)) return;
+                                const commentId = `comment-${fileId}-${comment.Line}-${commentIdx}`;
+                                if (hiddenComments.has(commentId)) return;
                                 lines.push(formatIssueForCopy(file.FilePath, comment));
                             });
                         }
@@ -506,22 +522,24 @@ async function initApp() {
             } catch (err) {
                 console.error('Failed to copy issues:', err);
             }
-        }, [files, visibleSeverities]);
+        }, [files, visibleSeverities, hiddenComments]);
         
         // Build flat ordered list of VISIBLE comments for navigation
         const allComments = [];
         const commentIds = [];
         files.forEach(file => {
+            const fileId = file.ID || filePathToId(file.FilePath);
             file.Hunks.forEach(hunk => {
                 hunk.Lines.forEach(line => {
                     if (line.IsComment && line.Comments) {
                         line.Comments.forEach((comment, commentIdx) => {
                             const sev = (comment.Severity || '').toLowerCase();
                             if (!visibleSeverities.has(sev)) return;
-                            const cid = `comment-${file.ID}-${comment.Line}-${commentIdx}`;
+                            const cid = `comment-${fileId}-${comment.Line}-${commentIdx}`;
+                            if (hiddenComments.has(cid)) return;
                             allComments.push({
                                 filePath: file.FilePath,
-                                fileId: file.ID,
+                                fileId: fileId,
                                 line: comment.Line,
                                 commentId: cid
                             });
@@ -622,6 +640,7 @@ async function initApp() {
                         visibleSeverities=${visibleSeverities}
                         onToggleSeverity=${toggleSeverity}
                         onCopyVisibleIssues=${handleCopyVisibleIssues}
+                        hiddenComments=${hiddenComments}
                     />
                     
                     <!-- Files Tab -->
@@ -634,6 +653,8 @@ async function initApp() {
                                     expanded=${expandedFiles.has(file.ID)}
                                     onToggle=${toggleFile}
                                     visibleSeverities=${visibleSeverities}
+                                    hiddenComments=${hiddenComments}
+                                    onToggleCommentVisibility=${toggleCommentVisibility}
                                 />
                             `)
                             : html`

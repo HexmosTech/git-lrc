@@ -6,7 +6,14 @@ export async function createDiffTable() {
     const { html } = await waitForPreact();
     const Comment = await getComment();
     
-    return function DiffTable({ hunks, filePath, fileId, visibleSeverities }) {
+    return function DiffTable({ 
+        hunks, 
+        filePath, 
+        fileId, 
+        visibleSeverities,
+        hiddenComments,
+        onToggleCommentVisibility
+    }) {
         if (!hunks || hunks.length === 0) {
             return html`
                 <div style="padding: 20px; text-align: center; color: #57606a;">
@@ -38,12 +45,16 @@ export async function createDiffTable() {
                             ${line.IsComment && line.Comments && line.Comments.map((comment, commentIdx) => {
                                 const sev = (comment.Severity || '').toLowerCase();
                                 if (visibleSeverities && !visibleSeverities.has(sev)) return null;
+                                const commentId = `comment-${resolvedFileId}-${comment.Line}-${commentIdx}`;
+                                const isHidden = hiddenComments && hiddenComments.has(commentId);
                                 return html`
                                     <${Comment} 
                                         comment=${comment} 
                                         filePath=${filePath}
                                         codeExcerpt=${codeExcerpt}
-                                        commentId=${`comment-${resolvedFileId}-${comment.Line}-${commentIdx}`}
+                                        commentId=${commentId}
+                                        isHidden=${isHidden}
+                                        onToggleVisibility=${onToggleCommentVisibility}
                                     />
                                 `;
                             })}
