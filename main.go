@@ -2676,58 +2676,6 @@ func openTTY() (*os.File, error) {
 
 // handleCtrlKeyWithCancel sets up raw terminal mode to detect Ctrl-S (skip), Ctrl-V (vouch), and Ctrl-C (abort).
 // Returns a decision code constant or 0 on cancellation/failure.
-func handleCtrlKeyWithCancel(stop <-chan struct{}) (int, error) {
-	tty, err := openTTY()
-	if err != nil {
-		return 0, err
-	}
-	defer tty.Close()
-
-	// Set terminal to raw mode
-	fd := int(tty.Fd())
-	oldState, err := term.MakeRaw(fd)
-	if err != nil {
-		return 0, err
-	}
-
-	// Ensure restoration on exit
-	defer term.Restore(fd, oldState)
-
-	buf := make([]byte, 1)
-	codeChan := make(chan int, 1)
-	errChan := make(chan error, 1)
-
-	go func() {
-		for {
-			n, err := tty.Read(buf)
-			if err != nil || n == 0 {
-				errChan <- err
-				return
-			}
-			switch buf[0] {
-			case 0x03: // Ctrl-C (ETX)
-				codeChan <- decisionAbort
-				return
-			case 0x13: // Ctrl-S (XOFF)
-				codeChan <- decisionSkip
-				return
-			case 0x16: // Ctrl-V (SYN)
-				codeChan <- decisionVouch
-				return
-			}
-		}
-	}()
-
-	select {
-	case code := <-codeChan:
-		return code, nil
-	case err := <-errChan:
-		return 0, err
-	case <-stop:
-		return 0, fmt.Errorf("cancelled")
-	}
-}
-
 // persistCommitMessage writes the desired commit message to a temporary file that the commit-msg hook will consume.
 func persistCommitMessage(commitMsgPath, message string) error {
 	if commitMsgPath == "" {
