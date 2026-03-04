@@ -69,6 +69,14 @@ class LRCBuilder:
                 key, _, value = line.partition("=")
                 key = key.strip()
                 value = value.strip()
+
+                # Strip wrapping quotes if present
+                if len(value) >= 2 and (
+                    (value.startswith('"') and value.endswith('"')) or
+                    (value.startswith("'") and value.endswith("'"))
+                ):
+                    value = value[1:-1]
+
                 # Don't override existing environment variables
                 if key not in os.environ:
                     os.environ[key] = value
