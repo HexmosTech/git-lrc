@@ -47,7 +47,7 @@ https://github.com/user-attachments/assets/cc4aa598-a7e3-4a1d-998c-9f2ba4b4c66e
 **لینوکس / مک:**
 
 ```bash
-curl -fsSL https://hexmos.com/lrc-install.sh | sudo bash
+curl -fsSL https://hexmos.com/lrc-install.sh | bash
 ```
 
 **ویندوز (PowerShell):**
