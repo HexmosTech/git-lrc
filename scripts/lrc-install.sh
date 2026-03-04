@@ -1,20 +1,25 @@
 #!/bin/bash
 # lrc installer - automatically downloads and installs the latest lrc CLI
-# Usage: curl -fsSL https://your-domain/lrc-install.sh | bash
-#   or:  wget -qO- https://your-domain/lrc-install.sh | bash
+# Usage: curl -fsSL https://hexmos.com/lrc-install.sh | bash
+#   or:  wget -qO- https://hexmos.com/lrc-install.sh | bash
+#
+# Install model:
+# - Installs to ~/.local/bin (user-writable, no sudo required).
+# - Migration: if legacy sudo-installed binaries exist (/usr/local/bin/lrc,
+#   git bin dir), attempt sudo removal once, then continue without sudo.
+# - PATH: creates ~/.lrc/env (idempotent PATH script) and sources it from
+#   shell rc files (~/.profile, ~/.bashrc, ~/.zshenv, etc.).
+# - No shell restart required: PATH is exported in-session.
 
 set -e
 
-print_sudo_help() {
-    echo ""
-    echo -e "${YELLOW}Troubleshooting:${NC}"
-    echo "  1) Try running 'sudo su' in your terminal to verify sudo works."
-    echo "  2) If sudo fails here, try a different system terminal (some terminals do not prompt correctly)."
-    echo "  3) If sudo access is not available, we cannot install lrc. Please file an issue with details: https://github.com/HexmosTech/LiveReview/issues"
-    echo ""
-}
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-# Require git to be present; we also install lrc alongside the git binary
+# Require git to be present
 if ! command -v git >/dev/null 2>&1; then
     echo -e "${RED}Error: git is not installed. Please install git and retry.${NC}"
     exit 1
@@ -28,11 +33,10 @@ B2_APP_KEY="K005DV+hNk6/fdQr8oXHmRsdo8U2YAU"
 B2_BUCKET_NAME="hexmos"
 B2_PREFIX="lrc"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Install location (user-writable, no sudo needed)
+INSTALL_DIR="$HOME/.local/bin"
+INSTALL_PATH="$INSTALL_DIR/lrc"
+GIT_INSTALL_PATH="$INSTALL_DIR/git-lrc"
 
 echo "[*] lrc Installer"
 echo "================"
@@ -74,26 +78,70 @@ esac
 PLATFORM="${PLATFORM_OS}-${PLATFORM_ARCH}"
 echo -e "${GREEN}OK${NC} Detected platform: ${PLATFORM}"
 
-# Try to obtain sudo early so we can install into /usr/local/bin
-SUDO_AVAILABLE=false
-if [ "$(id -u)" -eq 0 ]; then
-    SUDO_AVAILABLE=true
-    echo -e "${GREEN}OK${NC} Running as root; will install to /usr/local/bin"
-elif command -v sudo >/dev/null 2>&1; then
-    echo -n "Requesting sudo for install to /usr/local/bin... "
-    if sudo -v >/dev/null 2>&1; then
-        SUDO_AVAILABLE=true
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${RED}FAIL${NC} Could not acquire sudo permissions."
-        print_sudo_help
-        exit 1
-    fi
-else
-    echo -e "${RED}FAIL${NC} sudo is not available on this system."
-    print_sudo_help
-    exit 1
+# ---------------------------------------------------------------------------
+# Legacy binary cleanup (one-time migration from sudo-installed locations)
+# ---------------------------------------------------------------------------
+LEGACY_PATHS=()
+
+# Check /usr/local/bin/lrc
+if [ -f "/usr/local/bin/lrc" ]; then
+    LEGACY_PATHS+=("/usr/local/bin/lrc")
 fi
+# Check /usr/local/bin/git-lrc
+if [ -f "/usr/local/bin/git-lrc" ]; then
+    LEGACY_PATHS+=("/usr/local/bin/git-lrc")
+fi
+# Check git bin dir (e.g. /usr/bin/git-lrc) — only if it differs from /usr/local/bin
+GIT_DIR_GIT_LRC="${GIT_DIR}/git-lrc"
+if [ -f "$GIT_DIR_GIT_LRC" ] && [ "$GIT_DIR" != "/usr/local/bin" ]; then
+    LEGACY_PATHS+=("$GIT_DIR_GIT_LRC")
+fi
+
+if [ ${#LEGACY_PATHS[@]} -gt 0 ]; then
+    echo ""
+    echo -e "${YELLOW}Found legacy sudo-installed binaries:${NC}"
+    for p in "${LEGACY_PATHS[@]}"; do
+        echo "  $p"
+    done
+    echo -e "${YELLOW}These may shadow the new user-local install. Attempting removal...${NC}"
+
+    SUDO_OK=false
+    if [ "$(id -u)" -eq 0 ]; then
+        SUDO_OK=true
+    elif command -v sudo >/dev/null 2>&1; then
+        if sudo -v >/dev/null 2>&1; then
+            SUDO_OK=true
+        fi
+    fi
+
+    if [ "$SUDO_OK" = true ]; then
+        CLEANUP_FAILED=false
+        for p in "${LEGACY_PATHS[@]}"; do
+            echo -n "  Removing $p... "
+            if sudo rm -f "$p"; then
+                echo -e "${GREEN}OK${NC}"
+            else
+                echo -e "${RED}FAIL${NC}"
+                CLEANUP_FAILED=true
+            fi
+        done
+        if [ "$CLEANUP_FAILED" = true ]; then
+            echo -e "${YELLOW}Warning: Some legacy binaries could not be removed. They may shadow the new install.${NC}"
+        else
+            echo -e "${GREEN}OK${NC} Legacy binaries removed."
+        fi
+    else
+        echo -e "${YELLOW}Warning: sudo is not available to remove legacy binaries.${NC}"
+        echo -e "${YELLOW}The old binaries in system directories may shadow the new install at ~/.local/bin.${NC}"
+        echo -e "${YELLOW}To fix, manually run: sudo rm -f ${LEGACY_PATHS[*]}${NC}"
+    fi
+    echo ""
+fi
+
+# ---------------------------------------------------------------------------
+# Ensure install directory exists
+# ---------------------------------------------------------------------------
+mkdir -p "$INSTALL_DIR"
 
 # Authorize with B2
 echo -n "Authorizing with Backblaze B2... "
@@ -181,48 +229,124 @@ if [ ! -s "$TMP_FILE" ]; then
 fi
 echo -e "${GREEN}OK${NC}"
 
-# Install to /usr/local/bin/lrc first
-INSTALL_PATH="/usr/local/bin/lrc"
+# Install lrc to ~/.local/bin
 echo -n "Installing to ${INSTALL_PATH}... "
-if [ "$SUDO_AVAILABLE" = true ]; then
-    sudo mkdir -p "/usr/local/bin"
-    if ! sudo mv "$TMP_FILE" "$INSTALL_PATH" 2>/dev/null; then
-        echo -e "${RED}FAIL${NC}"
-        echo -e "${RED}Error: Failed to install to ${INSTALL_PATH}${NC}"
-        print_sudo_help
-        exit 1
-    fi
-    sudo chmod +x "$INSTALL_PATH"
-else
+if ! mv "$TMP_FILE" "$INSTALL_PATH"; then
     echo -e "${RED}FAIL${NC}"
-    echo -e "${RED}Error: sudo is required to install to /usr/local/bin${NC}"
-    print_sudo_help
+    echo -e "${RED}Error: Failed to install to ${INSTALL_PATH}${NC}"
+    rm -f "$TMP_FILE"
     exit 1
 fi
+chmod +x "$INSTALL_PATH"
 echo -e "${GREEN}OK${NC}"
 
-# Copy as git-lrc (git subcommand)
-# On macOS, /usr/bin is SIP-protected (read-only), so install to /usr/local/bin instead.
-# Git discovers subcommands via $PATH, so /usr/local/bin/git-lrc works for "git lrc".
-if [ "$PLATFORM_OS" = "darwin" ]; then
-    GIT_INSTALL_PATH="/usr/local/bin/git-lrc"
-else
-    GIT_INSTALL_PATH="${GIT_DIR}/git-lrc"
-fi
+# Copy as git-lrc (git subcommand) — git discovers subcommands via $PATH
 echo -n "Installing to ${GIT_INSTALL_PATH} (git subcommand)... "
-if [ "$SUDO_AVAILABLE" = true ]; then
-    if ! sudo cp "$INSTALL_PATH" "$GIT_INSTALL_PATH" 2>/dev/null; then
-        echo -e "${RED}FAIL${NC}"
-        echo -e "${RED}Error: Failed to install to ${GIT_INSTALL_PATH}${NC}"
-        exit 1
-    fi
-    sudo chmod +x "$GIT_INSTALL_PATH"
-else
+if ! cp "$INSTALL_PATH" "$GIT_INSTALL_PATH"; then
     echo -e "${RED}FAIL${NC}"
-    echo -e "${RED}Error: sudo is required to install to ${GIT_DIR}${NC}"
+    echo -e "${RED}Error: Failed to install to ${GIT_INSTALL_PATH}${NC}"
     exit 1
 fi
+chmod +x "$GIT_INSTALL_PATH"
 echo -e "${GREEN}OK${NC}"
+
+# ---------------------------------------------------------------------------
+# PATH management — rustup-style env script + shell rc source lines
+# ---------------------------------------------------------------------------
+LRC_ENV_DIR="$HOME/.lrc"
+LRC_ENV_FILE="$LRC_ENV_DIR/env"
+SOURCE_LINE=". \"\$HOME/.lrc/env\""
+
+# Create ~/.lrc/env with idempotent PATH logic
+mkdir -p "$LRC_ENV_DIR"
+cat > "$LRC_ENV_FILE" << 'ENVEOF'
+#!/bin/sh
+# lrc shell setup (auto-generated by lrc installer)
+# Ensures ~/.local/bin is on PATH for lrc and git-lrc discovery
+case ":${PATH}:" in
+    *:"$HOME/.local/bin":*)
+        ;;
+    *)
+        export PATH="$HOME/.local/bin:$PATH"
+        ;;
+esac
+ENVEOF
+chmod +x "$LRC_ENV_FILE"
+
+# Helper: append source line to a shell rc file if not already present
+add_source_line() {
+    local rcfile="$1"
+    if [ -f "$rcfile" ] && [ -r "$rcfile" ]; then
+        if ! grep -qF '/.lrc/env' "$rcfile"; then
+            echo "" >> "$rcfile"
+            echo "# Added by lrc installer" >> "$rcfile"
+            echo ". \"\$HOME/.lrc/env\"" >> "$rcfile"
+            echo -e "  ${GREEN}OK${NC} Updated $rcfile"
+        fi
+    fi
+}
+
+# Helper: create rc file with source line (for shells where we must create it)
+create_source_line() {
+    local rcfile="$1"
+    if [ ! -f "$rcfile" ]; then
+        echo "# Added by lrc installer" > "$rcfile"
+        echo ". \"\$HOME/.lrc/env\"" >> "$rcfile"
+        echo -e "  ${GREEN}OK${NC} Created $rcfile"
+    else
+        add_source_line "$rcfile"
+    fi
+}
+
+echo "Setting up PATH..."
+
+# Always update ~/.profile (POSIX login shells)
+create_source_line "$HOME/.profile"
+
+# Detect current shell
+CURRENT_SHELL="$(basename "${SHELL:-/bin/sh}")"
+
+case "$CURRENT_SHELL" in
+    bash)
+        # Update existing bash config files
+        # ~/.bashrc for interactive shells, ~/.bash_profile for login shells
+        add_source_line "$HOME/.bashrc"
+        add_source_line "$HOME/.bash_profile"
+        ;;
+    zsh)
+        # zsh: ensure ~/.zshenv exists and has the source line
+        # (macOS Catalina+ defaults to zsh but may not have any rc files yet)
+        create_source_line "$HOME/.zshenv"
+        add_source_line "$HOME/.zshrc"
+        ;;
+    fish)
+        # fish uses different syntax; can't source POSIX scripts
+        FISH_CONF_DIR="$HOME/.config/fish/conf.d"
+        FISH_LRC_CONF="$FISH_CONF_DIR/lrc.fish"
+        mkdir -p "$FISH_CONF_DIR"
+        if [ ! -f "$FISH_LRC_CONF" ] || ! grep -qF '.local/bin' "$FISH_LRC_CONF"; then
+            cat > "$FISH_LRC_CONF" << 'FISHEOF'
+# lrc shell setup (auto-generated by lrc installer)
+if not contains -- $HOME/.local/bin $PATH
+    set -gx PATH $HOME/.local/bin $PATH
+end
+FISHEOF
+            echo -e "  ${GREEN}OK${NC} Created $FISH_LRC_CONF"
+        fi
+        ;;
+    *)
+        # For other shells, ~/.profile is the best we can do
+        ;;
+esac
+
+# Export PATH in the current session so lrc works immediately
+export PATH="$HOME/.local/bin:$PATH"
+
+# Remove macOS quarantine attribute if present
+if [ "$PLATFORM_OS" = "darwin" ]; then
+    xattr -d com.apple.quarantine "$INSTALL_PATH" 2>/dev/null || true
+    xattr -d com.apple.quarantine "$GIT_INSTALL_PATH" 2>/dev/null || true
+fi
 
 # Create config file if API key and URL are provided
 if [ -n "$LRC_API_KEY" ] && [ -n "$LRC_API_URL" ]; then
@@ -288,17 +412,15 @@ if [ -n "$LRC_API_KEY" ] && [ -n "$LRC_API_URL" ]; then
 fi
 
 # Verify installation
-if ! command -v lrc >/dev/null 2>&1; then
-    echo ""
-    echo -e "${YELLOW}Warning: 'lrc' command not found in PATH${NC}"
-    echo -e "${YELLOW}You may need to add ${INSTALL_DIR} to your PATH or run:${NC}"
-    echo -e "${YELLOW}  ${INSTALL_PATH} --version${NC}"
-else
-    echo ""
-    echo -e "${GREEN}OK Installation complete!${NC}"
-    echo ""
-    lrc version
-fi
+echo ""
+echo -e "${GREEN}OK Installation complete!${NC}"
+echo ""
+"$INSTALL_PATH" version
 
 echo ""
-echo "Run 'lrc --help' to get started"
+echo -e "To start using lrc in your ${YELLOW}current${NC} terminal, run:"
+echo ""
+echo -e "  ${GREEN}source ~/.lrc/env${NC}"
+echo ""
+echo "New terminal sessions will pick it up automatically."
+echo "Run 'lrc --help' to get started."

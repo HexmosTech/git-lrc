@@ -3914,7 +3914,7 @@ func platformInstallCommand() string {
 	if runtime.GOOS == "windows" {
 		return `powershell -Command "iwr -useb https://hexmos.com/lrc-install.ps1 | iex"`
 	}
-	return "curl -fsSL https://hexmos.com/lrc-install.sh | sudo bash"
+	return "curl -fsSL https://hexmos.com/lrc-install.sh | bash"
 }
 
 // ANSI color codes for terminal output
@@ -3962,9 +3962,9 @@ func runSelfUpdate(c *cli.Context) error {
 		return nil
 	}
 
-	// Warn about sudo requirement on non-Windows platforms
+	// Note about legacy cleanup on non-Windows platforms
 	if runtime.GOOS != "windows" {
-		fmt.Printf("\n%s%s⚠ NOTE: The installer will use 'sudo' and may prompt for your password.%s\n\n",
+		fmt.Printf("\n%s%s⚠ NOTE: If old system-installed binaries are found, the installer may prompt for sudo to remove them.%s\n\n",
 			colorBold, colorYellow, colorReset)
 	}
 

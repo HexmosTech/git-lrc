@@ -24,10 +24,11 @@ build-all:
 build-local:
 	@echo "🔨 Building lrc CLI locally (dirty tree allowed)..."
 	@go build -o /tmp/lrc .
-	@sudo rm -f /usr/local/bin/lrc || true
-	@sudo install -m 0755 /tmp/lrc /usr/local/bin/lrc
-	@sudo cp /usr/local/bin/lrc /usr/bin/git-lrc
-	@echo "✅ Installed lrc to /usr/local/bin and git-lrc to /usr/bin"
+	@mkdir -p $(HOME)/.local/bin
+	@install -m 0755 /tmp/lrc $(HOME)/.local/bin/lrc
+	@cp $(HOME)/.local/bin/lrc $(HOME)/.local/bin/git-lrc
+	@echo "✅ Installed lrc and git-lrc to ~/.local/bin"
+	@case ":$$PATH:" in *:$(HOME)/.local/bin:*) ;; *) echo "⚠️  ~/.local/bin is not in PATH. Run: source ~/.lrc/env" ;; esac
 
 # Run the locally built lrc CLI (pass args via ARGS="--flag value")
 run: build-local
