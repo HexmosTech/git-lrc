@@ -40,24 +40,37 @@ export async function copyToClipboard(text) {
     await navigator.clipboard.writeText(text);
 }
 
+// Build a stable key for a comment so toggles stay in sync even if order changes.
+export function getCommentVisibilityKey(filePath, comment) {
+    const path = filePath || comment?.FilePath || '';
+    const line = comment?.Line ?? comment?.line ?? '';
+    const severity = (comment?.Severity || comment?.severity || '').toLowerCase();
+    const category = (comment?.Category || comment?.category || '').toLowerCase();
+    const content = (comment?.Content || comment?.content || '')
+        .trim()
+        .replace(/\s+/g, ' ');
+    return `${path}::${line}::${severity}::${category}::${content}`;
+}
+
 // Count visible comments for a single file, filtered by visibleSeverities.
 // Returns the count of comments whose severity is in the Set.
-export function countVisibleComments(file, visibleSeverities, hiddenComments) {
+export function countVisibleComments(file, visibleSeverities, hiddenCommentKeys) {
     if (!file) return 0;
     const severitySet = visibleSeverities && visibleSeverities.size > 0
         ? visibleSeverities
         : new Set(['critical', 'error', 'warning', 'info']);
-    const hiddenSet = hiddenComments || null;
-    const fileId = file.ID || filePathToId(file.FilePath || '');
+    const hiddenSet = hiddenCommentKeys || null;
     let count = 0;
     (file.Hunks || []).forEach(hunk => {
         (hunk.Lines || []).forEach(line => {
             if (!line.IsComment || !line.Comments) return;
-            line.Comments.forEach((c, commentIdx) => {
+            line.Comments.forEach((c) => {
                 const sev = (c.Severity || '').toLowerCase();
                 if (!severitySet.has(sev)) return;
-                const commentId = `comment-${fileId}-${c.Line}-${commentIdx}`;
-                if (hiddenSet && hiddenSet.has(commentId)) return;
+                if (hiddenSet) {
+                    const visibilityKey = getCommentVisibilityKey(file.FilePath, c);
+                    if (hiddenSet.has(visibilityKey)) return;
+                }
                 count++;
             });
         });
@@ -66,27 +79,28 @@ export function countVisibleComments(file, visibleSeverities, hiddenComments) {
 }
 
 // Count all issues by severity across files. Returns { critical, error, warning, info, total, visible }.
-export function countIssuesBySeverity(files, visibleSeverities, hiddenComments) {
+export function countIssuesBySeverity(files, visibleSeverities, hiddenCommentKeys) {
     let critical = 0, error = 0, warning = 0, info = 0, visible = 0;
-    const hiddenSet = hiddenComments || null;
+    const hiddenSet = hiddenCommentKeys || null;
     const severitySet = visibleSeverities && visibleSeverities.size > 0
         ? visibleSeverities
         : new Set(['critical', 'error', 'warning', 'info']);
     files.forEach(file => {
         if (!file.HasComments) return;
-        const fileId = file.ID || filePathToId(file.FilePath || '');
         (file.Hunks || []).forEach(hunk => {
             (hunk.Lines || []).forEach(line => {
                 if (line.IsComment && line.Comments) {
-                    line.Comments.forEach((c, commentIdx) => {
+                    line.Comments.forEach((c) => {
                         const sev = (c.Severity || '').toLowerCase();
                         if (sev === 'critical') critical++;
                         else if (sev === 'error') error++;
                         else if (sev === 'warning') warning++;
                         else info++;
                         if (!severitySet.has(sev)) return;
-                        const commentId = `comment-${fileId}-${c.Line}-${commentIdx}`;
-                        if (hiddenSet && hiddenSet.has(commentId)) return;
+                        if (hiddenSet) {
+                            const visibilityKey = getCommentVisibilityKey(file.FilePath, c);
+                            if (hiddenSet.has(visibilityKey)) return;
+                        }
                         visible++;
                     });
                 }

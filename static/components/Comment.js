@@ -4,7 +4,7 @@ import { waitForPreact, getBadgeClass, copyToClipboard } from './utils.js';
 export async function createComment() {
     const { html, useState } = await waitForPreact();
     
-    return function Comment({ comment, filePath, codeExcerpt, commentId, isHidden, onToggleVisibility }) {
+    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility }) {
         const [copied, setCopied] = useState(false);
         
         const handleCopy = async (e) => {
@@ -36,8 +36,12 @@ export async function createComment() {
 
         const handleToggleVisibility = (e) => {
             e.stopPropagation();
+            if (!visibilityKey) {
+                console.warn('Missing visibility key for comment toggle');
+                return;
+            }
             if (onToggleVisibility) {
-                onToggleVisibility(commentId);
+                onToggleVisibility(visibilityKey);
             }
         };
         

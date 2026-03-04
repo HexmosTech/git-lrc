@@ -493,7 +493,7 @@ body {
 
 .comment-visibility-row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
 }
 
@@ -1147,9 +1147,51 @@ body {
 .severity-filter-btn.info .filter-badge { background: #2b7bd4; }
 
 /* Copy Visible Issues button — primary action, pushed to far right */
-.copy-visible-btn {
+.copy-visible-wrapper {
     margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.copy-visible-btn {
     flex-shrink: 0;
+}
+
+.copy-visible-btn.success {
+    background: rgba(34,197,94,0.25);
+    border-color: rgba(34,197,94,0.6);
+    color: var(--accent-green-light);
+}
+
+.copy-visible-btn.empty {
+    background: rgba(234,179,8,0.2);
+    border-color: rgba(234,179,8,0.5);
+    color: #fde68a;
+}
+
+.copy-visible-btn.error {
+    background: rgba(248,113,113,0.2);
+    border-color: rgba(248,113,113,0.45);
+    color: #fecaca;
+}
+
+.copy-feedback {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.copy-feedback-success {
+    color: var(--accent-green-light);
+}
+
+.copy-feedback-empty {
+    color: #facc15;
+}
+
+.copy-feedback-error {
+    color: #fca5a5;
 }
 
 /* Loader */

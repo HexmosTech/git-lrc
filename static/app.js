@@ -1,7 +1,7 @@
 // LiveReview App - Main Entry Point
 // Fetches data from /api/review and updates reactively
 
-import { waitForPreact, filePathToId, transformEvent, getBadgeClass, formatIssueForCopy } from './components/utils.js';
+import { waitForPreact, filePathToId, transformEvent, getBadgeClass, formatIssueForCopy, getCommentVisibilityKey } from './components/utils.js';
 import { getHeader } from './components/Header.js';
 import { getSidebar } from './components/Sidebar.js';
 import { getSummary } from './components/Summary.js';
@@ -171,11 +171,13 @@ async function initApp() {
         const [events, setEvents] = useState([]);
         const [newEventCount, setNewEventCount] = useState(0);
         const [isTailing, setIsTailing] = useState(false);
-        const [hiddenComments, setHiddenComments] = useState(new Set());
+        const [hiddenCommentKeys, setHiddenCommentKeys] = useState(new Set());
+        const [copyFeedback, setCopyFeedback] = useState({ status: 'idle', message: '' });
         
         const pollingRef = useRef(null);
         const eventsPollingRef = useRef(null);
         const eventsListRef = useRef(null);
+        const copyFeedbackTimerRef = useRef(null);
         const [logsCopied, setLogsCopied] = useState(false);
         
         // Fetch review data from API
@@ -400,16 +402,43 @@ async function initApp() {
             }
         }, []);
 
-        const toggleCommentVisibility = useCallback((commentId) => {
-            setHiddenComments(prev => {
+        const toggleCommentVisibility = useCallback((visibilityKey) => {
+            if (!visibilityKey) {
+                console.warn('Cannot toggle comment visibility without a key');
+                return;
+            }
+            setHiddenCommentKeys(prev => {
                 const next = new Set(prev);
-                if (next.has(commentId)) {
-                    next.delete(commentId);
+                if (next.has(visibilityKey)) {
+                    next.delete(visibilityKey);
                 } else {
-                    next.add(commentId);
+                    next.add(visibilityKey);
                 }
                 return next;
             });
+        }, []);
+
+        const showCopyFeedback = useCallback((status, message) => {
+            setCopyFeedback({ status, message });
+            if (copyFeedbackTimerRef.current) {
+                clearTimeout(copyFeedbackTimerRef.current);
+                copyFeedbackTimerRef.current = null;
+            }
+            if (status !== 'idle') {
+                copyFeedbackTimerRef.current = setTimeout(() => {
+                    setCopyFeedback({ status: 'idle', message: '' });
+                    copyFeedbackTimerRef.current = null;
+                }, 2500);
+            }
+        }, []);
+
+        useEffect(() => {
+            return () => {
+                if (copyFeedbackTimerRef.current) {
+                    clearTimeout(copyFeedbackTimerRef.current);
+                    copyFeedbackTimerRef.current = null;
+                }
+            };
         }, []);
         
         // Tail log handler - toggle tailing on/off
@@ -501,28 +530,33 @@ async function initApp() {
             const lines = [];
             files.forEach(file => {
                 if (!file.HasComments) return;
-                const fileId = file.ID || filePathToId(file.FilePath);
                 file.Hunks.forEach(hunk => {
                     hunk.Lines.forEach(line => {
                         if (line.IsComment && line.Comments) {
-                            line.Comments.forEach((comment, commentIdx) => {
+                            line.Comments.forEach((comment) => {
                                 const sev = (comment.Severity || '').toLowerCase();
                                 if (!visibleSeverities.has(sev)) return;
-                                const commentId = `comment-${fileId}-${comment.Line}-${commentIdx}`;
-                                if (hiddenComments.has(commentId)) return;
+                                const visibilityKey = getCommentVisibilityKey(file.FilePath, comment);
+                                if (visibilityKey && hiddenCommentKeys.has(visibilityKey)) return;
                                 lines.push(formatIssueForCopy(file.FilePath, comment));
                             });
                         }
                     });
                 });
             });
-            if (lines.length === 0) return;
+            if (lines.length === 0) {
+                showCopyFeedback('empty', 'No visible issues to copy');
+                return;
+            }
             try {
-                await navigator.clipboard.writeText(lines.join('\n'));
+                const numbered = lines.map((text, idx) => `${idx + 1}. ${text}`).join('\n\n');
+                await navigator.clipboard.writeText(numbered);
+                showCopyFeedback('success', `Copied ${lines.length} issue${lines.length !== 1 ? 's' : ''}`);
             } catch (err) {
                 console.error('Failed to copy issues:', err);
+                showCopyFeedback('error', 'Failed to copy issues');
             }
-        }, [files, visibleSeverities, hiddenComments]);
+        }, [files, visibleSeverities, hiddenCommentKeys, showCopyFeedback]);
         
         // Build flat ordered list of VISIBLE comments for navigation
         const allComments = [];
@@ -535,8 +569,9 @@ async function initApp() {
                         line.Comments.forEach((comment, commentIdx) => {
                             const sev = (comment.Severity || '').toLowerCase();
                             if (!visibleSeverities.has(sev)) return;
+                            const visibilityKey = getCommentVisibilityKey(file.FilePath, comment);
+                            if (visibilityKey && hiddenCommentKeys.has(visibilityKey)) return;
                             const cid = `comment-${fileId}-${comment.Line}-${commentIdx}`;
-                            if (hiddenComments.has(cid)) return;
                             allComments.push({
                                 filePath: file.FilePath,
                                 fileId: fileId,
@@ -640,7 +675,9 @@ async function initApp() {
                         visibleSeverities=${visibleSeverities}
                         onToggleSeverity=${toggleSeverity}
                         onCopyVisibleIssues=${handleCopyVisibleIssues}
-                        hiddenComments=${hiddenComments}
+                        hiddenCommentKeys=${hiddenCommentKeys}
+                        copyFeedbackStatus=${copyFeedback.status}
+                        copyFeedbackMessage=${copyFeedback.message}
                     />
                     
                     <!-- Files Tab -->
@@ -653,7 +690,7 @@ async function initApp() {
                                     expanded=${expandedFiles.has(file.ID)}
                                     onToggle=${toggleFile}
                                     visibleSeverities=${visibleSeverities}
-                                    hiddenComments=${hiddenComments}
+                                    hiddenCommentKeys=${hiddenCommentKeys}
                                     onToggleCommentVisibility=${toggleCommentVisibility}
                                 />
                             `)

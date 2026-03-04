@@ -1,5 +1,5 @@
 // DiffTable component - renders diff hunks with lines and comments
-import { waitForPreact, getBadgeClass, filePathToId } from './utils.js';
+import { waitForPreact, getBadgeClass, filePathToId, getCommentVisibilityKey } from './utils.js';
 import { getComment } from './Comment.js';
 
 export async function createDiffTable() {
@@ -11,7 +11,7 @@ export async function createDiffTable() {
         filePath, 
         fileId, 
         visibleSeverities,
-        hiddenComments,
+        hiddenCommentKeys,
         onToggleCommentVisibility
     }) {
         if (!hunks || hunks.length === 0) {
@@ -46,7 +46,8 @@ export async function createDiffTable() {
                                 const sev = (comment.Severity || '').toLowerCase();
                                 if (visibleSeverities && !visibleSeverities.has(sev)) return null;
                                 const commentId = `comment-${resolvedFileId}-${comment.Line}-${commentIdx}`;
-                                const isHidden = hiddenComments && hiddenComments.has(commentId);
+                                const visibilityKey = getCommentVisibilityKey(filePath, comment);
+                                const isHidden = hiddenCommentKeys && hiddenCommentKeys.has(visibilityKey);
                                 return html`
                                     <${Comment} 
                                         comment=${comment} 
@@ -54,6 +55,7 @@ export async function createDiffTable() {
                                         codeExcerpt=${codeExcerpt}
                                         commentId=${commentId}
                                         isHidden=${isHidden}
+                                        visibilityKey=${visibilityKey}
                                         onToggleVisibility=${onToggleCommentVisibility}
                                     />
                                 `;

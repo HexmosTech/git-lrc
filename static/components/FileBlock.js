@@ -11,13 +11,13 @@ export async function createFileBlock() {
         expanded, 
         onToggle, 
         visibleSeverities,
-        hiddenComments,
+        hiddenCommentKeys,
         onToggleCommentVisibility
     }) {
         // Use file.ID if available (set by convertFilesToUIFormat), otherwise generate
         const fileId = file.ID || filePathToId(file.FilePath);
         
-        const visibleCount = countVisibleComments(file, visibleSeverities, hiddenComments);
+        const visibleCount = countVisibleComments(file, visibleSeverities, hiddenCommentKeys);
         
         return html`
             <div 
@@ -39,7 +39,7 @@ export async function createFileBlock() {
                         filePath=${file.FilePath} 
                         fileId=${fileId} 
                         visibleSeverities=${visibleSeverities}
-                        hiddenComments=${hiddenComments}
+                        hiddenCommentKeys=${hiddenCommentKeys}
                         onToggleCommentVisibility=${onToggleCommentVisibility}
                     />
                 </div>

@@ -4,13 +4,30 @@ import { waitForPreact, countIssuesBySeverity } from './utils.js';
 export async function createSeverityFilter() {
     const { html } = await waitForPreact();
 
-    return function SeverityFilter({ files, visibleSeverities, onToggleSeverity, onCopyVisibleIssues, hiddenComments }) {
-        const counts = countIssuesBySeverity(files, visibleSeverities, hiddenComments);
+    return function SeverityFilter({ 
+        files, 
+        visibleSeverities, 
+        onToggleSeverity, 
+        onCopyVisibleIssues, 
+        hiddenCommentKeys,
+        copyFeedbackStatus,
+        copyFeedbackMessage
+    }) {
+        const counts = countIssuesBySeverity(files, visibleSeverities, hiddenCommentKeys);
         if (counts.total === 0) return null;
 
         const filterLabel = counts.visible === counts.total
             ? `${counts.total} issues`
             : `${counts.visible} of ${counts.total} visible`;
+
+        const buttonState = copyFeedbackStatus && copyFeedbackStatus !== 'idle' ? copyFeedbackStatus : '';
+        const buttonLabel = copyFeedbackStatus === 'success'
+            ? 'Copied!'
+            : copyFeedbackStatus === 'empty'
+                ? 'No Visible Issues'
+                : copyFeedbackStatus === 'error'
+                    ? 'Copy Failed'
+                    : 'Copy Visible Issues';
 
         return html`
             <div class="severity-filter-bar">
@@ -49,12 +66,23 @@ export async function createSeverityFilter() {
                     </button>
                 </div>
                 <span class="severity-filter-summary">${filterLabel}</span>
-                <button class="btn btn-primary copy-visible-btn" onClick=${onCopyVisibleIssues} title="Copy all visible issues to clipboard">
-                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Copy Visible Issues
-                </button>
+                <div class="copy-visible-wrapper">
+                    <button 
+                        class="btn btn-primary copy-visible-btn ${buttonState}"
+                        onClick=${onCopyVisibleIssues} 
+                        title="Copy all visible issues to clipboard"
+                    >
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        ${buttonLabel}
+                    </button>
+                    ${copyFeedbackMessage && html`
+                        <div class="copy-feedback copy-feedback-${copyFeedbackStatus}" role="status" aria-live="polite">
+                            ${copyFeedbackMessage}
+                        </div>
+                    `}
+                </div>
             </div>
         `;
     };
