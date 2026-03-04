@@ -52,8 +52,22 @@ case "$OS" in
         PLATFORM_OS="darwin"
         ;;
     msys*|mingw*|cygwin*)
-        echo -e "${RED}Error: Windows detected. Please use lrc-install.ps1 for Windows.${NC}"
-        exit 1
+        echo -e "${YELLOW}Windows (Git Bash) detected.${NC}"
+        echo "Attempting to launch PowerShell installer..."
+        
+        # Try to run the PowerShell installer directly
+        if command -v powershell >/dev/null 2>&1; then
+            powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iwr -useb https://hexmos.com/lrc-install.ps1 | iex" || true
+        fi
+
+        # Provide fallback instructions in case the automatic launch didn't work
+        echo ""
+        echo "If the installation did not start or complete successfully,"
+        echo "please open PowerShell and run:"
+        echo ""
+        echo -e "  ${GREEN}iwr -useb https://hexmos.com/lrc-install.ps1 | iex${NC}"
+        echo ""
+        exit 0
         ;;
     *)
         echo -e "${RED}Error: Unsupported operating system: $OS${NC}"
