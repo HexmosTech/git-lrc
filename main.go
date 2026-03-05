@@ -117,11 +117,12 @@ const (
 	pushRequestFile     = "livereview_push_request"
 
 	// B2 constants for self-update (read-only credentials)
-	b2KeyID    = "00536b4c5851afd0000000006"
-	b2AppKey   = "K005DV+hNk6/fdQr8oXHmRsdo8U2YAU"
-	b2BucketID = "REDACTED_B2_BUCKET_ID"
-	b2Prefix   = "lrc"
-	b2AuthURL  = "https://api.backblazeb2.com/b2api/v2/b2_authorize_account"
+	b2KeyID      = "00536b4c5851afd0000000006"
+	b2AppKey     = "K005DV+hNk6/fdQr8oXHmRsdo8U2YAU"
+	b2BucketName = "hexmos"
+	b2BucketID   = "33d6ab74ac456875919a0f1d"
+	b2Prefix     = "lrc"
+	b2AuthURL    = "https://api.backblazeb2.com/b2api/v2/b2_authorize_account"
 )
 
 // highlightURL adds ANSI color to make served links stand out in terminals.
@@ -601,6 +602,12 @@ func pickServePort(preferredPort, maxTries int) (net.Listener, int, error) {
 
 func runReviewWithOptions(opts reviewOptions) error {
 	verbose := opts.verbose
+	defer func() {
+		if err := applyPendingUpdateIfAny(verbose); err != nil && verbose {
+			log.Printf("pending self-update apply failed: %v", err)
+		}
+	}()
+
 	var tempHTMLPath string
 	var commitMsgPath string
 	attestationAction := ""
@@ -848,6 +855,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 
 	// Track CLI usage (best-effort, non-blocking)
 	go trackCLIUsage(config.APIURL, config.APIKey, verbose)
+	startAutoUpdateCheck(verbose)
 
 	// Generate and serve skeleton HTML immediately if --serve is enabled
 	// Auto-enable serve when no HTML path specified and not in post-commit mode
@@ -1328,7 +1336,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 				decision := <-progressiveDecisionChan
 
 				if opts.precommit {
-					os.Exit(decision.code)
+					return cli.Exit("", decision.code)
 				}
 
 				switch decision.code {
@@ -1384,7 +1392,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 						_ = clearPushRequest(commitMsgPath)
 					}
 
-					os.Exit(code)
+					return cli.Exit("", code)
 				}
 
 				// Non-hook interactive: execute commit (and optional push) directly
@@ -3760,7 +3768,16 @@ var (
 type b2AuthResponse struct {
 	AuthorizationToken string `json:"authorizationToken"`
 	APIURL             string `json:"apiUrl"`
+	DownloadURL        string `json:"downloadUrl"`
 }
+
+type pendingUpdateState struct {
+	Version          string `json:"version"`
+	StagedBinaryPath string `json:"staged_binary_path"`
+	DownloadedAt     string `json:"downloaded_at"`
+}
+
+var autoUpdateStartOnce sync.Once
 
 // b2ListRequest models the B2 list files request
 type b2ListRequest struct {
@@ -3909,6 +3926,519 @@ func fetchLatestVersionFromB2() (string, error) {
 	return latestVersion, nil
 }
 
+func selfUpdateStateDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".lrc", "update"), nil
+}
+
+func pendingUpdateStatePath() (string, error) {
+	stateDir, err := selfUpdateStateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(stateDir, "pending-update.json"), nil
+}
+
+func updateLockPath() (string, error) {
+	stateDir, err := selfUpdateStateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(stateDir, "update.lock"), nil
+}
+
+func ensureSelfUpdateStateDir() error {
+	stateDir, err := selfUpdateStateDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return fmt.Errorf("failed to create self-update state directory: %w", err)
+	}
+	return nil
+}
+
+func loadPendingUpdateState() (*pendingUpdateState, error) {
+	statePath, err := pendingUpdateStatePath()
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read pending update state: %w", err)
+	}
+
+	var state pendingUpdateState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("failed to parse pending update state: %w", err)
+	}
+
+	if strings.TrimSpace(state.Version) == "" || strings.TrimSpace(state.StagedBinaryPath) == "" {
+		return nil, fmt.Errorf("pending update state is incomplete")
+	}
+
+	return &state, nil
+}
+
+func savePendingUpdateState(state *pendingUpdateState) error {
+	if state == nil {
+		return fmt.Errorf("pending update state is nil")
+	}
+	if err := ensureSelfUpdateStateDir(); err != nil {
+		return err
+	}
+
+	statePath, err := pendingUpdateStatePath()
+	if err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to encode pending update state: %w", err)
+	}
+
+	if err := os.WriteFile(statePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write pending update state: %w", err)
+	}
+
+	return nil
+}
+
+func clearPendingUpdateState() error {
+	statePath, err := pendingUpdateStatePath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(statePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to clear pending update state: %w", err)
+	}
+	return nil
+}
+
+func acquireUpdateLock() (func(), bool, error) {
+	if err := ensureSelfUpdateStateDir(); err != nil {
+		return nil, false, err
+	}
+
+	lockPath, err := updateLockPath()
+	if err != nil {
+		return nil, false, err
+	}
+
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to acquire update lock: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(lockFile, "%d\n", os.Getpid())
+
+	release := func() {
+		_ = lockFile.Close()
+		_ = os.Remove(lockPath)
+	}
+
+	return release, true, nil
+}
+
+func selfUpdatePlatformID() (string, error) {
+	platformOS := runtime.GOOS
+	switch platformOS {
+	case "linux", "darwin", "windows":
+	default:
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+
+	platformArch := ""
+	switch runtime.GOARCH {
+	case "amd64":
+		platformArch = "amd64"
+	case "arm64":
+		platformArch = "arm64"
+	default:
+		return "", fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+	}
+
+	return fmt.Sprintf("%s-%s", platformOS, platformArch), nil
+}
+
+func b2Authorize(client *http.Client) (*b2AuthResponse, error) {
+	authReq, err := http.NewRequest("GET", b2AuthURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create auth request: %w", err)
+	}
+	authReq.SetBasicAuth(b2KeyID, b2AppKey)
+
+	authResp, err := client.Do(authReq)
+	if err != nil {
+		return nil, fmt.Errorf("B2 auth request failed: %w", err)
+	}
+	defer authResp.Body.Close()
+
+	if authResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(authResp.Body)
+		return nil, fmt.Errorf("B2 auth failed with status %d: %s", authResp.StatusCode, string(body))
+	}
+
+	var authData b2AuthResponse
+	if err := json.NewDecoder(authResp.Body).Decode(&authData); err != nil {
+		return nil, fmt.Errorf("failed to decode B2 auth response: %w", err)
+	}
+
+	if strings.TrimSpace(authData.AuthorizationToken) == "" || strings.TrimSpace(authData.DownloadURL) == "" {
+		return nil, fmt.Errorf("B2 auth response missing required fields")
+	}
+
+	return &authData, nil
+}
+
+func downloadVersionBinaryFromB2(versionTag string) (string, error) {
+	platformID, err := selfUpdatePlatformID()
+	if err != nil {
+		return "", err
+	}
+
+	binaryName := "lrc"
+	if runtime.GOOS == "windows" {
+		binaryName = "lrc.exe"
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	authData, err := b2Authorize(client)
+	if err != nil {
+		return "", err
+	}
+
+	downloadPath := fmt.Sprintf("%s/%s/%s/%s", b2Prefix, versionTag, platformID, binaryName)
+	fullURL := fmt.Sprintf("%s/file/%s/%s", authData.DownloadURL, b2BucketName, downloadPath)
+
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create download request: %w", err)
+	}
+	req.Header.Set("Authorization", authData.AuthorizationToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download update binary: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("failed to download binary (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	tmpFile, err := os.CreateTemp("", "lrc-update-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file for update: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to write downloaded update binary: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to finalize downloaded update binary: %w", err)
+	}
+
+	if err := os.Chmod(tmpPath, 0755); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to mark downloaded binary executable: %w", err)
+	}
+
+	return tmpPath, nil
+}
+
+func stageUpdateVersion(versionTag string, force bool, verbose bool) (*pendingUpdateState, error) {
+	release, acquired, err := acquireUpdateLock()
+	if err != nil {
+		return nil, err
+	}
+	if !acquired {
+		if verbose {
+			log.Println("self-update lock is held by another process; skipping stage")
+		}
+		return nil, nil
+	}
+	defer release()
+
+	if strings.TrimSpace(versionTag) == "" {
+		return nil, fmt.Errorf("version tag is empty")
+	}
+
+	existing, err := loadPendingUpdateState()
+	if err == nil && existing != nil && existing.Version == versionTag && !force {
+		if st, statErr := os.Stat(existing.StagedBinaryPath); statErr == nil && st.Size() > 0 {
+			if verbose {
+				log.Printf("reusing already-downloaded update artifact for %s", versionTag)
+			}
+			return existing, nil
+		}
+	}
+
+	stagedBinaryPath, err := downloadVersionBinaryFromB2(versionTag)
+	if err != nil {
+		return nil, err
+	}
+
+	state := &pendingUpdateState{
+		Version:          versionTag,
+		StagedBinaryPath: stagedBinaryPath,
+		DownloadedAt:     time.Now().UTC().Format(time.RFC3339),
+	}
+
+	if err := savePendingUpdateState(state); err != nil {
+		_ = os.Remove(stagedBinaryPath)
+		return nil, err
+	}
+
+	if verbose {
+		log.Printf("staged update binary for %s at %s", versionTag, stagedBinaryPath)
+	}
+
+	return state, nil
+}
+
+func currentBinaryTargets() (string, string, error) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to resolve current executable path: %w", err)
+	}
+
+	resolvedExe, err := filepath.EvalSymlinks(exePath)
+	if err == nil && strings.TrimSpace(resolvedExe) != "" {
+		exePath = resolvedExe
+	}
+
+	installDir := filepath.Dir(exePath)
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+
+	return filepath.Join(installDir, "lrc"+ext), filepath.Join(installDir, "git-lrc"+ext), nil
+}
+
+func pathDirWritable(path string) bool {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, ".lrc-write-check-")
+	if err != nil {
+		return false
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return true
+}
+
+func copyFileContents(srcPath, dstPath string, mode fs.FileMode) error {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to open source file %s: %w", srcPath, err)
+	}
+	defer src.Close()
+
+	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return fmt.Errorf("failed to open destination file %s: %w", dstPath, err)
+	}
+
+	if _, err := io.Copy(dst, src); err != nil {
+		_ = dst.Close()
+		return fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
+	}
+
+	if err := dst.Close(); err != nil {
+		return fmt.Errorf("failed to close destination file %s: %w", dstPath, err)
+	}
+
+	return nil
+}
+
+func runHooksInstallWithBinary(binaryPath string, verbose bool) error {
+	cmd := exec.Command(binaryPath, "hooks", "install")
+	if verbose {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run hooks install with new binary: %w", err)
+	}
+	return nil
+}
+
+func applyPendingUpdateUnix(state *pendingUpdateState, verbose bool) error {
+	lrcBinaryPath, gitLRCBinaryPath, err := currentBinaryTargets()
+	if err != nil {
+		return err
+	}
+
+	if !pathDirWritable(lrcBinaryPath) {
+		return fmt.Errorf("install directory is not writable: %s", filepath.Dir(lrcBinaryPath))
+	}
+
+	replaceTmpPath := filepath.Join(filepath.Dir(lrcBinaryPath), fmt.Sprintf(".lrc.new.%d", time.Now().UnixNano()))
+	if err := copyFileContents(state.StagedBinaryPath, replaceTmpPath, 0755); err != nil {
+		return err
+	}
+
+	if err := os.Chmod(replaceTmpPath, 0755); err != nil {
+		_ = os.Remove(replaceTmpPath)
+		return fmt.Errorf("failed to set executable permissions on replacement binary: %w", err)
+	}
+
+	if err := os.Rename(replaceTmpPath, lrcBinaryPath); err != nil {
+		_ = os.Remove(replaceTmpPath)
+		return fmt.Errorf("failed to replace lrc binary: %w", err)
+	}
+
+	if err := copyFileContents(lrcBinaryPath, gitLRCBinaryPath, 0755); err != nil {
+		return fmt.Errorf("failed to sync git-lrc binary: %w", err)
+	}
+	if err := os.Chmod(gitLRCBinaryPath, 0755); err != nil {
+		return fmt.Errorf("failed to set executable permissions on git-lrc binary: %w", err)
+	}
+
+	if err := runHooksInstallWithBinary(lrcBinaryPath, verbose); err != nil {
+		return err
+	}
+
+	_ = os.Remove(state.StagedBinaryPath)
+	if err := clearPendingUpdateState(); err != nil {
+		return err
+	}
+
+	fmt.Printf("%s✓ Updated to %s and reinstalled global hooks%s\n", colorGreen, state.Version, colorReset)
+	return nil
+}
+
+func psSingleQuote(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
+func applyPendingUpdateWindows(state *pendingUpdateState, verbose bool) error {
+	lrcBinaryPath, gitLRCBinaryPath, err := currentBinaryTargets()
+	if err != nil {
+		return err
+	}
+
+	statePath, err := pendingUpdateStatePath()
+	if err != nil {
+		return err
+	}
+
+	script := fmt.Sprintf("$src='%s';$dst='%s';$git='%s';$state='%s';for($i=0;$i -lt 120;$i++){try{Move-Item -Force $src $dst;Copy-Item -Force $dst $git;& $dst hooks install *> $null;Remove-Item -Force $state -ErrorAction SilentlyContinue;exit 0}catch{Start-Sleep -Milliseconds 500}};exit 1",
+		psSingleQuote(state.StagedBinaryPath),
+		psSingleQuote(lrcBinaryPath),
+		psSingleQuote(gitLRCBinaryPath),
+		psSingleQuote(statePath),
+	)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
+	if verbose {
+		log.Println("starting Windows self-update helper process")
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start Windows update helper: %w", err)
+	}
+
+	fmt.Printf("%sUpdate to %s scheduled and will finalize as this process exits.%s\n", colorYellow, state.Version, colorReset)
+	return nil
+}
+
+func applyPendingUpdateState(state *pendingUpdateState, verbose bool) error {
+	if state == nil {
+		return nil
+	}
+	if st, err := os.Stat(state.StagedBinaryPath); err != nil || st.Size() == 0 {
+		_ = clearPendingUpdateState()
+		if err == nil {
+			return fmt.Errorf("staged update binary is empty: %s", state.StagedBinaryPath)
+		}
+		return fmt.Errorf("staged update binary unavailable: %w", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		return applyPendingUpdateWindows(state, verbose)
+	}
+	return applyPendingUpdateUnix(state, verbose)
+}
+
+func applyPendingUpdateIfAny(verbose bool) error {
+	release, acquired, err := acquireUpdateLock()
+	if err != nil {
+		return err
+	}
+	if !acquired {
+		if verbose {
+			log.Println("self-update lock is held by another process; skipping apply")
+		}
+		return nil
+	}
+	defer release()
+
+	state, err := loadPendingUpdateState()
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		return nil
+	}
+
+	return applyPendingUpdateState(state, verbose)
+}
+
+func startAutoUpdateCheck(verbose bool) {
+	autoUpdateStartOnce.Do(func() {
+		go func() {
+			latestVersion, err := fetchLatestVersionFromB2()
+			if err != nil {
+				if verbose {
+					log.Printf("auto-update check failed: %v", err)
+				}
+				return
+			}
+
+			cmp, err := semverCompare(version, latestVersion)
+			if err != nil {
+				if verbose {
+					log.Printf("auto-update version compare failed: %v", err)
+				}
+				return
+			}
+			if cmp >= 0 {
+				return
+			}
+
+			_, err = stageUpdateVersion(latestVersion, false, verbose)
+			if err != nil {
+				if verbose {
+					log.Printf("auto-update staging failed: %v", err)
+				}
+				return
+			}
+
+			if verbose {
+				log.Printf("auto-update staged version %s for apply-on-exit", latestVersion)
+			}
+		}()
+	})
+}
+
 // platformInstallCommand returns the appropriate installer command for the current platform
 func platformInstallCommand() string {
 	if runtime.GOOS == "windows" {
@@ -3962,30 +4492,19 @@ func runSelfUpdate(c *cli.Context) error {
 		return nil
 	}
 
-	// Note about legacy cleanup on non-Windows platforms
-	if runtime.GOOS != "windows" {
-		fmt.Printf("\n%s%s⚠ NOTE: If old system-installed binaries are found, the installer may prompt for sudo to remove them.%s\n\n",
-			colorBold, colorYellow, colorReset)
+	fmt.Println("Downloading update artifact...")
+	state, err := stageUpdateVersion(latestVersion, force, true)
+	if err != nil {
+		return fmt.Errorf("failed to stage update: %w", err)
+	}
+	if state == nil {
+		fmt.Printf("%sAnother lrc process is already performing self-update; try again shortly.%s\n", colorYellow, colorReset)
+		return nil
 	}
 
-	// Get the installer command
-	installCmd := platformInstallCommand()
-	fmt.Printf("Running installer: %s\n\n", installCmd)
-
-	// Execute the installer
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("powershell", "-Command", installCmd)
-	} else {
-		cmd = exec.Command("bash", "-c", installCmd)
-	}
-
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("installer failed: %w", err)
+	fmt.Println("Applying update...")
+	if err := applyPendingUpdateState(state, true); err != nil {
+		return fmt.Errorf("failed to apply update: %w", err)
 	}
 
 	fmt.Printf("\n%s✓ Update complete! Run 'lrc version' to verify.%s\n", colorGreen, colorReset)
