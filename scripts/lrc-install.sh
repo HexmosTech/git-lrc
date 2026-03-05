@@ -161,36 +161,64 @@ if [ ${#LEGACY_PATHS[@]} -gt 0 ]; then
     done
     echo -e "${YELLOW}These may shadow the new user-local install. Attempting removal...${NC}"
 
-    SUDO_OK=false
-    if [ "$(id -u)" -eq 0 ]; then
-        SUDO_OK=true
-    elif command -v sudo >/dev/null 2>&1; then
-        if sudo -v >/dev/null 2>&1; then
+    # First try removing directly (works when files are user-writable)
+    NEED_SUDO_PATHS=()
+    for p in "${LEGACY_PATHS[@]}"; do
+        echo -n "  Removing $p... "
+        if rm -f "$p" 2>/dev/null; then
+            echo -e "${GREEN}OK${NC}"
+        else
+            echo -e "${YELLOW}(needs sudo)${NC}"
+            NEED_SUDO_PATHS+=("$p")
+        fi
+    done
+
+    if [ ${#NEED_SUDO_PATHS[@]} -gt 0 ]; then
+        SUDO_OK=false
+        if [ "$(id -u)" -eq 0 ]; then
             SUDO_OK=true
+        elif command -v sudo >/dev/null 2>&1; then
+            if sudo -v >/dev/null 2>&1; then
+                SUDO_OK=true
+            fi
+        fi
+
+        if [ "$SUDO_OK" = true ]; then
+            CLEANUP_FAILED=false
+            for p in "${NEED_SUDO_PATHS[@]}"; do
+                echo -n "  Removing with sudo $p... "
+                if sudo rm -f "$p"; then
+                    echo -e "${GREEN}OK${NC}"
+                else
+                    echo -e "${RED}FAIL${NC}"
+                    CLEANUP_FAILED=true
+                fi
+            done
+            if [ "$CLEANUP_FAILED" = true ]; then
+                echo -e "${RED}Error: Some legacy binaries could not be removed. Aborting to avoid shadowed install.${NC}"
+                exit 1
+            fi
+        else
+            echo -e "${RED}Error: sudo is not available to remove legacy binaries that require elevated permissions.${NC}"
+            echo -e "${RED}Please remove these and rerun: ${NEED_SUDO_PATHS[*]}${NC}"
+            exit 1
         fi
     fi
 
-    if [ "$SUDO_OK" = true ]; then
-        CLEANUP_FAILED=false
-        for p in "${LEGACY_PATHS[@]}"; do
-            echo -n "  Removing $p... "
-            if sudo rm -f "$p"; then
-                echo -e "${GREEN}OK${NC}"
-            else
-                echo -e "${RED}FAIL${NC}"
-                CLEANUP_FAILED=true
-            fi
-        done
-        if [ "$CLEANUP_FAILED" = true ]; then
-            echo -e "${YELLOW}Warning: Some legacy binaries could not be removed. They may shadow the new install.${NC}"
-        else
-            echo -e "${GREEN}OK${NC} Legacy binaries removed."
+    # Final verification: do not proceed if any legacy binaries remain
+    REMAINING_LEGACY=()
+    for p in "${LEGACY_PATHS[@]}"; do
+        if [ -f "$p" ]; then
+            REMAINING_LEGACY+=("$p")
         fi
-    else
-        echo -e "${YELLOW}Warning: sudo is not available to remove legacy binaries.${NC}"
-        echo -e "${YELLOW}The old binaries in system directories may shadow the new install at ~/.local/bin.${NC}"
-        echo -e "${YELLOW}To fix, manually run: sudo rm -f ${LEGACY_PATHS[*]}${NC}"
+    done
+    if [ ${#REMAINING_LEGACY[@]} -gt 0 ]; then
+        echo -e "${RED}Error: Legacy binaries still present: ${REMAINING_LEGACY[*]}${NC}"
+        echo -e "${RED}Aborting to avoid shadowed install.${NC}"
+        exit 1
     fi
+
+    echo -e "${GREEN}OK${NC} Legacy binaries removed."
     echo ""
 fi
 
