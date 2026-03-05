@@ -2613,6 +2613,7 @@ func openURL(url string) error {
 		args = []string{"url.dll,FileProtocolHandler", url}
 	case "darwin":
 		cmd = "open"
+		args = []string{url}
 	default: // "linux", "freebsd", "openbsd", "netbsd"
 		// Check if running under WSL
 		if isWSL() {

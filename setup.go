@@ -276,7 +276,11 @@ func runSetup(c *cli.Context) error {
 	fmt.Println()
 	slog.write("phase 2: prompting for gemini key")
 
-	openURL(geminiKeysURL)
+	if err := openURL(geminiKeysURL); err != nil {
+		slog.write("warning: failed to auto-open Gemini keys URL: %v", err)
+		fmt.Printf("  %s⚠ Could not open browser automatically.%s Open this URL manually: %s\n", clr(cYellow), clr(cReset), hyperlink(geminiKeysURL, clr(cCyan)+geminiKeysURL+clr(cReset)))
+		fmt.Println()
+	}
 
 	geminiKey, err := promptGeminiKey(result, slog)
 	if err != nil {
@@ -436,7 +440,11 @@ func runHexmosLoginFlow(slog *setupLog) (*setupResult, error) {
 	fmt.Println()
 	slog.write("local server on port %d, signin url: %s", port, signinURL)
 
-	openURL(localURL)
+	if err := openURL(localURL); err != nil {
+		slog.write("warning: failed to auto-open local login URL: %v", err)
+		fmt.Printf("  %s⚠ Could not open browser automatically.%s Continue by opening: %s\n", clr(cYellow), clr(cReset), hyperlink(localURL, clr(cCyan)+localURL+clr(cReset)))
+		fmt.Println()
+	}
 
 	// Wait for callback or timeout
 	var cbData *hexmosCallbackData
