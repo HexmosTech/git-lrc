@@ -212,12 +212,9 @@ $AUTH_TOKEN = $authResponse.authorizationToken
 $API_URL = $authResponse.apiUrl
 $DOWNLOAD_URL = $authResponse.downloadUrl
 
-# Create a WebSession to carry the B2 auth token.
-# Some Windows/.NET versions reject raw B2 tokens in -Headers because they
-# don't match a standard HTTP auth scheme (Bearer/Basic). WebRequestSession
-# uses WebHeaderCollection which skips that validation.
-$b2Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-$b2Session.Headers.Add("Authorization", $AUTH_TOKEN)
+# Detect environment for header handling
+$isCore = ($PSVersionTable.PSVersion.Major -ge 6)
+$b2Session = $null
 
 # List files in the lrc/ folder to find versions
 Write-Host -NoNewline "Finding latest version... "
@@ -229,12 +226,33 @@ try {
         maxFileCount = 10000
     } | ConvertTo-Json
 
-    $listResponse = Invoke-RestMethod -Uri "$API_URL/b2api/v2/b2_list_file_names" `
-        -Method Post `
-        -WebSession $b2Session `
-        -ContentType "application/json" `
-        -Body $listBody `
-        -UseBasicParsing
+    if ($isCore) {
+        # PowerShell Core: Use HttpClient to bypass strict header validation for B2 tokens
+        $client = New-Object System.Net.Http.HttpClient
+        [void]$client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $AUTH_TOKEN)
+        
+        $content = New-Object System.Net.Http.StringContent($listBody, [System.Text.Encoding]::UTF8, "application/json")
+        $response = $client.PostAsync("$API_URL/b2api/v2/b2_list_file_names", $content).GetAwaiter().GetResult()
+        
+        if (-not $response.IsSuccessStatusCode) {
+            throw "HTTP Status: $($response.StatusCode)"
+        }
+        
+        $jsonStr = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        $listResponse = $jsonStr | ConvertFrom-Json
+        $client.Dispose()
+    } else {
+        # Windows PowerShell: Use WebRequestSession (allows raw headers in WebHeaderCollection)
+        $b2Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+        $b2Session.Headers.Add("Authorization", $AUTH_TOKEN)
+
+        $listResponse = Invoke-RestMethod -Uri "$API_URL/b2api/v2/b2_list_file_names" `
+            -Method Post `
+            -WebSession $b2Session `
+            -ContentType "application/json" `
+            -Body $listBody `
+            -UseBasicParsing
+    }
 } catch {
     Write-Host "$FAIL" -ForegroundColor Red
     Write-Host "Error: Failed to list files from B2" -ForegroundColor Red
@@ -277,7 +295,26 @@ $FULL_URL = "$DOWNLOAD_URL/file/$B2_BUCKET_NAME/$DOWNLOAD_PATH"
 Write-Host -NoNewline "Downloading lrc $LATEST_VERSION for $PLATFORM... "
 $TMP_FILE = [System.IO.Path]::GetTempFileName()
 try {
-    Invoke-WebRequest -Uri $FULL_URL -OutFile $TMP_FILE -UseBasicParsing -WebSession $b2Session
+    if ($isCore) {
+        $client = New-Object System.Net.Http.HttpClient
+        [void]$client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $AUTH_TOKEN)
+        
+        $response = $client.GetAsync($FULL_URL, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        
+        if (-not $response.IsSuccessStatusCode) {
+             throw "HTTP Status: $($response.StatusCode)"
+        }
+        
+        $fileStream = [System.IO.File]::Create($TMP_FILE)
+        try {
+            $response.Content.CopyToAsync($fileStream).GetAwaiter().GetResult()
+        } finally {
+            $fileStream.Close()
+            $client.Dispose()
+        }
+    } else {
+        Invoke-WebRequest -Uri $FULL_URL -OutFile $TMP_FILE -UseBasicParsing -WebSession $b2Session
+    }
     Write-Host "$OK" -ForegroundColor Green
 } catch {
     Write-Host "$FAIL" -ForegroundColor Red
