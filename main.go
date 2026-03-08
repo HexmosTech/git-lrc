@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -25,6 +26,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -365,7 +367,7 @@ func main() {
 					},
 					&cli.BoolFlag{
 						Name:  "force",
-						Usage: "Force reinstall even if already up-to-date",
+						Usage: "Force recovery by terminating another active lrc self-update process, then continue update",
 					},
 				},
 				Action: runSelfUpdate,
@@ -3783,6 +3785,15 @@ type pendingUpdateState struct {
 	DownloadedAt     string `json:"downloaded_at"`
 }
 
+type updateLockMetadata struct {
+	PID       int    `json:"pid"`
+	UID       string `json:"uid,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Command   string `json:"command"`
+	Version   string `json:"version"`
+	StartedAt string `json:"started_at"`
+}
+
 var autoUpdateStartOnce sync.Once
 
 // b2ListRequest models the B2 list files request
@@ -4011,8 +4022,31 @@ func savePendingUpdateState(state *pendingUpdateState) error {
 		return fmt.Errorf("failed to encode pending update state: %w", err)
 	}
 
-	if err := os.WriteFile(statePath, data, 0644); err != nil {
+	tmpFile, err := os.CreateTemp(filepath.Dir(statePath), "pending-update-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary pending update state file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to write pending update state: %w", err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to finalize pending update state: %w", err)
+	}
+
+	if err := os.Chmod(tmpPath, 0644); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to set permissions on pending update state: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, statePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to atomically write pending update state: %w", err)
 	}
 
 	return nil
@@ -4029,7 +4063,130 @@ func clearPendingUpdateState() error {
 	return nil
 }
 
-func acquireUpdateLock() (func(), bool, error) {
+func currentUserIdentity() (string, string) {
+	usr, err := user.Current()
+	if err != nil {
+		return "", ""
+	}
+	return strings.TrimSpace(usr.Uid), strings.TrimSpace(usr.Username)
+}
+
+func readUpdateLockMetadata() (*updateLockMetadata, error) {
+	lockPath, err := updateLockPath()
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read update lock metadata: %w", err)
+	}
+
+	if strings.TrimSpace(string(data)) == "" {
+		return nil, nil
+	}
+
+	var metadata updateLockMetadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to parse update lock metadata: %w", err)
+	}
+
+	return &metadata, nil
+}
+
+func writeUpdateLockMetadata(lockPath string, metadata *updateLockMetadata) {
+	if metadata == nil {
+		return
+	}
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(lockPath, data, 0644)
+}
+
+func isProcessRunning(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+
+	if runtime.GOOS == "windows" {
+		check := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid))
+		out, err := check.Output()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(string(out), fmt.Sprintf(" %d", pid))
+	}
+
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+func waitForProcessExit(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !isProcessRunning(pid) {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return !isProcessRunning(pid)
+}
+
+func terminateProcessForForceUnlock(pid int, verbose bool) error {
+	if pid <= 0 {
+		return fmt.Errorf("invalid lock holder pid: %d", pid)
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("failed to resolve lock holder process %d: %w", pid, err)
+	}
+
+	if !isProcessRunning(pid) {
+		return nil
+	}
+
+	if verbose {
+		log.Printf("self-update --force: stopping updater process pid=%d", pid)
+	}
+
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F")
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to terminate updater process %d: %w", pid, err)
+		}
+		_ = waitForProcessExit(pid, 3*time.Second)
+		return nil
+	}
+
+	if err := process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return fmt.Errorf("failed to send SIGTERM to updater process %d: %w", pid, err)
+	}
+	if waitForProcessExit(pid, 2*time.Second) {
+		return nil
+	}
+
+	if verbose {
+		log.Printf("self-update --force: process pid=%d ignored SIGTERM; sending SIGKILL", pid)
+	}
+	if err := process.Signal(syscall.SIGKILL); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return fmt.Errorf("failed to SIGKILL updater process %d: %w", pid, err)
+	}
+	_ = waitForProcessExit(pid, 2*time.Second)
+	return nil
+}
+
+func acquireUpdateLock(force bool, command string, verbose bool) (func(), bool, error) {
 	if err := ensureSelfUpdateStateDir(); err != nil {
 		return nil, false, err
 	}
@@ -4039,19 +4196,68 @@ func acquireUpdateLock() (func(), bool, error) {
 		return nil, false, err
 	}
 
-	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-	if err != nil {
-		if os.IsExist(err) {
-			return nil, false, nil
+	lock := flock.New(lockPath)
+
+	tryAcquire := func() (bool, error) {
+		locked, err := lock.TryLock()
+		if err != nil {
+			return false, fmt.Errorf("failed to acquire update lock: %w", err)
 		}
-		return nil, false, fmt.Errorf("failed to acquire update lock: %w", err)
+		return locked, nil
 	}
 
-	_, _ = fmt.Fprintf(lockFile, "%d\n", os.Getpid())
+	locked, err := tryAcquire()
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !locked {
+		if !force {
+			return nil, false, nil
+		}
+
+		metadata, metaErr := readUpdateLockMetadata()
+		if metaErr != nil {
+			if verbose {
+				log.Printf("self-update --force: lock metadata unavailable: %v", metaErr)
+			}
+			return nil, false, fmt.Errorf("self-update lock is held and owner metadata is unreadable; rerun after current updater exits")
+		}
+
+		if metadata == nil || metadata.PID <= 0 {
+			return nil, false, fmt.Errorf("self-update lock is held and owner PID is unavailable; rerun after current updater exits")
+		}
+
+		currentUID, _ := currentUserIdentity()
+		if currentUID != "" && metadata.UID != "" && currentUID != metadata.UID {
+			return nil, false, fmt.Errorf("refusing to terminate updater process pid=%d owned by another user (%s)", metadata.PID, metadata.Username)
+		}
+
+		if err := terminateProcessForForceUnlock(metadata.PID, verbose); err != nil {
+			return nil, false, err
+		}
+
+		locked, err = tryAcquire()
+		if err != nil {
+			return nil, false, err
+		}
+		if !locked {
+			return nil, false, fmt.Errorf("self-update lock is still held after --force recovery attempt")
+		}
+	}
+
+	uid, username := currentUserIdentity()
+	writeUpdateLockMetadata(lockPath, &updateLockMetadata{
+		PID:       os.Getpid(),
+		UID:       uid,
+		Username:  username,
+		Command:   command,
+		Version:   version,
+		StartedAt: time.Now().UTC().Format(time.RFC3339),
+	})
 
 	release := func() {
-		_ = lockFile.Close()
-		_ = os.Remove(lockPath)
+		_ = lock.Unlock()
 	}
 
 	return release, true, nil
@@ -4170,7 +4376,7 @@ func downloadVersionBinaryFromB2(versionTag string) (string, error) {
 }
 
 func stageUpdateVersion(versionTag string, force bool, verbose bool) (*pendingUpdateState, error) {
-	release, acquired, err := acquireUpdateLock()
+	release, acquired, err := acquireUpdateLock(force, "self-update-stage", verbose)
 	if err != nil {
 		return nil, err
 	}
@@ -4385,7 +4591,7 @@ func applyPendingUpdateState(state *pendingUpdateState, verbose bool) error {
 }
 
 func applyPendingUpdateIfAny(verbose bool) error {
-	release, acquired, err := acquireUpdateLock()
+	release, acquired, err := acquireUpdateLock(false, "self-update-apply", verbose)
 	if err != nil {
 		return err
 	}
@@ -4411,6 +4617,14 @@ func applyPendingUpdateIfAny(verbose bool) error {
 func startAutoUpdateCheck(verbose bool) {
 	autoUpdateStartOnce.Do(func() {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						log.Printf("auto-update check panicked: %v", r)
+					}
+				}
+			}()
+
 			latestVersion, err := fetchLatestVersionFromB2()
 			if err != nil {
 				if verbose {
@@ -4488,9 +4702,12 @@ func runSelfUpdate(c *cli.Context) error {
 	}
 
 	if cmp >= 0 && force {
-		fmt.Printf("\n%sForce reinstall requested%s\n", colorYellow, colorReset)
+		fmt.Printf("\n%sForce recovery requested (this may terminate another active lrc self-update process)%s\n", colorYellow, colorReset)
 	} else {
 		fmt.Printf("\n%s⬆ Update available: %s → %s%s\n", colorYellow, version, latestVersion, colorReset)
+		if force {
+			fmt.Printf("%sWarning: --force may terminate another active lrc self-update process.%s\n", colorYellow, colorReset)
+		}
 	}
 
 	if checkOnly {
@@ -4504,7 +4721,7 @@ func runSelfUpdate(c *cli.Context) error {
 		return fmt.Errorf("failed to stage update: %w", err)
 	}
 	if state == nil {
-		fmt.Printf("%sAnother lrc process is already performing self-update; try again shortly.%s\n", colorYellow, colorReset)
+		fmt.Printf("%sAnother lrc self-update process is active. Re-run with --force to recover.%s\n", colorYellow, colorReset)
 		return nil
 	}
 

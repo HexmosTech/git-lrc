@@ -3,6 +3,7 @@ module github.com/HexmosTech/git-lrc
 go 1.24.3
 
 require (
+	github.com/gofrs/flock v0.13.0
 	github.com/knadh/koanf/parsers/toml v0.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.3.2
