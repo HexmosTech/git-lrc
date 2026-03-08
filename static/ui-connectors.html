@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>git-lrc Manager | Home</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230078d4' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%230078d4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    body {
+      overflow: auto;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+    }
+    #app { display: block; height: auto; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: var(--space-lg); }
+    .ui-shell { display: flex; flex-direction: column; gap: 12px; }
+    h1 { margin: 0 0 8px 0; font-size: 24px; color: var(--text-primary); }
+    .sub { color: var(--text-muted); margin-bottom: 18px; }
+    .ui-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      position: sticky;
+      top: 8px;
+      z-index: 5;
+    }
+    .ui-nav .nav-label {
+      color: var(--text-muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-right: 4px;
+    }
+    .ui-nav .nav-link {
+      text-decoration: none;
+      border: 1px solid var(--border-medium);
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .ui-nav .nav-link.active {
+      border-color: var(--accent-blue);
+      color: #fff;
+      background: var(--accent-blue);
+    }
+    .ui-nav .nav-link:hover { background: var(--bg-hover); }
+    .ui-nav .nav-link.active:hover { background: var(--accent-blue-hover); }
+    .breadcrumbs {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 2px 2px 4px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .crumb-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .crumb-link {
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+    .crumb-link:hover {
+      color: var(--accent-blue-light);
+      text-decoration: underline;
+    }
+    .crumb-current {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .crumb-sep {
+      color: var(--text-muted);
+      opacity: 0.75;
+    }
+    .grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+    .single { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 14px;
+    }
+    .card h2 { margin: 0 0 12px 0; font-size: 17px; color: var(--text-primary); }
+    label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    input, select {
+      width: 100%;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-medium);
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    button {
+      border: 1px solid var(--accent-blue);
+      background: var(--accent-blue);
+      color: white;
+      border-radius: 4px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-blue-hover); }
+    button.secondary {
+      background: var(--bg-tertiary);
+      border-color: var(--border-medium);
+      color: var(--text-secondary);
+    }
+    button.secondary:hover { background: var(--bg-hover); }
+    button.danger { background: var(--accent-red); border-color: var(--accent-red); }
+    button.danger:hover { background: #dd3f3f; }
+    button.tertiary-danger {
+      background: transparent;
+      border-color: var(--status-error-border);
+      color: var(--status-error-text);
+    }
+    button.tertiary-danger:hover { background: var(--status-error-bg); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .status { margin-top: 8px; font-size: 13px; }
+    .status.ok { color: var(--status-success-text); }
+    .status.err { color: var(--status-error-text); }
+    .connectors-content {
+      width: min(100%, 900px);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .connectors-toolbar {
+      width: 100%;
+      margin-bottom: 2px;
+    }
+    .form-content {
+      width: min(100%, 900px);
+    }
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+    .item {
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 10px;
+      background: var(--bg-tertiary);
+      width: 100%;
+    }
+    .item.dragging {
+      opacity: 0.75;
+    }
+    .item.drag-over {
+      border-color: var(--accent-blue);
+      box-shadow: inset 0 0 0 1px var(--accent-blue);
+    }
+    .pulse-attention {
+      animation: pulse-attention 0.45s ease-in-out 2;
+    }
+    @keyframes pulse-attention {
+      0%,
+      100% {
+        filter: brightness(1);
+      }
+      50% {
+        filter: brightness(1.22);
+      }
+    }
+    .connector-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px 14px;
+      margin-bottom: 4px;
+    }
+    .connector-main {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+    .connector-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-self: end;
+      white-space: nowrap;
+    }
+    .item-title { font-weight: 600; color: var(--text-primary); }
+    .badge {
+      font-size: 11px;
+      border: 1px solid var(--border-medium);
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: var(--text-muted);
+      margin-left: 8px;
+    }
+    .badge-id {
+      margin-left: 0;
+      color: var(--text-secondary);
+      border-color: var(--border-subtle);
+      background: var(--bg-secondary);
+      font-variant-numeric: tabular-nums;
+    }
+    .muted { color: var(--text-muted); font-size: 12px; }
+    .muted-meta {
+      margin-top: 2px;
+      font-size: 11px;
+      opacity: 0.9;
+    }
+    .connector-foot {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .muted-meta-right {
+      margin-left: auto;
+      text-align: right;
+      cursor: default;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .top-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-group-compact {
+      gap: 0;
+    }
+    .btn-group-compact button {
+      border-radius: 0;
+      margin-left: -1px;
+    }
+    .btn-group-compact button:first-child {
+      border-top-left-radius: 4px;
+      border-bottom-left-radius: 4px;
+      margin-left: 0;
+    }
+    .btn-group-compact button:last-child {
+      border-top-right-radius: 4px;
+      border-bottom-right-radius: 4px;
+    }
+    .btn-icon {
+      margin-right: 6px;
+      opacity: 0.9;
+      font-size: 12px;
+    }
+    .icon-only {
+      min-width: 34px;
+      padding-left: 0;
+      padding-right: 0;
+      text-align: center;
+    }
+    .drag-handle {
+      cursor: grab;
+    }
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+    .icon-only .btn-icon {
+      margin-right: 0;
+      font-size: 13px;
+    }
+    .page-empty {
+      color: var(--text-muted);
+      padding: 12px;
+      border: 1px dashed var(--border-medium);
+      border-radius: 4px;
+      background: var(--bg-secondary);
+    }
+    .home-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .home-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 12px;
+    }
+    .home-card h3 {
+      margin: 0 0 8px;
+      color: var(--text-primary);
+      font-size: 15px;
+    }
+    .home-card p {
+      margin: 0 0 8px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .home-link {
+      color: var(--accent-blue-light);
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .home-link:hover { text-decoration: underline; }
+    .release-list { display: flex; flex-direction: column; gap: 10px; }
+    .release-item {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .release-main {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .err-banner {
+      border: 1px solid var(--status-error-border);
+      background: var(--status-error-bg);
+      color: var(--status-error-text);
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 860px) {
+      .connector-row {
+        grid-template-columns: 1fr;
+      }
+      .connector-actions {
+        justify-self: start;
+      }
+      .connectors-toolbar {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+  <script type="module">
+    import { h, render } from 'https://esm.sh/preact@10.26.4';
+    import { useEffect, useMemo, useRef, useState } from 'https://esm.sh/preact@10.26.4/hooks';
+    import htm from 'https://esm.sh/htm@3.1.1';
+    window.preact = { h, render, useEffect, useMemo, useRef, useState, html: htm.bind(h) };
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/static/ui-connectors.js"></script>
+</body>
+</html>

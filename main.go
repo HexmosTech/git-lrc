@@ -395,6 +395,11 @@ func main() {
 				Usage:  "Guided onboarding — authenticate with Hexmos and configure LiveReview + AI",
 				Action: runSetup,
 			},
+			{
+				Name:   "ui",
+				Usage:  "Open local web UI to manage your git-lrc",
+				Action: runUI,
+			},
 		},
 		Action: runReviewSimple,
 	}

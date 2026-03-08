@@ -2,20 +2,44 @@
 import { waitForPreact } from './utils.js';
 
 export async function createCommentNav() {
-    const { html, useState, useEffect, useCallback } = await waitForPreact();
+    const { html, useState, useEffect, useCallback, useRef } = await waitForPreact();
 
     return function CommentNav({ allComments, commentKey, onNavigate, activeTab }) {
         const [currentIdx, setCurrentIdx] = useState(-1);
+        const activeCommentIdRef = useRef(null);
 
-        // Reset index only when the actual comment set changes (not on every render)
+        // Preserve current position when the comment set changes
         useEffect(() => {
-            setCurrentIdx(-1);
-        }, [commentKey]);
+            setCurrentIdx((prevIdx) => {
+                if (allComments.length === 0) {
+                    activeCommentIdRef.current = null;
+                    return -1;
+                }
+
+                const activeCommentId = activeCommentIdRef.current;
+                if (activeCommentId) {
+                    const activeIdx = allComments.findIndex((entry) => entry.commentId === activeCommentId);
+                    if (activeIdx >= 0) {
+                        return activeIdx;
+                    }
+                }
+
+                if (prevIdx < 0) {
+                    return -1;
+                }
+
+                const fallbackIdx = Math.min(prevIdx, allComments.length - 1);
+                activeCommentIdRef.current = allComments[fallbackIdx]?.commentId || null;
+                return fallbackIdx;
+            });
+        }, [commentKey, allComments]);
 
         // Clamp index if comments shrink
         useEffect(() => {
             if (currentIdx >= allComments.length) {
-                setCurrentIdx(allComments.length > 0 ? allComments.length - 1 : -1);
+                const nextIdx = allComments.length > 0 ? allComments.length - 1 : -1;
+                setCurrentIdx(nextIdx);
+                activeCommentIdRef.current = nextIdx >= 0 ? allComments[nextIdx]?.commentId || null : null;
             }
         }, [allComments.length, currentIdx]);
 
@@ -23,6 +47,7 @@ export async function createCommentNav() {
             if (allComments.length === 0) return;
             setCurrentIdx(idx);
             const c = allComments[idx];
+            activeCommentIdRef.current = c?.commentId || null;
             onNavigate(c.commentId, c.fileId);
         }, [allComments, onNavigate]);
 
