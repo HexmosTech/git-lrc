@@ -57,3 +57,40 @@ org_id = "42"
 		t.Fatalf("connector data not written to managed section")
 	}
 }
+
+func TestPersistAuthTokensToConfigUpdatesExistingTokens(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".lrc.toml")
+
+	original := `api_key = "abc123"
+api_url = "https://livereview.hexmos.com"
+org_id = "42"
+jwt = "old-token"
+refresh_token = "old-refresh"
+`
+	if err := os.WriteFile(configPath, []byte(original), 0600); err != nil {
+		t.Fatalf("write original config: %v", err)
+	}
+
+	if err := persistAuthTokensToConfig(configPath, "new-token", "new-refresh"); err != nil {
+		t.Fatalf("persist auth tokens: %v", err)
+	}
+
+	updatedBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read updated config: %v", err)
+	}
+	updated := string(updatedBytes)
+
+	if !strings.Contains(updated, `api_key = "abc123"`) {
+		t.Fatalf("existing config keys were not preserved")
+	}
+
+	if !strings.Contains(updated, `jwt = "new-token"`) {
+		t.Fatalf("jwt value was not updated")
+	}
+
+	if !strings.Contains(updated, `refresh_token = "new-refresh"`) {
+		t.Fatalf("refresh token value was not updated")
+	}
+}
