@@ -9,6 +9,14 @@ export const providers = [
     apiKeyPlaceholder: 'gemini-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
   },
   {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    defaultModel: 'deepseek-chat',
+    models: ['deepseek-chat', 'deepseek-r1'],
+    apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    baseURLPlaceholder: 'https://api.deepseek.com/v1',
+  },
+  {
     id: 'openrouter',
     name: 'OpenRouter',
     defaultModel: 'deepseek/deepseek-r1-0528:free',
@@ -35,16 +43,21 @@ export const providers = [
   {
     id: 'claude',
     name: 'Anthropic Claude',
-    defaultModel: 'claude-3-sonnet-20240229',
-    models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
-    apiKeyPlaceholder: 'claude-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-  },
-  {
-    id: 'cohere',
-    name: 'Cohere',
-    defaultModel: 'command-r',
-    models: ['command', 'command-light', 'command-r', 'command-r-plus'],
-    apiKeyPlaceholder: 'cohere-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    models: [
+      'claude-haiku-4-5-20251001',
+      'claude-opus-4-1-20250805',
+      'claude-opus-4-20250514',
+      'claude-opus-4-5-20251101',
+      'claude-opus-4-6',
+      'claude-sonnet-4-20250514',
+      'claude-sonnet-4-5-20250929',
+      'claude-sonnet-4-6',
+      'claude-3-opus-20240229',
+      'claude-3-sonnet-20240229',
+      'claude-3-haiku-20240307',
+    ],
+    apiKeyPlaceholder: 'sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
   },
 ];
 

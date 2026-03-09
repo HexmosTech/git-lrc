@@ -327,6 +327,7 @@ function App() {
           body: JSON.stringify({
             provider: provider.id,
             api_key: apiKey,
+            base_url: baseURL || undefined,
             model: selectedModel || provider.defaultModel || undefined,
           }),
         });
@@ -342,7 +343,7 @@ function App() {
         provider_name: provider.id,
         api_key: apiKey,
         connector_name: connectorName,
-        base_url: provider.requiresBaseURL ? baseURL : undefined,
+        base_url: baseURL || undefined,
         selected_model: selectedModel || provider.defaultModel || undefined,
         display_order: 0,
       };
