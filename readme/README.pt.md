@@ -1,6 +1,8 @@
+<div align="center">
+
 [🇬🇧 English](../README.md)
 
----
+</div>
 
 <div align="center">
 
