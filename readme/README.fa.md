@@ -1,5 +1,4 @@
----
-**Languages:** [English](../README.md) | [Dansk](README.da.md) | [Español](README.es.md) | [Farsi](README.fa.md) | [Suomi](README.fi.md) | [日本語](README.ja.md) | [Norsk Nynorsk](README.nn.md) | [Português](README.pt.md) | [Русский](README.ru.md) | [Shqip](README.sq.md) | [中文](README.zh.md)
+[🇬🇧 English](../README.md)
 
 ---
 
