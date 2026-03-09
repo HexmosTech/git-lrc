@@ -1,5 +1,4 @@
----
-**Languages:** [English](README.md) | [Dansk](readme/README.da.md) | [Español](readme/README.es.md) | [Farsi](readme/README.fa.md) | [Suomi](readme/README.fi.md) | [日本語](readme/README.ja.md) | [Norsk Nynorsk](readme/README.nn.md) | [Português](readme/README.pt.md) | [Русский](readme/README.ru.md) | [Shqip](readme/README.sq.md) | [中文](readme/README.zh.md)
+| [🇬🇧 EN](README.md) | [🇩🇰 DA](readme/README.da.md) | [🇪🇸 ES](readme/README.es.md) | [🇮🇷 FA](readme/README.fa.md) | [🇫🇮 FI](readme/README.fi.md) | [🇯🇵 JA](readme/README.ja.md) | [🇳🇴 NN](readme/README.nn.md) | [🇵🇹 PT](readme/README.pt.md) | [🇷🇺 RU](readme/README.ru.md) | [🇦🇱 SQ](readme/README.sq.md) | [🇨🇳 ZH](readme/README.zh.md) |
 
 ---
 
