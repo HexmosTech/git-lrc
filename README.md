@@ -1,3 +1,8 @@
+---
+**Languages:** [English](README.md) | [Dansk](readme/README.da.md) | [Español](readme/README.es.md) | [Farsi](readme/README.fa.md) | [Suomi](readme/README.fi.md) | [日本語](readme/README.ja.md) | [Norsk Nynorsk](readme/README.nn.md) | [Português](readme/README.pt.md) | [Русский](readme/README.ru.md) | [Shqip](readme/README.sq.md) | [中文](readme/README.zh.md)
+
+---
+
 <div align="center">
 
 <img width="60" alt="git-lrc logo" src="https://hexmos.com/freedevtools/public/lr_logo.svg" />
