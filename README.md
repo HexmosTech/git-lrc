@@ -254,7 +254,11 @@ If it helps you — **share it with your developer friends.** The more people re
 
 ## Community
 
-Discuss possibilities, improvements, features, and get help with contributions in the **git-lrc Discord community**: [discord.gg/sGdnKwB3qq](https://discord.gg/sGdnKwB3qq).
+Pick the right place based on what you need:
+
+- **Discord**: [discord.gg/R5PX8nCH](https://discord.gg/R5PX8nCH) - Best for joining the community, asking general Q&A, and having quick back-and-forth with the team.
+- **GitHub Discussions**: [github.com/HexmosTech/git-lrc/discussions](https://github.com/HexmosTech/git-lrc/discussions) - Best for in-depth idea proposals, scoping, design discussions, modification proposals, and constructive criticism.
+- **GitHub Issues**: [github.com/HexmosTech/git-lrc/issues](https://github.com/HexmosTech/git-lrc/issues) - Best for concrete, scoped tasks such as bugs, focused feature requests, and actionable implementation work.
 
 ## License
 
