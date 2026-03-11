@@ -402,7 +402,7 @@ func runHexmosLoginFlow(slog *setupLog) (*setupResult, error) {
 		dataParam := r.URL.Query().Get("data")
 		if dataParam == "" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			if _, err := io.WriteString(w, setupErrorHTML); err != nil {
+			if err := setupErrorPageTemplate.Execute(w, nil); err != nil {
 				slog.write("warning: failed to write setup error page: %v", err)
 			}
 			errCh <- fmt.Errorf("no data parameter in callback")
@@ -412,7 +412,7 @@ func runHexmosLoginFlow(slog *setupLog) (*setupResult, error) {
 		var cbData hexmosCallbackData
 		if err := json.Unmarshal([]byte(dataParam), &cbData); err != nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			if _, writeErr := io.WriteString(w, setupErrorHTML); writeErr != nil {
+			if writeErr := setupErrorPageTemplate.Execute(w, nil); writeErr != nil {
 				slog.write("warning: failed to write setup error page: %v", writeErr)
 			}
 			errCh <- fmt.Errorf("failed to parse callback data: %w", err)
@@ -421,7 +421,7 @@ func runHexmosLoginFlow(slog *setupLog) (*setupResult, error) {
 
 		if cbData.Result.JWT == "" || cbData.Result.Data.Email == "" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			if _, err := io.WriteString(w, setupErrorHTML); err != nil {
+			if err := setupErrorPageTemplate.Execute(w, nil); err != nil {
 				slog.write("warning: failed to write setup error page: %v", err)
 			}
 			errCh <- fmt.Errorf("incomplete callback data (missing JWT or email)")
@@ -429,7 +429,7 @@ func runHexmosLoginFlow(slog *setupLog) (*setupResult, error) {
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if _, err := io.WriteString(w, setupSuccessHTML); err != nil {
+		if err := setupSuccessPageTemplate.Execute(w, nil); err != nil {
 			errCh <- fmt.Errorf("failed to write setup success page: %w", err)
 			return
 		}
@@ -877,6 +877,8 @@ const setupLandingHTML = `<!DOCTYPE html>
 </html>`
 
 var setupLandingPageTemplate = htmltemplate.Must(htmltemplate.New("setup-landing").Parse(setupLandingHTML))
+var setupSuccessPageTemplate = htmltemplate.Must(htmltemplate.New("setup-success").Parse(setupSuccessHTML))
+var setupErrorPageTemplate = htmltemplate.Must(htmltemplate.New("setup-error").Parse(setupErrorHTML))
 
 const setupSuccessHTML = `<!DOCTYPE html>
 <html>
