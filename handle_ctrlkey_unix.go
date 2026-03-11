@@ -101,26 +101,8 @@ func handleCtrlKeyWithCancel(stop <-chan struct{}, allowEnter bool) (int, error)
 				continue
 			}
 
-			switch buf[0] {
-			case '\r', '\n': // Enter
-				if allowEnter {
-					codeChan <- decisionCommit
-					return
-				}
-			case ctrlCKey: // Ctrl-C (ETX)
-				codeChan <- decisionAbort
-				return
-			case ctrlSKey: // Ctrl-S (XOFF)
-				codeChan <- decisionSkip
-				return
-			case ctrlVKey: // Ctrl-V (SYN)
-				codeChan <- decisionVouch
-				return
-			case 's', 'S': // Fallback for terminals that intercept Ctrl-S
-				codeChan <- decisionSkip
-				return
-			case 'v', 'V': // Fallback for terminals that intercept Ctrl-V
-				codeChan <- decisionVouch
+			if code, ok := mapControlKeyToDecision(buf[0], allowEnter); ok {
+				codeChan <- code
 				return
 			}
 		}

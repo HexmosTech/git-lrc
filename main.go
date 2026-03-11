@@ -1299,7 +1299,7 @@ func runReviewWithOptions(opts reviewOptions) error {
 			}
 		}()
 
-		syncedPrintln("💡 Press Ctrl-C to abort, Ctrl-S to skip, or Ctrl-V to vouch and commit")
+		syncedPrintln("💡 Press Ctrl-C to abort, Ctrl-S to skip, or Ctrl-V/Ctrl-Y to vouch and commit")
 		syncedPrintln("")
 
 		// Poll concurrently and race with decisions
