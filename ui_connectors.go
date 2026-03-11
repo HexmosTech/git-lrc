@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	uicfg "github.com/HexmosTech/git-lrc/ui"
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -21,37 +22,12 @@ import (
 const defaultUIPort = 8090
 
 const (
-	aiConnectorsSectionBegin = "# BEGIN lrc managed ai_connectors"
-	aiConnectorsSectionEnd   = "# END lrc managed ai_connectors"
+	aiConnectorsSectionBegin = uicfg.AIConnectorsSectionBegin
+	aiConnectorsSectionEnd   = uicfg.AIConnectorsSectionEnd
 )
 
-type uiRuntimeConfig struct {
-	APIURL        string
-	JWT           string
-	RefreshJWT    string
-	OrgID         string
-	UserEmail     string
-	UserID        string
-	FirstName     string
-	LastName      string
-	AvatarURL     string
-	OrgName       string
-	ConfigPath    string
-	ConfigErr     string
-	ConfigMissing bool
-}
-
-type aiConnectorRemote struct {
-	ID            int64  `json:"id"`
-	ProviderName  string `json:"provider_name"`
-	ConnectorName string `json:"connector_name"`
-	APIKey        string `json:"api_key"`
-	BaseURL       string `json:"base_url"`
-	SelectedModel string `json:"selected_model"`
-	DisplayOrder  int    `json:"display_order"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
-}
+type uiRuntimeConfig = uicfg.RuntimeConfig
+type aiConnectorRemote = uicfg.ConnectorRemote
 
 type connectorManagerServer struct {
 	cfg    *uiRuntimeConfig
@@ -59,14 +35,8 @@ type connectorManagerServer struct {
 	mu     sync.Mutex
 }
 
-type authRefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
-type authRefreshResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-}
+type authRefreshRequest = uicfg.AuthRefreshRequest
+type authRefreshResponse = uicfg.AuthRefreshResponse
 
 func runUI(c *cli.Context) error {
 	cfg, err := loadUIRuntimeConfig()

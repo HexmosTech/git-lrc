@@ -1,105 +1,56 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
+	hooksvc "github.com/HexmosTech/git-lrc/hooks"
 	"github.com/urfave/cli/v2"
 )
 
-type hooksMeta struct {
-	Path     string `json:"path"`
-	PrevPath string `json:"prev_path,omitempty"`
-	SetByLRC bool   `json:"set_by_lrc"`
-}
+type hooksMeta = hooksvc.Meta
 
 func defaultGlobalHooksPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(home, defaultGlobalHooksDir), nil
+	return hooksvc.DefaultGlobalHooksPath(defaultGlobalHooksDir)
 }
 
 func currentHooksPath() (string, error) {
-	cmd := exec.Command("git", "config", "--global", "--get", "core.hooksPath")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", nil
-	}
-
-	return strings.TrimSpace(string(out)), nil
+	return hooksvc.CurrentHooksPath()
 }
 
 func currentLocalHooksPath(repoRoot string) (string, error) {
-	cmd := exec.Command("git", "config", "--local", "--get", "core.hooksPath")
-	cmd.Dir = repoRoot
-	out, err := cmd.Output()
-	if err != nil {
-		return "", nil
-	}
-
-	return strings.TrimSpace(string(out)), nil
+	return hooksvc.CurrentLocalHooksPath(repoRoot)
 }
 
 func resolveRepoHooksPath(repoRoot string) (string, error) {
-	localPath, _ := currentLocalHooksPath(repoRoot)
-	if localPath == "" {
-		return filepath.Join(repoRoot, ".git", "hooks"), nil
-	}
-	if filepath.IsAbs(localPath) {
-		return localPath, nil
-	}
-	return filepath.Join(repoRoot, localPath), nil
+	return hooksvc.ResolveRepoHooksPath(repoRoot)
 }
 
 func setGlobalHooksPath(path string) error {
-	cmd := exec.Command("git", "config", "--global", "core.hooksPath", path)
-	return cmd.Run()
+	return hooksvc.SetGlobalHooksPath(path)
 }
 
 func unsetGlobalHooksPath() error {
-	cmd := exec.Command("git", "config", "--global", "--unset", "core.hooksPath")
-	return cmd.Run()
+	return hooksvc.UnsetGlobalHooksPath()
 }
 
 func hooksMetaPath(hooksPath string) string {
-	return filepath.Join(hooksPath, hooksMetaFilename)
+	return hooksvc.MetaPath(hooksPath, hooksMetaFilename)
 }
 
 func writeHooksMeta(hooksPath string, meta hooksMeta) {
-	data, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return
-	}
-
-	_ = os.MkdirAll(hooksPath, 0755)
-	_ = os.WriteFile(hooksMetaPath(hooksPath), data, 0644)
+	hooksvc.WriteMeta(hooksPath, hooksMetaFilename, meta)
 }
 
 func readHooksMeta(hooksPath string) (*hooksMeta, error) {
-	data, err := os.ReadFile(hooksMetaPath(hooksPath))
-	if err != nil {
-		return nil, err
-	}
-
-	var meta hooksMeta
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, err
-	}
-
-	return &meta, nil
+	return hooksvc.ReadMeta(hooksPath, hooksMetaFilename)
 }
 
 func removeHooksMeta(hooksPath string) error {
-	return os.Remove(hooksMetaPath(hooksPath))
+	return hooksvc.RemoveMeta(hooksPath, hooksMetaFilename)
 }
 
 func writeManagedHookScripts(dir string) error {
@@ -333,31 +284,12 @@ func runHooksUninstall(c *cli.Context) error {
 
 // pathsEqual compares two filesystem paths robustly, resolving symlinks
 func pathsEqual(a, b string) bool {
-	absA, errA := filepath.Abs(a)
-	absB, errB := filepath.Abs(b)
-	if errA != nil || errB != nil {
-		return a == b
-	}
-	if absA == absB {
-		return true
-	}
-	realA, errA := filepath.EvalSymlinks(absA)
-	realB, errB := filepath.EvalSymlinks(absB)
-	if errA != nil || errB != nil {
-		return absA == absB
-	}
-	return realA == realB
+	return hooksvc.PathsEqual(a, b)
 }
 
 // cleanEmptyHooksDir removes the hooks directory if it's empty or contains only lrc artifacts
 func cleanEmptyHooksDir(dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	if len(entries) == 0 {
-		_ = os.Remove(dir)
-	}
+	hooksvc.CleanEmptyHooksDir(dir)
 }
 
 func runHooksDisable(c *cli.Context) error {
@@ -396,12 +328,7 @@ func runHooksEnable(c *cli.Context) error {
 }
 
 func hookHasManagedSection(path string) bool {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-
-	return strings.Contains(string(content), lrcMarkerBegin)
+	return hooksvc.HookHasManagedSection(path, lrcMarkerBegin)
 }
 
 func runHooksStatus(c *cli.Context) error {
@@ -463,94 +390,12 @@ func isGitRepository() bool {
 
 // installHook installs or updates a hook with lrc managed section
 func installHook(hookPath, lrcSection, hookName, backupDir string, force bool) error {
-	timestamp := time.Now().Format("20060102_150405")
-	backupPath := filepath.Join(backupDir, fmt.Sprintf("%s.%s", hookName, timestamp))
-
-	existingContent, err := os.ReadFile(hookPath)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to read existing hook: %w", err)
-	}
-
-	if len(existingContent) == 0 {
-		content := "#!/bin/sh\n" + lrcSection
-		if err := os.WriteFile(hookPath, []byte(content), 0755); err != nil {
-			return fmt.Errorf("failed to write hook: %w", err)
-		}
-		fmt.Printf("✅ Created %s\n", hookName)
-		return nil
-	}
-
-	if err := os.WriteFile(backupPath, existingContent, 0644); err != nil {
-		return fmt.Errorf("failed to create backup: %w", err)
-	}
-	fmt.Printf("📁 Backup created: %s\n", backupPath)
-
-	contentStr := string(existingContent)
-	if strings.Contains(contentStr, lrcMarkerBegin) {
-		if !force {
-			fmt.Printf("ℹ️  %s already has lrc section (use --force=false to skip updating)\n", hookName)
-			return nil
-		}
-		newContent := replaceLrcSection(contentStr, lrcSection)
-		if err := os.WriteFile(hookPath, []byte(newContent), 0755); err != nil {
-			return fmt.Errorf("failed to update hook: %w", err)
-		}
-		fmt.Printf("✅ Updated %s (replaced lrc section)\n", hookName)
-		return nil
-	}
-
-	var newContent string
-	if !strings.HasPrefix(contentStr, "#!/") {
-		newContent = "#!/bin/sh\n" + lrcSection + "\n" + contentStr
-	} else {
-		lines := strings.SplitN(contentStr, "\n", 2)
-		if len(lines) == 1 {
-			newContent = lines[0] + "\n" + lrcSection
-		} else {
-			newContent = lines[0] + "\n" + lrcSection + "\n" + lines[1]
-		}
-	}
-
-	if err := os.WriteFile(hookPath, []byte(newContent), 0755); err != nil {
-		return fmt.Errorf("failed to write hook: %w", err)
-	}
-	fmt.Printf("✅ Updated %s (added lrc section)\n", hookName)
-
-	return nil
+	return hooksvc.InstallHook(hookPath, lrcSection, hookName, backupDir, lrcMarkerBegin, lrcMarkerEnd, force)
 }
 
 // uninstallHook removes lrc-managed section from a hook file
 func uninstallHook(hookPath, hookName string) error {
-	content, err := os.ReadFile(hookPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to read hook: %w", err)
-	}
-
-	contentStr := string(content)
-	if !strings.Contains(contentStr, lrcMarkerBegin) {
-		return nil
-	}
-
-	newContent := removeLrcSection(contentStr)
-
-	trimmed := strings.TrimSpace(newContent)
-	if trimmed == "" || trimmed == "#!/bin/sh" {
-		if err := os.Remove(hookPath); err != nil {
-			return fmt.Errorf("failed to remove hook file: %w", err)
-		}
-		fmt.Printf("🗑️  Removed %s (was empty after removing lrc section)\n", hookName)
-		return nil
-	}
-
-	if err := os.WriteFile(hookPath, []byte(newContent), 0755); err != nil {
-		return fmt.Errorf("failed to write hook: %w", err)
-	}
-	fmt.Printf("✅ Removed lrc section from %s\n", hookName)
-
-	return nil
+	return hooksvc.UninstallHook(hookPath, hookName, lrcMarkerBegin, lrcMarkerEnd)
 }
 
 // installEditorWrapper sets core.editor to an lrc-managed wrapper that injects
@@ -649,131 +494,61 @@ func unsetGitConfig(repoRoot, key string) error {
 
 // replaceLrcSection replaces the lrc-managed section in hook content
 func replaceLrcSection(content, newSection string) string {
-	start := strings.Index(content, lrcMarkerBegin)
-	if start == -1 {
-		return content
-	}
-
-	end := strings.Index(content[start:], lrcMarkerEnd)
-	if end == -1 {
-		return content
-	}
-	end += start + len(lrcMarkerEnd)
-
-	if end < len(content) && content[end] == '\n' {
-		end++
-	}
-
-	return content[:start] + newSection + "\n" + content[end:]
+	return hooksvc.ReplaceManagedSection(content, newSection, lrcMarkerBegin, lrcMarkerEnd)
 }
 
 // removeLrcSection removes the lrc-managed section from hook content
 func removeLrcSection(content string) string {
-	for {
-		start := strings.Index(content, lrcMarkerBegin)
-		if start == -1 {
-			return content
-		}
-
-		end := strings.Index(content[start:], lrcMarkerEnd)
-		if end == -1 {
-			return content
-		}
-		end += start + len(lrcMarkerEnd)
-
-		if end < len(content) && content[end] == '\n' {
-			end++
-		}
-
-		content = content[:start] + content[end:]
-	}
+	return hooksvc.RemoveManagedSection(content, lrcMarkerBegin, lrcMarkerEnd)
 }
 
 // generatePreCommitHook generates the pre-commit hook script
 func generatePreCommitHook() string {
-	return renderHookTemplate("hooks/pre-commit.sh", map[string]string{
-		hookMarkerBeginPlaceholder: lrcMarkerBegin,
-		hookMarkerEndPlaceholder:   lrcMarkerEnd,
-		hookVersionPlaceholder:     version,
+	return hooksvc.GeneratePreCommitHook(hooksvc.TemplateConfig{
+		MarkerBegin: lrcMarkerBegin,
+		MarkerEnd:   lrcMarkerEnd,
+		Version:     version,
 	})
 }
 
 // generatePrepareCommitMsgHook generates the prepare-commit-msg hook script
 func generatePrepareCommitMsgHook() string {
-	return renderHookTemplate("hooks/prepare-commit-msg.sh", map[string]string{
-		hookMarkerBeginPlaceholder: lrcMarkerBegin,
-		hookMarkerEndPlaceholder:   lrcMarkerEnd,
-		hookVersionPlaceholder:     version,
+	return hooksvc.GeneratePrepareCommitMsgHook(hooksvc.TemplateConfig{
+		MarkerBegin: lrcMarkerBegin,
+		MarkerEnd:   lrcMarkerEnd,
+		Version:     version,
 	})
 }
 
 // generateCommitMsgHook generates the commit-msg hook script
 func generateCommitMsgHook() string {
-	return renderHookTemplate("hooks/commit-msg.sh", map[string]string{
-		hookMarkerBeginPlaceholder:       lrcMarkerBegin,
-		hookMarkerEndPlaceholder:         lrcMarkerEnd,
-		hookVersionPlaceholder:           version,
-		hookCommitMessageFilePlaceholder: commitMessageFile,
+	return hooksvc.GenerateCommitMsgHook(hooksvc.TemplateConfig{
+		MarkerBegin:       lrcMarkerBegin,
+		MarkerEnd:         lrcMarkerEnd,
+		Version:           version,
+		CommitMessageFile: commitMessageFile,
 	})
 }
 
 // generatePostCommitHook runs a safe pull (ff-only) and push when requested.
 func generatePostCommitHook() string {
-	return renderHookTemplate("hooks/post-commit.sh", map[string]string{
-		hookMarkerBeginPlaceholder:     lrcMarkerBegin,
-		hookMarkerEndPlaceholder:       lrcMarkerEnd,
-		hookVersionPlaceholder:         version,
-		hookPushRequestFilePlaceholder: pushRequestFile,
+	return hooksvc.GeneratePostCommitHook(hooksvc.TemplateConfig{
+		MarkerBegin:     lrcMarkerBegin,
+		MarkerEnd:       lrcMarkerEnd,
+		Version:         version,
+		PushRequestFile: pushRequestFile,
 	})
 }
 
 func generateDispatcherHook(hookName string) string {
-	return renderHookTemplate("hooks/dispatcher.sh", map[string]string{
-		hookMarkerBeginPlaceholder: lrcMarkerBegin,
-		hookMarkerEndPlaceholder:   lrcMarkerEnd,
-		hookVersionPlaceholder:     version,
-		hookNamePlaceholder:        hookName,
+	return hooksvc.GenerateDispatcherHook(hookName, hooksvc.TemplateConfig{
+		MarkerBegin: lrcMarkerBegin,
+		MarkerEnd:   lrcMarkerEnd,
+		Version:     version,
 	})
 }
 
 // cleanOldBackups removes old backup files, keeping only the last N
 func cleanOldBackups(backupDir string, keepLast int) error {
-	entries, err := os.ReadDir(backupDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-
-	backupsByHook := make(map[string][]os.DirEntry)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		parts := strings.SplitN(name, ".", 2)
-		if len(parts) == 2 {
-			hookName := parts[0]
-			backupsByHook[hookName] = append(backupsByHook[hookName], entry)
-		}
-	}
-
-	for hookName, backups := range backupsByHook {
-		if len(backups) <= keepLast {
-			continue
-		}
-
-		for i := 0; i < len(backups)-keepLast; i++ {
-			oldPath := filepath.Join(backupDir, backups[i].Name())
-			if err := os.Remove(oldPath); err != nil {
-				log.Printf("Warning: failed to remove old backup %s: %v", oldPath, err)
-			} else {
-				log.Printf("Removed old backup: %s", backups[i].Name())
-			}
-		}
-		log.Printf("Cleaned up old %s backups (kept last %d)", hookName, keepLast)
-	}
-
-	return nil
+	return hooksvc.CleanOldBackups(backupDir, keepLast)
 }
