@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	cloudAPIURL        = "https://livereview.hexmos.com"
-	hexmosSigninBase   = "https://hexmos.com/signin"
-	geminiKeysURL      = "https://aistudio.google.com/api-keys"
-	defaultGeminiModel = "gemini-2.5-flash"
+	cloudAPIURL        = setuptpl.CloudAPIURL
+	hexmosSigninBase   = setuptpl.HexmosSigninBase
+	geminiKeysURL      = setuptpl.GeminiKeysURL
+	defaultGeminiModel = setuptpl.DefaultGeminiModel
 	setupTimeout       = 5 * time.Minute
-	issuesURL          = "https://github.com/HexmosTech/git-lrc/issues/new"
+	issuesURL          = setuptpl.IssuesURL
 )
 
 // ── ANSI color helpers ──────────────────────────────────────────────
@@ -140,101 +140,15 @@ func (sl *setupLog) buildIssueURL(errMsg string) string {
 	return issuesURL + "?" + params.Encode()
 }
 
-// setupResult holds the data collected during the setup flow.
-type setupResult struct {
-	Email        string
-	FirstName    string
-	LastName     string
-	AvatarURL    string
-	UserID       string
-	OrgID        string
-	OrgName      string
-	AccessToken  string
-	RefreshToken string
-	PlainAPIKey  string
-}
-
-// hexmosCallbackData models the ?data= JSON from Hexmos Login redirect.
-type hexmosCallbackData struct {
-	Result struct {
-		JWT  string `json:"jwt"`
-		Data struct {
-			Email         string `json:"email"`
-			Username      string `json:"username"`
-			FirstName     string `json:"first_name"`
-			LastName      string `json:"last_name"`
-			ProfilePicURL string `json:"profilePicUrl"`
-		} `json:"data"`
-	} `json:"result"`
-}
-
-// ensureCloudUserRequest is the body for POST /api/v1/auth/ensure-cloud-user.
-type ensureCloudUserRequest struct {
-	Email     string `json:"email"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Source    string `json:"source,omitempty"`
-}
-
-// ensureCloudUserResponse models the response from ensure-cloud-user.
-// ID fields use json.Number because the API may return them as integers.
-type ensureCloudUserResponse struct {
-	Status string      `json:"status"`
-	UserID json.Number `json:"user_id"`
-	OrgID  json.Number `json:"org_id"`
-	Email  string      `json:"email"`
-	User   struct {
-		ID        json.Number `json:"id"`
-		Email     string      `json:"email"`
-		FirstName string      `json:"first_name"`
-		LastName  string      `json:"last_name"`
-	} `json:"user"`
-	Tokens struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresAt    string `json:"expires_at"`
-	} `json:"tokens"`
-	Organizations []struct {
-		ID   json.Number `json:"id"`
-		Name string      `json:"name"`
-	} `json:"organizations"`
-}
-
-// createAPIKeyRequest is the body for POST /api/v1/orgs/:org_id/api-keys.
-type createAPIKeyRequest struct {
-	Label string `json:"label"`
-}
-
-// createAPIKeyResponse models the response from creating an API key.
-type createAPIKeyResponse struct {
-	APIKey struct {
-		ID    json.Number `json:"id"`
-		Label string      `json:"label"`
-	} `json:"api_key"`
-	PlainKey string `json:"plain_key"`
-}
-
-// validateKeyRequest is the body for POST /api/v1/aiconnectors/validate-key.
-type validateKeyRequest struct {
-	Provider string `json:"provider"`
-	APIKey   string `json:"api_key"`
-	Model    string `json:"model,omitempty"`
-}
-
-// validateKeyResponse models the response from validate-key.
-type validateKeyResponse struct {
-	Valid   bool   `json:"valid"`
-	Message string `json:"message"`
-}
-
-// createConnectorRequest is the body for POST /api/v1/aiconnectors.
-type createConnectorRequest struct {
-	ProviderName  string `json:"provider_name"`
-	APIKey        string `json:"api_key"`
-	ConnectorName string `json:"connector_name"`
-	SelectedModel string `json:"selected_model"`
-	DisplayOrder  int    `json:"display_order"`
-}
+type setupResult = setuptpl.SetupResult
+type hexmosCallbackData = setuptpl.HexmosCallbackData
+type ensureCloudUserRequest = setuptpl.EnsureCloudUserRequest
+type ensureCloudUserResponse = setuptpl.EnsureCloudUserResponse
+type createAPIKeyRequest = setuptpl.CreateAPIKeyRequest
+type createAPIKeyResponse = setuptpl.CreateAPIKeyResponse
+type validateKeyRequest = setuptpl.ValidateKeyRequest
+type validateKeyResponse = setuptpl.ValidateKeyResponse
+type createConnectorRequest = setuptpl.CreateConnectorRequest
 
 // runSetup is the handler for "lrc setup".
 func runSetup(c *cli.Context) error {
