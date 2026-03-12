@@ -40,6 +40,30 @@ export async function copyToClipboard(text) {
     await navigator.clipboard.writeText(text);
 }
 
+// Build contextual code excerpt for a comment line.
+// Includes previous/current/next lines (when available) with line numbers.
+export function buildIssueCodeExcerpt(lines, commentLineIndex, contextLines = 1) {
+    if (!Array.isArray(lines) || lines.length === 0) return '';
+    if (!Number.isInteger(commentLineIndex) || commentLineIndex < 0 || commentLineIndex >= lines.length) return '';
+
+    const radius = Number.isInteger(contextLines) && contextLines >= 0 ? contextLines : 1;
+    const start = Math.max(0, commentLineIndex - radius);
+    const end = Math.min(lines.length - 1, commentLineIndex + radius);
+
+    const excerptLines = [];
+    for (let i = start; i <= end; i++) {
+        const line = lines[i] || {};
+        const newNum = String(line.NewNum || '').trim();
+        const oldNum = String(line.OldNum || '').trim();
+        const lineNumber = newNum || oldNum || '?';
+        const content = typeof line.Content === 'string' ? line.Content : '';
+        const marker = i === commentLineIndex ? '>' : ' ';
+        excerptLines.push(`${marker} ${lineNumber}: ${content}`);
+    }
+
+    return excerptLines.join('\n');
+}
+
 // Build a stable key for a comment so toggles stay in sync even if order changes.
 export function getCommentVisibilityKey(filePath, comment) {
     const path = filePath || comment?.FilePath || '';

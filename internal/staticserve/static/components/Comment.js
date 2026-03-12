@@ -20,7 +20,7 @@ export async function createComment() {
             }
             
             if (codeExcerpt) {
-                copyText += 'Code excerpt:\n  ' + codeExcerpt + '\n\n';
+                copyText += 'Code excerpt:\n' + codeExcerpt + '\n\n';
             }
             
             copyText += 'Issue:\n' + comment.Content;

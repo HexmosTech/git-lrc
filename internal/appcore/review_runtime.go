@@ -216,6 +216,14 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		return fmt.Errorf("no diff content collected")
 	}
 
+	var fakeBaseFiles []reviewmodel.DiffReviewFileResult
+	if fakeMode {
+		fakeBaseFiles, err = parseDiffToFiles(diffContent)
+		if err != nil {
+			return fmt.Errorf("failed to parse diff for fake review mode: %w", err)
+		}
+	}
+
 	if verbose {
 		log.Printf("Collected %d bytes of diff content", len(diffContent))
 	}
@@ -479,6 +487,31 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			})
 			// Proxy endpoint for review-events API to avoid CORS
 			mux.HandleFunc("/api/v1/diff-review/", func(w http.ResponseWriter, r *http.Request) {
+				if fakeMode {
+					if r.Method != http.MethodGet {
+						w.WriteHeader(http.StatusMethodNotAllowed)
+						return
+					}
+					if !strings.HasSuffix(r.URL.Path, "/events") {
+						http.NotFound(w, r)
+						return
+					}
+
+					reviewStateMu.RLock()
+					state := currentReviewState
+					reviewStateMu.RUnlock()
+					if state == nil {
+						http.Error(w, "No review in progress", http.StatusNotFound)
+						return
+					}
+
+					w.Header().Set("Content-Type", "application/json")
+					if err := json.NewEncoder(w).Encode(buildFakeEventsResponse(state.Snapshot())); err != nil {
+						http.Error(w, "Failed to encode fake events", http.StatusInternalServerError)
+					}
+					return
+				}
+
 				// Forward request to backend API with authentication
 				backendURL := config.APIURL + r.URL.Path
 				if r.URL.RawQuery != "" {
@@ -549,7 +582,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	if isPostCommitReview {
 		var pollErr error
 		if fakeMode {
-			result, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, nil)
+			result, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, nil, fakeBaseFiles)
 		} else {
 			result, pollErr = reviewapi.PollReview(config.APIURL, config.APIKey, reviewID, opts.PollInterval, opts.Timeout, verbose, nil)
 		}
@@ -626,7 +659,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		stopPollFn := func() { stopPollOnce.Do(func() { close(stopPoll) }) }
 		go func() {
 			if fakeMode {
-				pollResult, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, stopPoll)
+				pollResult, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, stopPoll, fakeBaseFiles)
 			} else {
 				pollResult, pollErr = reviewapi.PollReview(config.APIURL, config.APIKey, reviewID, opts.PollInterval, opts.Timeout, verbose, stopPoll)
 			}

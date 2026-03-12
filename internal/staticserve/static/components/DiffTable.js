@@ -1,5 +1,5 @@
 // DiffTable component - renders diff hunks with lines and comments
-import { waitForPreact, getBadgeClass, filePathToId, getCommentVisibilityKey } from './utils.js';
+import { waitForPreact, getBadgeClass, filePathToId, getCommentVisibilityKey, buildIssueCodeExcerpt } from './utils.js';
 import { getComment } from './Comment.js';
 
 export async function createDiffTable() {
@@ -32,9 +32,8 @@ export async function createDiffTable() {
                         <td colspan="3" class="hunk-header">${hunk.Header}</td>
                     </tr>
                     ${hunk.Lines.map((line, idx) => {
-                        // Get previous line content for code excerpt (for comments)
-                        const prevLine = idx > 0 ? hunk.Lines[idx - 1] : null;
-                        const codeExcerpt = prevLine ? prevLine.Content : '';
+                        // Build line-numbered code context for per-issue copy.
+                        const codeExcerpt = buildIssueCodeExcerpt(hunk.Lines, idx, 1);
                         
                         return html`
                             <tr class="diff-line ${line.Class}">

@@ -45,6 +45,16 @@ type ReviewState struct {
 	ErrorSummary string `json:"errorSummary,omitempty"`
 }
 
+// ReviewStateSnapshot captures read-only fields needed outside the state lock.
+type ReviewStateSnapshot struct {
+	ReviewID      string
+	Status        string
+	TotalFiles    int
+	TotalComments int
+	StartedAt     time.Time
+	Summary       string
+}
+
 // NewReviewState creates a new ReviewState with initial values
 func NewReviewState(reviewID string, files []reviewmodel.DiffReviewFileResult, interactive, isPostCommitReview bool, initialMsg, apiURL string) *ReviewState {
 	return &ReviewState{
@@ -111,6 +121,20 @@ func (rs *ReviewState) AddComments(count int) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.TotalComments += count
+}
+
+// Snapshot returns a thread-safe copy of key state fields.
+func (rs *ReviewState) Snapshot() ReviewStateSnapshot {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	return ReviewStateSnapshot{
+		ReviewID:      rs.ReviewID,
+		Status:        rs.Status,
+		TotalFiles:    rs.TotalFiles,
+		TotalComments: rs.TotalComments,
+		StartedAt:     rs.StartedAt,
+		Summary:       rs.Summary,
+	}
 }
 
 // GetJSON returns the current state as JSON
