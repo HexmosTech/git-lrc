@@ -197,3 +197,6 @@ security-secret-regression:
 	}
 	@rm -f /tmp/lrc-secret-regression.txt
 	@echo "✅ No known leaked B2 literals detected in tracked source/docs/scripts"
+
+check-status-doc:
+	bash scripts/check-status-doc-links.sh

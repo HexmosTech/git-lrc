@@ -475,6 +475,31 @@ func selfUpdatePlatformID() (string, error) {
 	return fmt.Sprintf("%s-%s", platformOS, platformArch), nil
 }
 
+func verifyDownloadedBinarySHA256(binaryPath, expectedSHA256 string) error {
+	expected := strings.ToLower(strings.TrimSpace(expectedSHA256))
+	if expected == "" {
+		return fmt.Errorf("release manifest checksum is empty")
+	}
+
+	f, err := storage.OpenFileForRead(binaryPath)
+	if err != nil {
+		return fmt.Errorf("failed to open downloaded binary for checksum verification: %w", err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf("failed to hash downloaded binary: %w", err)
+	}
+
+	actual := hex.EncodeToString(h.Sum(nil))
+	if actual != expected {
+		return fmt.Errorf("downloaded binary checksum mismatch")
+	}
+
+	return nil
+}
+
 func downloadVersionBinaryFromManifest(versionTag string) (string, error) {
 	platformID, err := selfUpdatePlatformID()
 	if err != nil {
@@ -530,6 +555,12 @@ func downloadVersionBinaryFromManifest(versionTag string) (string, error) {
 	if err := tmpFile.Close(); err != nil {
 		_ = storage.Remove(tmpPath)
 		return "", fmt.Errorf("failed to finalize downloaded update binary: %w", err)
+	}
+
+	// Verify downloaded artifact integrity before making it executable or staging it.
+	if err := verifyDownloadedBinarySHA256(tmpPath, artifact.SHA256); err != nil {
+		_ = storage.Remove(tmpPath)
+		return "", fmt.Errorf("failed to verify downloaded binary checksum: %w", err)
 	}
 
 	if err := storage.Chmod(tmpPath, 0755); err != nil {

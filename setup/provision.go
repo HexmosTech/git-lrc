@@ -69,8 +69,9 @@ func ProvisionLiveReviewUser(cbData *HexmosCallbackData, logf func(format string
 		return nil, fmt.Errorf("failed to create API key: %w", err)
 	}
 	if resp2.StatusCode != http.StatusCreated && resp2.StatusCode != http.StatusOK {
-		log("create API key failed: status=%d body=%s", resp2.StatusCode, string(resp2.Body))
-		return nil, fmt.Errorf("create API key returned %d: %s", resp2.StatusCode, string(resp2.Body))
+		// Do not log/echo response bodies here because create-key responses can contain plaintext secrets.
+		log("create API key failed: status=%d", resp2.StatusCode)
+		return nil, fmt.Errorf("create API key returned %d", resp2.StatusCode)
 	}
 
 	log("API key created: status=%d", resp2.StatusCode)

@@ -1,6 +1,6 @@
 # Network Operations Status
 
-Last Reviewed: 2026-03-16
+Last Reviewed: 2026-03-17
 Audience: Engineering, Procurement, Security Vetting, CISO
 Scope: Outbound and proxied network operations in the network boundary
 
@@ -42,8 +42,8 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | Operation | Mode | Data Handled | Purpose | Severity | Risk Acknowledgement | Compensation Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | SetupEnsureCloudUser | api | Access-token-authenticated identity payload | Ensure cloud user record exists during setup | High | Authentication-context misuse risk | Compensated by bearer token boundary and scoped setup endpoint; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L6) |
-| SetupCreateAPIKey | api | API key label and returned plaintext API key | Create connector/review API key | High | High sensitivity secret material exposure risk | Partially compensated by explicit auth flow and controlled response handling; Suggestion: add explicit no-log guarantee note in docs | [network/setup_operations.go](setup_operations.go#L11) |
-| SetupValidateConnectorKey | api | Provider key and validation request body | Validate AI connector key before persistence | High | Third-party key exposure/handling risk | Partially compensated by authenticated request path; Suggestion: add key redaction verification in error paths | [network/setup_operations.go](setup_operations.go#L16) |
+| SetupCreateAPIKey | api | API key label and returned plaintext API key | Create connector/review API key | High | High sensitivity secret material exposure risk | Compensated by explicit auth flow and setup caller no-log/no-echo handling for create-key error paths; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L11) |
+| SetupValidateConnectorKey | api | Provider key and validation request body | Validate AI connector key before persistence | High | Third-party key exposure/handling risk | Compensated by authenticated request path plus connector key redaction in setup error surfaces; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L16) |
 | SetupCreateConnector | api | Connector configuration payload | Persist connector configuration via LiveReview API | High | Misconfiguration and sensitive metadata transmission risk | Compensated by bearer auth plus org context boundary; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L21) |
 
 ## Inventory: Proxy And Forwarding APIs
@@ -59,7 +59,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | SelfUpdateFetchManifest | api | Update manifest metadata and checksum references | Retrieve global update manifest | Medium | Medium integrity risk if manifest source is untrusted | Compensated by controlled update source design and follow-on verification path; acceptable risk | [network/selfupdate_operations.go](selfupdate_operations.go#L32) |
 | SelfUpdateFetchReleaseManifest | api | Platform-specific release manifest | Retrieve release details for current target platform | Medium | Medium integrity risk from release metadata tampering | Compensated by expected-host model and verification pipeline assumptions; acceptable risk | [network/selfupdate_operations.go](selfupdate_operations.go#L37) |
-| SelfUpdateDownloadBinaryTo | api | Binary stream bytes for executable update artifact | Download release binary to target path | High | High integrity and supply-chain risk for executable download | Partially compensated by source host validation; Suggestion: surface checksum verification ownership inline in this doc | [network/selfupdate_operations.go](selfupdate_operations.go#L45) |
+| SelfUpdateDownloadBinaryTo | api | Binary stream bytes for executable update artifact | Download release binary to target path | High | High integrity and supply-chain risk for executable download | Compensated by source host validation and SHA256 verification during staging in internal/selfupdate downloadVersionBinaryFromManifest; residual risk acceptable | [network/selfupdate_operations.go](selfupdate_operations.go#L45) |
 
 ## Inventory: HTTP Transport And Error Handling Utilities
 
@@ -76,8 +76,10 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 - Auth separation by flow: API-key and bearer-token paths are distinct and explicit in operation wrappers.
 - URL hygiene: endpoint normalization centralizes path composition.
 - Update source restrictions: self-update path validates expected host family before binary download.
+- Self-update integrity verification: staged binaries are checksum-verified against release-manifest SHA256 before chmod/install.
 - Timeout controls: review polling uses bounded timeout and cancellation semantics.
 - Diagnostic hardening: parse-error helpers improve unsafe endpoint detection and operator triage.
+- Setup secret-handling hardening: create-key failures avoid response-body echo and connector setup errors redact submitted provider keys.
 
 ## Known Gaps And Follow-Ups
 
@@ -86,7 +88,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | Retry and backoff strategy is not centralized in network client wrappers | Transient failures can reduce reliability and affect user trust | Decide whether retries belong in network layer or explicit call sites, then document policy |
 | 429/rate-limit handling is not represented as a standard control in operation docs | Can affect enterprise traffic reliability expectations | Document expected behavior and operator guidance for rate-limit scenarios |
 | Proxy forwarding operation is intentionally flexible and may need tighter guardrails for some deployments | Security teams may ask for explicit path/method constraints | Document deployment-time constraints and threat model assumptions |
-| Binary download integrity chain is split across components and not summarized here | Procurement and CISO reviews expect clear integrity story | Add short integrity path note linking fetch, checksum verification owner, and install decision point |
+| Binary download integrity chain is split across components and not summarized here | Procurement and CISO reviews expect clear integrity story | Addressed: integrity path now documented with checksum verification owner at self-update staging control point |
 
 ## Review Cadence
 
