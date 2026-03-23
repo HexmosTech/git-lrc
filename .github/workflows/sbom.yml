@@ -25,6 +25,8 @@ jobs:
       SYFT_CACHE_DIR: ${{ github.workspace }}/.cache/syft-bin
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
 
       - name: Compute syft cache epoch
         id: syft-cache-epoch
@@ -80,5 +82,8 @@ jobs:
       - name: Upload SBOMs to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.release.tag_name }}
+          fail_on_unmatched_files: true
+          clobber: true
           files: |
             security_issues/sbom/*.json

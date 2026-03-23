@@ -1,4 +1,4 @@
-.PHONY: build build-win build-all build-local build-local-test run run-fake-review bump release clean test testall test-pkg upload-secrets download-secrets security-govulncheck security-govulncheck-json security-osv security-triage security-gitleaks security-b2-audit security-b2-cleanup-plan security-b2-cleanup-apply security-publish-release-manifest security-secret-regression security-sbom security-sbom-cyclonedx security-sbom-spdx security-sbom-validate
+.PHONY: build build-win build-all build-local build-local-test run run-fake-review bump release release-gh clean test testall test-pkg upload-secrets download-secrets security-govulncheck security-govulncheck-json security-osv security-triage security-gitleaks security-b2-audit security-b2-cleanup-plan security-b2-cleanup-apply security-publish-release-manifest security-secret-regression security-sbom security-sbom-cyclonedx security-sbom-spdx security-sbom-validate release-notes-init release-notes-check release-preflight
 
 # Go parameters
 GOCMD=go
@@ -13,6 +13,9 @@ GH=/usr/bin/gh
 ENV_VARS=B2_KEY_ID B2_APP_KEY B2_BUCKET_NAME B2_BUCKET_ID
 SYFT_CMD=syft
 SBOM_DIR=security_issues/sbom
+RELEASE_NOTES_DIR=docs/releases
+RELEASE_NOTES_TEMPLATE=$(RELEASE_NOTES_DIR)/_template.md
+RELEASE_GH_SCRIPT=scripts/release_gh.py
 
 # Build lrc for the current platform
 build:
@@ -73,6 +76,13 @@ bump:
 release:
 	@echo "🚀 Building and releasing lrc..."
 	@python scripts/lrc_build.py -v release
+	@echo "ℹ️  Optional GitHub release publish: make release-gh"
+	@echo "   Optional explicit override: make release-gh VERSION=$$(awk -F'"' '/const appVersion/{print $$2; exit}' main.go)"
+
+# Optionally publish a GitHub release using markdown notes (no binary assets).
+# VERSION is optional and auto-inferred by scripts/release_gh.py.
+release-gh:
+	@python3 $(RELEASE_GH_SCRIPT) --repo $(GH_REPO) $(if $(VERSION),--version $(VERSION),)
 
 # Clean build artifacts
 clean:
@@ -233,6 +243,54 @@ security-sbom-validate:
 	@test -s $(SBOM_DIR)/git-lrc-go-cyclonedx.json
 	@test -s $(SBOM_DIR)/git-lrc-go-spdx.json
 	@echo "✅ SBOM validation passed"
+
+# Generate release notes file from template.
+# Usage: make release-notes-init VERSION=v1.2.3
+release-notes-init:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ VERSION is required. Example: make release-notes-init VERSION=v1.2.3"; \
+		exit 1; \
+	fi
+	@echo "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$' || { \
+		echo "❌ VERSION must match vX.Y.Z"; \
+		exit 1; \
+	}
+	@test -f $(RELEASE_NOTES_TEMPLATE) || { \
+		echo "❌ Missing template: $(RELEASE_NOTES_TEMPLATE)"; \
+		exit 1; \
+	}
+	@mkdir -p $(RELEASE_NOTES_DIR)
+	@target="$(RELEASE_NOTES_DIR)/$(VERSION).md"; \
+	if [ -f "$$target" ]; then \
+		echo "❌ Release notes already exist: $$target"; \
+		exit 1; \
+	fi; \
+	sed -e "s/__VERSION__/$(VERSION)/g" -e "s/__DATE__/$(shell date -u +%Y-%m-%d)/g" "$(RELEASE_NOTES_TEMPLATE)" > "$$target"; \
+	echo "✅ Created $$target"
+
+# Validate release notes file exists and required headings are present.
+# Usage: make release-notes-check VERSION=v1.2.3
+release-notes-check:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ VERSION is required. Example: make release-notes-check VERSION=v1.2.3"; \
+		exit 1; \
+	fi
+	@echo "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$' || { \
+		echo "❌ VERSION must match vX.Y.Z"; \
+		exit 1; \
+	}
+	@target="$(RELEASE_NOTES_DIR)/$(VERSION).md"; \
+	test -f "$$target" || { echo "❌ Missing release notes: $$target"; exit 1; }; \
+	test -s "$$target" || { echo "❌ Release notes file is empty: $$target"; exit 1; }; \
+	grep -q '^## Summary' "$$target" || { echo "❌ Missing required section: ## Summary"; exit 1; }; \
+	grep -q '^## Install and Update' "$$target" || { echo "❌ Missing required section: ## Install and Update"; exit 1; }; \
+	grep -q '^## Changes' "$$target" || { echo "❌ Missing required section: ## Changes"; exit 1; }; \
+	echo "✅ Release notes validated: $$target"
+
+# Run all release checks before creating/publishing a GitHub release.
+# Usage: make release-preflight VERSION=v1.2.3
+release-preflight: release-notes-check
+	@echo "✅ Release preflight passed for $(VERSION)"
 
 check-status-doc:
 	bash scripts/check-status-doc-links.sh
