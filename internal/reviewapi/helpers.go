@@ -158,11 +158,15 @@ func TrackCLIUsage(apiURL, apiKey string, verbose bool) {
 var ErrPollCancelled = errors.New("poll cancelled")
 var ErrInputCancelled = errors.New("terminal input cancelled")
 
-func PollReview(apiURL, apiKey, reviewID string, pollInterval, timeout time.Duration, verbose bool, cancel <-chan struct{}) (*reviewmodel.DiffReviewResponse, error) {
+func PollReview(apiURL, apiKey, reviewID string, pollInterval, timeout time.Duration, verbose bool, cancel <-chan struct{}, statusSink func(string)) (*reviewmodel.DiffReviewResponse, error) {
 	deadline := time.Now().Add(timeout)
 	start := time.Now()
-	fmt.Printf("Waiting for review completion (poll every %s, timeout %s)...\r\n", pollInterval, timeout)
-	interactive.SyncFileSafely(os.Stdout)
+	if statusSink != nil {
+		statusSink(fmt.Sprintf("waiting | poll=%s timeout=%s", pollInterval, timeout))
+	} else {
+		fmt.Printf("Waiting for review completion (poll every %s, timeout %s)...\r\n", pollInterval, timeout)
+		interactive.SyncFileSafely(os.Stdout)
+	}
 
 	if verbose {
 		log.Printf("Polling for review completion (timeout: %v)...", timeout)
@@ -173,8 +177,10 @@ func PollReview(apiURL, apiKey, reviewID string, pollInterval, timeout time.Dura
 	for time.Now().Before(deadline) {
 		select {
 		case <-cancel:
-			fmt.Printf("\r\n")
-			interactive.SyncFileSafely(os.Stdout)
+			if statusSink == nil {
+				fmt.Printf("\r\n")
+				interactive.SyncFileSafely(os.Stdout)
+			}
 			return nil, ErrPollCancelled
 		default:
 		}
@@ -196,21 +202,29 @@ func PollReview(apiURL, apiKey, reviewID string, pollInterval, timeout time.Dura
 		}
 
 		statusLine := fmt.Sprintf("Status: %s | elapsed: %s", result.Status, time.Since(start).Truncate(time.Second))
-		fmt.Printf("\r%-80s", statusLine)
-		interactive.SyncFileSafely(os.Stdout)
+		if statusSink != nil {
+			statusSink(statusLine)
+		} else {
+			fmt.Printf("\r%-80s", statusLine)
+			interactive.SyncFileSafely(os.Stdout)
+		}
 		if verbose {
 			log.Printf("%s", statusLine)
 		}
 
 		if result.Status == "completed" {
-			fmt.Printf("\r%-80s\r\n", statusLine)
-			interactive.SyncFileSafely(os.Stdout)
+			if statusSink == nil {
+				fmt.Printf("\r%-80s\r\n", statusLine)
+				interactive.SyncFileSafely(os.Stdout)
+			}
 			return &result, nil
 		}
 
 		if result.Status == "failed" {
-			fmt.Printf("\r%-80s\r\n", statusLine)
-			interactive.SyncFileSafely(os.Stdout)
+			if statusSink == nil {
+				fmt.Printf("\r%-80s\r\n", statusLine)
+				interactive.SyncFileSafely(os.Stdout)
+			}
 			reason := strings.TrimSpace(result.Message)
 			if reason == "" {
 				reason = "no additional details provided"
@@ -226,6 +240,8 @@ func PollReview(apiURL, apiKey, reviewID string, pollInterval, timeout time.Dura
 		}
 	}
 
-	fmt.Println()
+	if statusSink == nil {
+		fmt.Println()
+	}
 	return nil, fmt.Errorf("timeout waiting for review completion")
 }

@@ -367,17 +367,6 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	var progressiveDecideOnce sync.Once
 	progressiveRuntime := decisionruntime.New(decisionflow.PhaseReviewRunning)
 
-	fmt.Printf("Review submitted, ID: %s\n", reviewID)
-	if submitResp.UserEmail != "" {
-		fmt.Printf("Account: %s\n", submitResp.UserEmail)
-	}
-	if submitResp.FriendlyName != "" {
-		fmt.Printf("Title: %s\n", submitResp.FriendlyName)
-	}
-	if reviewURL != "" {
-		fmt.Printf("Review link: %s\n", highlightURL(reviewURL))
-	}
-
 	// In precommit mode, ensure unbuffered output
 	if opts.Precommit {
 		// Force flush and set unbuffered
@@ -410,6 +399,20 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	// This is critical for Case 1 (hook-based terminal invocation) where serve is auto-enabled
 	// and we need the interactive flow with commit/push/skip options
 	useInteractive = !opts.Skip && opts.Serve && !isPostCommitReview
+	reviewMetadata := buildDecisionMetadata(reviewID, submitResp.UserEmail, submitResp.FriendlyName, reviewURL)
+
+	if !useInteractive {
+		fmt.Printf("Review submitted, ID: %s\n", reviewID)
+		if submitResp.UserEmail != "" {
+			fmt.Printf("Account: %s\n", submitResp.UserEmail)
+		}
+		if submitResp.FriendlyName != "" {
+			fmt.Printf("Title: %s\n", submitResp.FriendlyName)
+		}
+		if reviewURL != "" {
+			fmt.Printf("Review link: %s\n", highlightURL(reviewURL))
+		}
+	}
 
 	if opts.Serve {
 		// Parse the diff content to generate file structures for immediate display
@@ -434,8 +437,10 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		}
 
 		serveURL := fmt.Sprintf("http://localhost:%d", opts.Port)
-		fmt.Printf("\n🌐 Review available at: %s\n", highlightURL(serveURL))
-		fmt.Printf("   Comments will appear progressively as review runs\n\n")
+		if !useInteractive {
+			fmt.Printf("\n🌐 Review available at: %s\n", highlightURL(serveURL))
+			fmt.Printf("   Comments will appear progressively as review runs\n\n")
+		}
 
 		// Auto-open the review in the default browser
 		openURL(serveURL)
@@ -622,10 +627,10 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	if isPostCommitReview {
 		var pollErr error
 		if fakeMode {
-			result, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, nil, fakeBaseFiles)
+			result, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, nil, fakeBaseFiles, nil)
 		} else {
 			var updatedConfig Config
-			result, updatedConfig, pollErr = pollReviewWithRecovery(*config, reviewID, opts.PollInterval, opts.Timeout, verbose, nil)
+			result, updatedConfig, pollErr = pollReviewWithRecovery(*config, reviewID, opts.PollInterval, opts.Timeout, verbose, nil, nil)
 			config = &updatedConfig
 		}
 		if pollErr != nil {
@@ -677,10 +682,10 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		defer signal.Stop(sigChan)
 
 		interactiveRuntime := decisionruntime.New(decisionflow.PhaseReviewRunning)
-		decisionChan := make(chan int, 1)
+		decisionChan := make(chan terminalDecision, 1)
 		var decisionOnce sync.Once
-		submitInteractiveDecision := func(source decisionruntime.Source, code int) bool {
-			outcome := interactiveRuntime.TryDecide(decisionruntime.Decision{Source: source, Code: code})
+		submitInteractiveDecision := func(source decisionruntime.Source, d terminalDecision) bool {
+			outcome := interactiveRuntime.TryDecide(decisionruntime.Decision{Source: source, Code: d.Code, Message: d.Message, Push: d.Push})
 			if outcome.Err != nil || !outcome.Accepted {
 				return false
 			}
@@ -689,29 +694,34 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				return false
 			}
 			decisionOnce.Do(func() {
-				decisionChan <- chosen.Code
+				decisionChan <- terminalDecision{Code: chosen.Code, Message: d.Message, Push: d.Push}
 			})
 			return true
 		}
 
 		prompt := decisionPrompt{
-			Title:       "Review in progress",
-			Description: "Choose terminal action now or continue waiting.",
-			AllowAbort:  true,
-			AllowSkip:   true,
-			AllowVouch:  true,
+			Title:                  "Review in progress",
+			Description:            "Choose terminal action now or continue waiting.",
+			Metadata:               reviewMetadata,
+			InitialText:            initialMsg,
+			AllowAbort:             true,
+			AllowSkip:              true,
+			AllowVouch:             true,
+			RequireMessageForSkip:  true,
+			RequireMessageForVouch: true,
 		}
-		tuiDecisionCh, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
+		tuiDecisionCh, setTUIStatus, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
+		setTUIStatus("status: waiting for review")
 		go func() {
-			for code := range tuiDecisionCh {
-				submitInteractiveDecision(decisionruntime.SourceTerminal, code)
+			for d := range tuiDecisionCh {
+				submitInteractiveDecision(decisionruntime.SourceTerminal, d)
 			}
 		}()
 
 		// Ctrl-C -> abort commit
 		go func() {
 			<-sigChan
-			submitInteractiveDecision(decisionruntime.SourceSignal, decisionflow.DecisionAbort)
+			submitInteractiveDecision(decisionruntime.SourceSignal, terminalDecision{Code: decisionflow.DecisionAbort})
 		}()
 
 		// Poll concurrently and race with decisions
@@ -729,17 +739,20 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		stopPollFn := func() { stopPollOnce.Do(func() { close(stopPoll) }) }
 		go func() {
 			if fakeMode {
-				pollResult, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, stopPoll, fakeBaseFiles)
+				pollResult, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, stopPoll, fakeBaseFiles, setTUIStatus)
 			} else {
 				pollUsedRecovery = true
-				pollResult, pollUpdatedConfig, pollErr = pollReviewWithRecovery(*config, reviewID, opts.PollInterval, opts.Timeout, verbose, stopPoll)
+				pollResult, pollUpdatedConfig, pollErr = pollReviewWithRecovery(*config, reviewID, opts.PollInterval, opts.Timeout, verbose, stopPoll, setTUIStatus)
 			}
 			close(pollDone)
 		}()
 
 		var pollFinished bool
 		select {
-		case decisionCode = <-decisionChan:
+		case d := <-decisionChan:
+			decisionCode = d.Code
+			decisionMessage = d.Message
+			decisionPush = d.Push
 			stopTUI()
 			<-tuiDone
 			stopPollFn()
@@ -766,7 +779,10 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			}
 			// Prefer a user decision if it arrives within a short grace window after poll finishes
 			select {
-			case decisionCode = <-decisionChan:
+			case d := <-decisionChan:
+				decisionCode = d.Code
+				decisionMessage = d.Message
+				decisionPush = d.Push
 				// got user decision
 			case webDecision := <-webDecisionChan:
 				decisionCode = webDecision.code
@@ -947,12 +963,16 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			if progressiveLoadingActive {
 				// Progressive loading active - server already running on opts.Port
 				prompt := decisionPrompt{
-					Title:       "Review complete. Choose action",
-					Description: "Use terminal keys or the web UI buttons.",
-					AllowCommit: true,
-					AllowAbort:  true,
+					Title:                   "Review complete. Choose action",
+					Description:             "Use terminal keys or the web UI buttons.",
+					Metadata:                reviewMetadata,
+					InitialText:             initialMsg,
+					AllowCommit:             true,
+					AllowPush:               true,
+					AllowAbort:              true,
+					RequireMessageForCommit: true,
 				}
-				tuiDecisionCh, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
+				tuiDecisionCh, _, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
 
 				// Signals still map to abort decisions.
 				sigChan := make(chan os.Signal, 1)
@@ -967,9 +987,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				}()
 
 				go func() {
-					for code := range tuiDecisionCh {
+					for d := range tuiDecisionCh {
 						if progressiveSubmit != nil {
-							progressiveSubmit(decisionruntime.SourceTerminal, code, "", false)
+							progressiveSubmit(decisionruntime.SourceTerminal, d.Code, d.Message, d.Push)
 						}
 					}
 				}()
@@ -989,7 +1009,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				})
 			} else {
 				// No progressive loading - use normal serveHTMLInteractive
-				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.Port, nonProgressiveListener, initialMsg, false)
+				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.Port, nonProgressiveListener, initialMsg, reviewMetadata, false)
 				if err != nil {
 					return err
 				}
@@ -1999,10 +2019,27 @@ func handleReviewEventsProxy(w http.ResponseWriter, r *http.Request, config Conf
 	}
 }
 
+func buildDecisionMetadata(reviewID, account, title, reviewURL string) []string {
+	metadata := make([]string, 0, 4)
+	if strings.TrimSpace(reviewID) != "" {
+		metadata = append(metadata, fmt.Sprintf("Review ID: %s", reviewID))
+	}
+	if strings.TrimSpace(account) != "" {
+		metadata = append(metadata, fmt.Sprintf("Account: %s", account))
+	}
+	if strings.TrimSpace(title) != "" {
+		metadata = append(metadata, fmt.Sprintf("Title: %s", title))
+	}
+	if strings.TrimSpace(reviewURL) != "" {
+		metadata = append(metadata, fmt.Sprintf("Review link: %s", reviewURL))
+	}
+	return metadata
+}
+
 // serveHTMLInteractive serves HTML and waits for user decision
 // Returns decision details (code: 0 commit, 1 abort, 2 skip-from-terminal, 3 skip-from-HTML)
 // skipBrowserOpen: set to true if browser is already open (e.g., from progressive loading)
-func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, skipBrowserOpen bool) (int, string, bool, error) {
+func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, metadata []string, skipBrowserOpen bool) (int, string, bool, error) {
 	absPath, err := filepath.Abs(htmlPath)
 	if err != nil {
 		return 1, "", false, fmt.Errorf("failed to get absolute path: %w", err)
@@ -2167,12 +2204,20 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 	defer signal.Stop(sigChan)
 
 	prompt := decisionPrompt{
-		Title:       "Review complete. Choose action",
-		Description: "Use terminal keys or web UI buttons.",
-		AllowCommit: true,
-		AllowAbort:  true,
+		Title:                   "Review complete. Choose action",
+		Description:             "Use terminal keys or web UI buttons.",
+		Metadata:                metadata,
+		InitialText:             initialMsg,
+		AllowCommit:             true,
+		AllowPush:               true,
+		AllowSkip:               true,
+		AllowVouch:              true,
+		AllowAbort:              true,
+		RequireMessageForCommit: true,
+		RequireMessageForSkip:   true,
+		RequireMessageForVouch:  true,
 	}
-	tuiDecisionCh, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
+	tuiDecisionCh, _, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
 
 	go func() {
 		<-sigChan
@@ -2180,8 +2225,8 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 	}()
 
 	go func() {
-		for code := range tuiDecisionCh {
-			submit(decisionruntime.SourceTerminal, code, "", false)
+		for d := range tuiDecisionCh {
+			submit(decisionruntime.SourceTerminal, d.Code, d.Message, d.Push)
 		}
 	}()
 

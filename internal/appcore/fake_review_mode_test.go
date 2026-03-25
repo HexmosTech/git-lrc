@@ -194,7 +194,7 @@ func TestPollReviewFakeCompletes(t *testing.T) {
 		},
 	}
 
-	result, err := pollReviewFake("fake-test", 2*time.Millisecond, 1*time.Millisecond, false, nil, baseFiles)
+	result, err := pollReviewFake("fake-test", 2*time.Millisecond, 1*time.Millisecond, false, nil, baseFiles, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestPollReviewFakeCancelled(t *testing.T) {
 	cancel := make(chan struct{})
 	close(cancel)
 
-	_, err := pollReviewFake("fake-test", 10*time.Millisecond, 1*time.Second, false, cancel, nil)
+	_, err := pollReviewFake("fake-test", 10*time.Millisecond, 1*time.Second, false, cancel, nil, nil)
 	if err == nil {
 		t.Fatalf("expected cancellation error")
 	}

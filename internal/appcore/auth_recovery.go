@@ -111,8 +111,8 @@ func submitReviewWithRecovery(config Config, base64Diff, repoName string, verbos
 	return retryResp, recoveredConfig, nil
 }
 
-func pollReviewWithRecovery(config Config, reviewID string, pollInterval, timeout time.Duration, verbose bool, cancel <-chan struct{}) (*reviewmodel.DiffReviewResponse, Config, error) {
-	result, err := reviewapi.PollReview(config.APIURL, config.APIKey, reviewID, pollInterval, timeout, verbose, cancel)
+func pollReviewWithRecovery(config Config, reviewID string, pollInterval, timeout time.Duration, verbose bool, cancel <-chan struct{}, statusSink func(string)) (*reviewmodel.DiffReviewResponse, Config, error) {
+	result, err := reviewapi.PollReview(config.APIURL, config.APIKey, reviewID, pollInterval, timeout, verbose, cancel, statusSink)
 	if err == nil {
 		return result, config, nil
 	}
@@ -126,7 +126,7 @@ func pollReviewWithRecovery(config Config, reviewID string, pollInterval, timeou
 	}
 
 	fmt.Println("Retrying review polling with refreshed credentials...")
-	retryResult, retryErr := reviewapi.PollReview(recoveredConfig.APIURL, recoveredConfig.APIKey, reviewID, pollInterval, timeout, verbose, cancel)
+	retryResult, retryErr := reviewapi.PollReview(recoveredConfig.APIURL, recoveredConfig.APIKey, reviewID, pollInterval, timeout, verbose, cancel, statusSink)
 	if retryErr != nil {
 		return nil, recoveredConfig, retryErr
 	}

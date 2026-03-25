@@ -104,14 +104,19 @@ func TestRuntimeWebSkipVouchAllowedAfterReviewComplete(t *testing.T) {
 		}
 	})
 
-	t.Run("terminal skip still blocked", func(t *testing.T) {
+	t.Run("terminal skip allowed", func(t *testing.T) {
 		rt := New(decisionflow.PhaseReviewComplete)
 		outcome := rt.TryDecide(Decision{Source: SourceTerminal, Code: decisionflow.DecisionSkip})
-		if outcome.Accepted {
-			t.Fatalf("expected terminal skip to be rejected after review complete")
+		if !outcome.Accepted || outcome.Err != nil {
+			t.Fatalf("expected terminal skip to be accepted after review complete, got accepted=%v err=%v", outcome.Accepted, outcome.Err)
 		}
-		if !errors.Is(outcome.Err, ErrActionNotAllowed) {
-			t.Fatalf("expected ErrActionNotAllowed, got %v", outcome.Err)
+	})
+
+	t.Run("terminal vouch allowed", func(t *testing.T) {
+		rt := New(decisionflow.PhaseReviewComplete)
+		outcome := rt.TryDecide(Decision{Source: SourceTerminal, Code: decisionflow.DecisionVouch})
+		if !outcome.Accepted || outcome.Err != nil {
+			t.Fatalf("expected terminal vouch to be accepted after review complete, got accepted=%v err=%v", outcome.Accepted, outcome.Err)
 		}
 	})
 }

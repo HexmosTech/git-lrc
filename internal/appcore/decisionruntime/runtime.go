@@ -83,15 +83,15 @@ func (r *Runtime) TryDecide(d Decision) Outcome {
 		return Outcome{Accepted: false, Err: ErrAlreadyResolved}
 	}
 
+	if r.phase == decisionflow.PhaseReviewComplete && (d.Code == decisionflow.DecisionSkip || d.Code == decisionflow.DecisionVouch) {
+		r.resolved = true
+		r.chosen = d
+		return Outcome{Accepted: true, Err: nil}
+	}
+
 	if d.Source == SourceWeb {
-		// Keep web UI actions usable after review completion: skip/vouch are treated
-		// as valid terminal decisions even though decisionflow limits them to running.
-		if r.phase == decisionflow.PhaseReviewComplete && (d.Code == decisionflow.DecisionSkip || d.Code == decisionflow.DecisionVouch) {
-			// allowed
-		} else {
-			if err := decisionflow.ValidateRequest(d.Code, d.Message, r.phase); err != nil {
-				return Outcome{Accepted: false, Err: err}
-			}
+		if err := decisionflow.ValidateRequest(d.Code, d.Message, r.phase); err != nil {
+			return Outcome{Accepted: false, Err: err}
 		}
 	} else if !decisionflow.ActionAllowedInPhase(d.Code, r.phase) {
 		return Outcome{Accepted: false, Err: ErrActionNotAllowed}

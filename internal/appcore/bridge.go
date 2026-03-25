@@ -339,15 +339,19 @@ func buildFakeEventsResponse(snapshot ReviewStateSnapshot) fakeReviewEventsRespo
 	return fakeReviewEventsResponse{Events: events}
 }
 
-func pollReviewFake(reviewID string, pollInterval, wait time.Duration, verbose bool, cancel <-chan struct{}, baseFiles []reviewmodel.DiffReviewFileResult) (*reviewmodel.DiffReviewResponse, error) {
+func pollReviewFake(reviewID string, pollInterval, wait time.Duration, verbose bool, cancel <-chan struct{}, baseFiles []reviewmodel.DiffReviewFileResult, statusSink func(string)) (*reviewmodel.DiffReviewResponse, error) {
 	if pollInterval <= 0 {
 		pollInterval = 1 * time.Second
 	}
 
 	start := time.Now()
 	deadline := start.Add(wait)
-	fmt.Printf("Waiting for fake review completion (poll every %s, delay %s)...\r\n", pollInterval, wait)
-	syncFileSafely(os.Stdout)
+	if statusSink != nil {
+		statusSink(fmt.Sprintf("waiting | poll=%s delay=%s", pollInterval, wait))
+	} else {
+		fmt.Printf("Waiting for fake review completion (poll every %s, delay %s)...\r\n", pollInterval, wait)
+		syncFileSafely(os.Stdout)
+	}
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -356,8 +360,12 @@ func pollReviewFake(reviewID string, pollInterval, wait time.Duration, verbose b
 		now := time.Now()
 		if !now.Before(deadline) {
 			statusLine := fmt.Sprintf("Status: completed | elapsed: %s", now.Sub(start).Truncate(time.Second))
-			fmt.Printf("\r%-80s\r\n", statusLine)
-			syncFileSafely(os.Stdout)
+			if statusSink != nil {
+				statusSink(statusLine)
+			} else {
+				fmt.Printf("\r%-80s\r\n", statusLine)
+				syncFileSafely(os.Stdout)
+			}
 			if verbose {
 				log.Printf("fake review %s completed", reviewID)
 			}
@@ -365,16 +373,22 @@ func pollReviewFake(reviewID string, pollInterval, wait time.Duration, verbose b
 		}
 
 		statusLine := fmt.Sprintf("Status: in_progress | elapsed: %s", now.Sub(start).Truncate(time.Second))
-		fmt.Printf("\r%-80s", statusLine)
-		syncFileSafely(os.Stdout)
+		if statusSink != nil {
+			statusSink(statusLine)
+		} else {
+			fmt.Printf("\r%-80s", statusLine)
+			syncFileSafely(os.Stdout)
+		}
 		if verbose {
 			log.Printf("fake review %s: %s", reviewID, statusLine)
 		}
 
 		select {
 		case <-cancel:
-			fmt.Printf("\r\n")
-			syncFileSafely(os.Stdout)
+			if statusSink == nil {
+				fmt.Printf("\r\n")
+				syncFileSafely(os.Stdout)
+			}
 			return nil, reviewapi.ErrPollCancelled
 		case <-ticker.C:
 		}
