@@ -11,15 +11,16 @@ import (
 )
 
 type decisionPrompt struct {
-	Title       string
-	Description string
-	Metadata    []string
-	InitialText string
-	AllowCommit bool
-	AllowPush   bool
-	AllowAbort  bool
-	AllowSkip   bool
-	AllowVouch  bool
+	Title        string
+	Description  string
+	Metadata     []string
+	InitialText  string
+	FocusMessage bool
+	AllowCommit  bool
+	AllowPush    bool
+	AllowAbort   bool
+	AllowSkip    bool
+	AllowVouch   bool
 
 	RequireMessageForCommit bool
 	RequireMessageForSkip   bool
@@ -98,21 +99,6 @@ func (m decisionTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		key := strings.ToLower(v.String())
-		if key == "ctrl+e" && m.onEditor != nil {
-			text, version, err := m.onEditor()
-			if err != nil {
-				m.errorMsg = "editor failed: " + err.Error()
-				return m, nil
-			}
-			m.message = []rune(text)
-			m.cursor = len(m.message)
-			if version > 0 {
-				m.draftVer = version
-			}
-			m.errorMsg = ""
-			return m, nil
-		}
-
 		if key == "ctrl+c" {
 			if m.prompt.AllowAbort {
 				if action, ok := m.actionForCode(decisionflow.DecisionAbort, false); ok {
@@ -186,6 +172,21 @@ func (m decisionTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch key {
+		case "e", "ctrl+e":
+			if m.onEditor != nil {
+				text, version, err := m.onEditor()
+				if err != nil {
+					m.errorMsg = "editor failed: " + err.Error()
+					return m, nil
+				}
+				m.message = []rune(text)
+				m.cursor = len(m.message)
+				if version > 0 {
+					m.draftVer = version
+				}
+				m.errorMsg = ""
+				return m, nil
+			}
 		case "q", "esc":
 			if m.prompt.AllowAbort {
 				if action, ok := m.actionForCode(decisionflow.DecisionAbort, false); ok {
@@ -273,7 +274,7 @@ func (m decisionTUIModel) View() tea.View {
 	if !m.compact {
 		lines = append(lines, styleMuted("Shortcuts (actions focus): C commit, P commit+push, S skip, V vouch, Q abort, Ctrl-C abort"))
 		if m.onEditor != nil {
-			lines = append(lines, styleMuted("Optional: Ctrl-E open in editor"))
+			lines = append(lines, styleMuted("Optional: E open in editor"))
 		}
 	}
 	if m.errorMsg != "" {
@@ -407,7 +408,7 @@ func newDecisionTUIModel(prompt decisionPrompt, output chan<- terminalDecision, 
 		prompt:   prompt,
 		actions:  actions,
 		selected: 0,
-		focus:    0,
+		focus:    initialFocus(prompt.FocusMessage),
 		message:  message,
 		cursor:   len(message),
 		output:   output,
@@ -416,6 +417,13 @@ func newDecisionTUIModel(prompt decisionPrompt, output chan<- terminalDecision, 
 		onDraft:  onDraftChange,
 		onEditor: openEditor,
 	}
+}
+
+func initialFocus(focusMessage bool) int {
+	if focusMessage {
+		return 1
+	}
+	return 0
 }
 
 func (m *decisionTUIModel) currentAction() (decisionAction, bool) {
@@ -501,13 +509,16 @@ func (m decisionTUIModel) renderActions() []string {
 	lines := []string{styleSection("+ Actions +")}
 	for i, action := range m.actions {
 		prefix := "  "
+		if i == m.selected {
+			prefix = styleMuted("* ")
+		}
 		if m.focus == 0 && i == m.selected {
 			prefix = styleFocus("▶ ")
 		}
 		if m.compact {
-			lines = append(lines, prefix+styleAction(action.Label, m.focus == 0 && i == m.selected))
+			lines = append(lines, prefix+styleAction(action.Label, i == m.selected))
 		} else {
-			lines = append(lines, prefix+styleAction(action.Label, m.focus == 0 && i == m.selected)+" "+styleMuted("- "+action.Help))
+			lines = append(lines, prefix+styleAction(action.Label, i == m.selected)+" "+styleMuted("- "+action.Help))
 		}
 	}
 	return lines
