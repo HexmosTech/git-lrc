@@ -24,7 +24,109 @@ export async function createPrecommitBar() {
         const [status, setStatus] = useState('');
         const [disabled, setDisabled] = useState(false);
         const userHasTyped = useRef(!!(initialMsg && initialMsg.trim()));
+        const draftVersionRef = useRef(0);
+        const draftDebounceRef = useRef(null);
+        const skipPublishRef = useRef(false);
         const reviewCompleted = reviewStatus === 'completed';
+
+        const publishDraft = (nextMessage) => {
+            if (disabled) return;
+            if (skipPublishRef.current) return;
+            if (draftDebounceRef.current) {
+                clearTimeout(draftDebounceRef.current);
+            }
+
+            draftDebounceRef.current = setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/draft', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: nextMessage,
+                            expectedVersion: draftVersionRef.current
+                        })
+                    });
+
+                    if (res.status === 409) {
+                        const latest = await fetch('/api/draft');
+                        if (latest.ok) {
+                            const snap = await latest.json();
+                            draftVersionRef.current = snap.version || 0;
+                            skipPublishRef.current = true;
+                            setMessage(snap.text || '');
+                            skipPublishRef.current = false;
+                        }
+                        return;
+                    }
+                    if (!res.ok) return;
+
+                    const snap = await res.json();
+                    draftVersionRef.current = snap.version || draftVersionRef.current;
+                } catch (_err) {
+                    // Best-effort draft sync. Decision actions still use explicit POST endpoints.
+                }
+            }, 160);
+        };
+
+        useEffect(() => {
+            if (!interactive || isPostCommitReview) return;
+
+            let mounted = true;
+            let source = null;
+
+            const initDraft = async () => {
+                try {
+                    const res = await fetch('/api/draft');
+                    if (!res.ok || !mounted) return;
+                    const snap = await res.json();
+                    draftVersionRef.current = snap.version || 0;
+                    skipPublishRef.current = true;
+                    setMessage(snap.text || '');
+                    skipPublishRef.current = false;
+                    if (snap.frozen) {
+                        setDisabled(true);
+                    }
+                } catch (_err) {
+                    // Ignore; interactive actions remain usable.
+                }
+            };
+
+            initDraft();
+
+            if (window.EventSource) {
+                source = new EventSource('/api/draft/events');
+                source.onmessage = (event) => {
+                    if (!mounted) return;
+                    try {
+                        const snap = JSON.parse(event.data || '{}');
+                        const incomingVersion = Number(snap.version || 0);
+                        if (incomingVersion < draftVersionRef.current) {
+                            return;
+                        }
+                        draftVersionRef.current = incomingVersion;
+                        skipPublishRef.current = true;
+                        setMessage(snap.text || '');
+                        skipPublishRef.current = false;
+                        if (snap.frozen) {
+                            setDisabled(true);
+                        }
+                    } catch (_err) {
+                        // Ignore malformed events.
+                    }
+                };
+            }
+
+            return () => {
+                mounted = false;
+                if (source) {
+                    source.close();
+                }
+                if (draftDebounceRef.current) {
+                    clearTimeout(draftDebounceRef.current);
+                    draftDebounceRef.current = null;
+                }
+            };
+        }, [interactive, isPostCommitReview]);
         
         // Auto-fill commit message from AI summary title when review completes
         useEffect(() => {
@@ -32,6 +134,7 @@ export async function createPrecommitBar() {
                 const title = extractTitleFromSummary(summary);
                 if (title) {
                     setMessage(title);
+                    publishDraft(title);
                 }
             }
         }, [reviewStatus, summary]);
@@ -72,7 +175,7 @@ export async function createPrecommitBar() {
                 setDisabled(false);
             }
         };
-        
+
         return html`
             <div class="precommit-bar">
                 <div class="precommit-bar-left">
@@ -145,9 +248,10 @@ export async function createPrecommitBar() {
                         onInput=${(e) => {
                             setMessage(e.target.value);
                             userHasTyped.current = true;
+                            publishDraft(e.target.value);
                         }}
                     ></textarea>
-                    <div class="precommit-message-hint">Required for Commit/Commit & Push. Optional for Skip/Vouch. Ignored on Abort.</div>
+                    <div class="precommit-message-hint">Required for Commit/Commit & Push. Optional for Skip/Vouch. Ignored on Abort. Optional: press Ctrl-E in terminal to edit in your editor.</div>
                 </div>
             </div>
         `;

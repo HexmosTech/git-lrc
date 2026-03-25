@@ -36,6 +36,11 @@ type tuiStatusMsg struct {
 	Text string
 }
 
+type tuiDraftMsg struct {
+	Text    string
+	Version int64
+}
+
 type decisionAction struct {
 	Label           string
 	Help            string
@@ -57,6 +62,9 @@ type decisionTUIModel struct {
 	width    int
 	compact  bool
 	output   chan<- terminalDecision
+	draftVer int64
+	onDraft  func(string) int64
+	onEditor func() (string, int64, error)
 }
 
 func (m decisionTUIModel) Init() tea.Cmd {
@@ -74,12 +82,37 @@ func (m decisionTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		clean = strings.TrimPrefix(clean, "Status:")
 		m.status = strings.TrimSpace(clean)
 		return m, nil
+	case tuiDraftMsg:
+		if v.Version <= 0 || v.Version < m.draftVer {
+			return m, nil
+		}
+		if string(m.message) != v.Text {
+			m.message = []rune(v.Text)
+			m.cursor = len(m.message)
+		}
+		m.draftVer = v.Version
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = v.Width
 		m.compact = v.Width > 0 && v.Width < 100
 		return m, nil
 	case tea.KeyPressMsg:
 		key := strings.ToLower(v.String())
+		if key == "ctrl+e" && m.onEditor != nil {
+			text, version, err := m.onEditor()
+			if err != nil {
+				m.errorMsg = "editor failed: " + err.Error()
+				return m, nil
+			}
+			m.message = []rune(text)
+			m.cursor = len(m.message)
+			if version > 0 {
+				m.draftVer = version
+			}
+			m.errorMsg = ""
+			return m, nil
+		}
+
 		if key == "ctrl+c" {
 			if m.prompt.AllowAbort {
 				if action, ok := m.actionForCode(decisionflow.DecisionAbort, false); ok {
@@ -119,12 +152,14 @@ func (m decisionTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.message = append(m.message[:m.cursor-1], m.message[m.cursor:]...)
 					m.cursor--
 					m.errorMsg = ""
+					m.publishDraftChange()
 				}
 				return m, nil
 			case "delete":
 				if m.cursor < len(m.message) {
 					m.message = append(m.message[:m.cursor], m.message[m.cursor+1:]...)
 					m.errorMsg = ""
+					m.publishDraftChange()
 				}
 				return m, nil
 			case "enter":
@@ -139,6 +174,7 @@ func (m decisionTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.insertKeyText(key) {
 				m.errorMsg = ""
+				m.publishDraftChange()
 				return m, nil
 			}
 			return m, nil
@@ -230,6 +266,9 @@ func (m decisionTUIModel) View() tea.View {
 	lines = append(lines, styleMuted("Keys: Tab switch focus, Up/Down select action, Enter confirm"))
 	if !m.compact {
 		lines = append(lines, styleMuted("Shortcuts (actions focus): C commit, P commit+push, S skip, V vouch, Q abort, Ctrl-C abort"))
+		if m.onEditor != nil {
+			lines = append(lines, styleMuted("Optional: Ctrl-E open in editor"))
+		}
 	}
 	if m.errorMsg != "" {
 		lines = append(lines, "")
@@ -268,9 +307,10 @@ func (m *decisionTUIModel) submit(d terminalDecision) {
 	}
 }
 
-func startTerminalDecisionBubbleTea(prompt decisionPrompt) (<-chan terminalDecision, func(string), func(), <-chan struct{}) {
+func startTerminalDecisionBubbleTea(prompt decisionPrompt, onDraftChange func(string) int64, openEditor func() (string, int64, error)) (<-chan terminalDecision, func(string), func(string, int64), func(), <-chan struct{}) {
 	decisionCh := make(chan terminalDecision, 1)
 	statusCh := make(chan string, 32)
+	draftCh := make(chan tuiDraftMsg, 64)
 	doneCh := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -278,7 +318,7 @@ func startTerminalDecisionBubbleTea(prompt decisionPrompt) (<-chan terminalDecis
 		defer close(doneCh)
 		defer close(decisionCh)
 
-		model := newDecisionTUIModel(prompt, decisionCh)
+		model := newDecisionTUIModel(prompt, decisionCh, onDraftChange, openEditor)
 		program := tea.NewProgram(model, tea.WithContext(ctx))
 
 		forwardDone := make(chan struct{})
@@ -289,9 +329,19 @@ func startTerminalDecisionBubbleTea(prompt decisionPrompt) (<-chan terminalDecis
 			}
 		}()
 
+		draftForwardDone := make(chan struct{})
+		go func() {
+			defer close(draftForwardDone)
+			for d := range draftCh {
+				program.Send(d)
+			}
+		}()
+
 		_, _ = program.Run()
 		close(statusCh)
+		close(draftCh)
 		<-forwardDone
+		<-draftForwardDone
 	}()
 
 	setStatus := func(text string) {
@@ -309,10 +359,17 @@ func startTerminalDecisionBubbleTea(prompt decisionPrompt) (<-chan terminalDecis
 		cancel()
 	}
 
-	return decisionCh, setStatus, stop, doneCh
+	setDraft := func(text string, version int64) {
+		select {
+		case draftCh <- tuiDraftMsg{Text: text, Version: version}:
+		default:
+		}
+	}
+
+	return decisionCh, setStatus, setDraft, stop, doneCh
 }
 
-func newDecisionTUIModel(prompt decisionPrompt, output chan<- terminalDecision) decisionTUIModel {
+func newDecisionTUIModel(prompt decisionPrompt, output chan<- terminalDecision, onDraftChange func(string) int64, openEditor func() (string, int64, error)) decisionTUIModel {
 	actions := make([]decisionAction, 0, 5)
 	if prompt.AllowCommit {
 		actions = append(actions, decisionAction{Label: "Commit", Help: "continue with commit", Code: decisionflow.DecisionCommit, RequiresMessage: prompt.RequireMessageForCommit})
@@ -341,6 +398,8 @@ func newDecisionTUIModel(prompt decisionPrompt, output chan<- terminalDecision) 
 		output:   output,
 		width:    80,
 		compact:  true,
+		onDraft:  onDraftChange,
+		onEditor: openEditor,
 	}
 }
 
@@ -412,6 +471,15 @@ func (m *decisionTUIModel) insertRune(r rune) {
 
 	m.message = append(m.message[:m.cursor], append([]rune{r}, m.message[m.cursor:]...)...)
 	m.cursor++
+}
+
+func (m *decisionTUIModel) publishDraftChange() {
+	if m.onDraft == nil {
+		return
+	}
+	if version := m.onDraft(string(m.message)); version > 0 {
+		m.draftVer = version
+	}
 }
 
 func (m decisionTUIModel) renderActions() []string {

@@ -400,6 +400,10 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	// and we need the interactive flow with commit/push/skip options
 	useInteractive = !opts.Skip && opts.Serve && !isPostCommitReview
 	reviewMetadata := buildDecisionMetadata(reviewID, submitResp.UserEmail, submitResp.FriendlyName, reviewURL)
+	var runningDraftHub *draftHub
+	if useInteractive {
+		runningDraftHub = newDraftHub(initialMsg)
+	}
 
 	if !useInteractive {
 		fmt.Printf("Review submitted, ID: %s\n", reviewID)
@@ -469,6 +473,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			if !ok {
 				return false
 			}
+			if runningDraftHub != nil {
+				runningDraftHub.Freeze()
+			}
 			progressiveDecide(chosen.Code, chosen.Message, chosen.Push)
 			return true
 		}
@@ -500,6 +507,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				return
 			}
 
+			if runningDraftHub != nil {
+				runningDraftHub.Freeze()
+			}
 			progressiveDecide(chosen.Code, chosen.Message, chosen.Push)
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
@@ -541,6 +551,23 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				state.ServeHTTP(w, r)
 			})
 
+			if runningDraftHub != nil {
+				mux.HandleFunc("/api/draft", func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet {
+						handleDraftGet(w, r, runningDraftHub)
+						return
+					}
+					if r.Method == http.MethodPost {
+						handleDraftUpdate(w, r, runningDraftHub, draftSourceWeb)
+						return
+					}
+					w.WriteHeader(http.StatusMethodNotAllowed)
+				})
+				mux.HandleFunc("/api/draft/events", func(w http.ResponseWriter, r *http.Request) {
+					handleDraftEvents(w, r, runningDraftHub)
+				})
+			}
+
 			// Functional commit handlers that work with the decision channel
 			mux.HandleFunc("/commit", func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
@@ -548,6 +575,11 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					return
 				}
 				msg := readCommitMessageFromRequest(r)
+				if runningDraftHub != nil {
+					if snap, err := runningDraftHub.Update(msg, draftSourceWeb, 0); err == nil {
+						msg = snap.Text
+					}
+				}
 				handleProgressiveDecision(w, decisionflow.DecisionCommit, msg, false)
 			})
 			mux.HandleFunc("/commit-push", func(w http.ResponseWriter, r *http.Request) {
@@ -556,6 +588,11 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					return
 				}
 				msg := readCommitMessageFromRequest(r)
+				if runningDraftHub != nil {
+					if snap, err := runningDraftHub.Update(msg, draftSourceWeb, 0); err == nil {
+						msg = snap.Text
+					}
+				}
 				handleProgressiveDecision(w, decisionflow.DecisionCommit, msg, true)
 			})
 			mux.HandleFunc("/skip", func(w http.ResponseWriter, r *http.Request) {
@@ -564,6 +601,11 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					return
 				}
 				msg := readCommitMessageFromRequest(r)
+				if runningDraftHub != nil {
+					if snap, err := runningDraftHub.Update(msg, draftSourceWeb, 0); err == nil {
+						msg = snap.Text
+					}
+				}
 				handleProgressiveDecision(w, decisionflow.DecisionSkip, msg, false)
 			})
 			mux.HandleFunc("/vouch", func(w http.ResponseWriter, r *http.Request) {
@@ -572,12 +614,20 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					return
 				}
 				msg := readCommitMessageFromRequest(r)
+				if runningDraftHub != nil {
+					if snap, err := runningDraftHub.Update(msg, draftSourceWeb, 0); err == nil {
+						msg = snap.Text
+					}
+				}
 				handleProgressiveDecision(w, decisionflow.DecisionVouch, msg, false)
 			})
 			mux.HandleFunc("/abort", func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
+				}
+				if runningDraftHub != nil {
+					runningDraftHub.Freeze()
 				}
 				handleProgressiveDecision(w, decisionflow.DecisionAbort, "", false)
 			})
@@ -693,8 +743,11 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			if !ok {
 				return false
 			}
+			if runningDraftHub != nil {
+				runningDraftHub.Freeze()
+			}
 			decisionOnce.Do(func() {
-				decisionChan <- terminalDecision{Code: chosen.Code, Message: d.Message, Push: d.Push}
+				decisionChan <- terminalDecision{Code: chosen.Code, Message: chosen.Message, Push: chosen.Push}
 			})
 			return true
 		}
@@ -710,7 +763,42 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			RequireMessageForSkip:  true,
 			RequireMessageForVouch: true,
 		}
-		tuiDecisionCh, setTUIStatus, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
+		publishTerminalDraft := func(text string) int64 {
+			if runningDraftHub == nil {
+				return 0
+			}
+			snap, err := runningDraftHub.Update(text, draftSourceTerminal, 0)
+			if err != nil {
+				return 0
+			}
+			return snap.Version
+		}
+		openEditor := func() (string, int64, error) {
+			if runningDraftHub == nil {
+				return "", 0, fmt.Errorf("draft sync unavailable")
+			}
+			current := runningDraftHub.Snapshot()
+			edited, err := openDraftInEditor(current.Text)
+			if err != nil {
+				return "", 0, err
+			}
+			snap, err := runningDraftHub.Update(edited, draftSourceEditor, current.Version)
+			if err != nil {
+				return "", 0, err
+			}
+			return snap.Text, snap.Version, nil
+		}
+
+		tuiDecisionCh, setTUIStatus, setTUIDraft, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt, publishTerminalDraft, openEditor)
+		if runningDraftHub != nil {
+			updates, unsubscribe := runningDraftHub.Subscribe()
+			defer unsubscribe()
+			go func() {
+				for snap := range updates {
+					setTUIDraft(snap.Text, snap.Version)
+				}
+			}()
+		}
 		setTUIStatus("status: waiting for review")
 		go func() {
 			for d := range tuiDecisionCh {
@@ -972,7 +1060,41 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					AllowAbort:              true,
 					RequireMessageForCommit: true,
 				}
-				tuiDecisionCh, _, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
+				publishTerminalDraft := func(text string) int64 {
+					if runningDraftHub == nil {
+						return 0
+					}
+					snap, err := runningDraftHub.Update(text, draftSourceTerminal, 0)
+					if err != nil {
+						return 0
+					}
+					return snap.Version
+				}
+				openEditor := func() (string, int64, error) {
+					if runningDraftHub == nil {
+						return "", 0, fmt.Errorf("draft sync unavailable")
+					}
+					current := runningDraftHub.Snapshot()
+					edited, err := openDraftInEditor(current.Text)
+					if err != nil {
+						return "", 0, err
+					}
+					snap, err := runningDraftHub.Update(edited, draftSourceEditor, current.Version)
+					if err != nil {
+						return "", 0, err
+					}
+					return snap.Text, snap.Version, nil
+				}
+				tuiDecisionCh, _, setTUIDraft, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt, publishTerminalDraft, openEditor)
+				if runningDraftHub != nil {
+					updates, unsubscribe := runningDraftHub.Subscribe()
+					defer unsubscribe()
+					go func() {
+						for snap := range updates {
+							setTUIDraft(snap.Text, snap.Version)
+						}
+					}()
+				}
 
 				// Signals still map to abort decisions.
 				sigChan := make(chan os.Signal, 1)
@@ -1953,19 +2075,196 @@ func readCommitMessageFromRequest(r *http.Request) string {
 		return ""
 	}
 
-	// Sanitize message: remove null bytes and control characters (except newlines/tabs)
-	msg := strings.TrimRight(payload.Message, "\r\n")
+	return sanitizeUserMessage(payload.Message)
+}
+
+type draftUpdateRequest struct {
+	Message         string `json:"message"`
+	ExpectedVersion int64  `json:"expectedVersion"`
+}
+
+func readDraftUpdateFromRequest(r *http.Request) (draftUpdateRequest, error) {
+	var req draftUpdateRequest
+	if r.Body == nil {
+		return req, nil
+	}
+	defer r.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 128*1024))
+	if err != nil {
+		return req, err
+	}
+	if len(body) == 0 {
+		return req, nil
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return req, err
+	}
+	req.Message = sanitizeUserMessage(req.Message)
+	return req, nil
+}
+
+func sanitizeUserMessage(msg string) string {
+	msg = strings.TrimRight(msg, "\r\n")
 	msg = strings.Map(func(r rune) rune {
 		if r == '\n' || r == '\t' || r == '\r' {
-			return r // Allow newlines and tabs
+			return r
 		}
 		if r < 32 || r == 127 {
-			return -1 // Remove control characters and DEL
+			return -1
 		}
 		return r
 	}, msg)
-
 	return msg
+}
+
+func writeDraftSnapshot(w http.ResponseWriter, snap draftSnapshot) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(snap); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+	}
+}
+
+func handleDraftGet(w http.ResponseWriter, r *http.Request, hub *draftHub) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writeDraftSnapshot(w, hub.Snapshot())
+}
+
+func handleDraftUpdate(w http.ResponseWriter, r *http.Request, hub *draftHub, source draftSource) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	req, err := readDraftUpdateFromRequest(r)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	snap, updateErr := hub.Update(req.Message, source, req.ExpectedVersion)
+	if updateErr != nil {
+		if errors.Is(updateErr, ErrDraftFrozen) {
+			http.Error(w, updateErr.Error(), http.StatusConflict)
+			return
+		}
+		if errors.Is(updateErr, ErrDraftStaleVersion) {
+			http.Error(w, updateErr.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, updateErr.Error(), http.StatusBadRequest)
+		return
+	}
+	writeDraftSnapshot(w, snap)
+}
+
+func handleDraftEvents(w http.ResponseWriter, r *http.Request, hub *draftHub) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	updates, unsubscribe := hub.Subscribe()
+	defer unsubscribe()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case snap, ok := <-updates:
+			if !ok {
+				return
+			}
+			payload, err := json.Marshal(snap)
+			if err != nil {
+				continue
+			}
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func openDraftInEditor(initial string) (string, error) {
+	tmp, err := os.CreateTemp("", "lrc-draft-*.txt")
+	if err != nil {
+		return "", err
+	}
+	path := tmp.Name()
+	defer os.Remove(path)
+
+	if _, err := tmp.WriteString(initial); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", err
+	}
+
+	cmdSpec := strings.TrimSpace(os.Getenv("LRC_FALLBACK_EDITOR"))
+	if cmdSpec == "" {
+		cmdSpec = strings.TrimSpace(os.Getenv("VISUAL"))
+	}
+	if cmdSpec == "" {
+		cmdSpec = strings.TrimSpace(os.Getenv("EDITOR"))
+	}
+	if cmdSpec == "" {
+		cmdSpec = "vi"
+	}
+
+	parts := strings.Fields(cmdSpec)
+	if len(parts) == 0 {
+		parts = []string{"vi"}
+	}
+	args := append(parts[1:], path)
+	cmd := exec.Command(parts[0], args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return sanitizeUserMessage(string(body)), nil
+}
+
+func handleDraftEditor(w http.ResponseWriter, r *http.Request, hub *draftHub) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	current := hub.Snapshot()
+	edited, err := openDraftInEditor(current.Text)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	snap, updateErr := hub.Update(edited, draftSourceEditor, current.Version)
+	if updateErr != nil {
+		if errors.Is(updateErr, ErrDraftFrozen) || errors.Is(updateErr, ErrDraftStaleVersion) {
+			http.Error(w, updateErr.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, updateErr.Error(), http.StatusBadRequest)
+		return
+	}
+	writeDraftSnapshot(w, snap)
 }
 
 func handleReviewEventsProxy(w http.ResponseWriter, r *http.Request, config Config, reviewID string, verbose bool) {
@@ -2078,6 +2377,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 	}
 
 	runtimeDecision := decisionruntime.New(decisionflow.PhaseReviewComplete)
+	draftState := newDraftHub(initialMsg)
 
 	decisionChan := make(chan precommitDecision, 1)
 	var decideOnce sync.Once
@@ -2100,6 +2400,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		if !ok {
 			return false
 		}
+		draftState.Freeze()
 		decide(chosen.Code, chosen.Message, chosen.Push)
 		return true
 	}
@@ -2128,10 +2429,26 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			http.Error(w, "decision resolution failed", http.StatusConflict)
 			return
 		}
+		draftState.Freeze()
 		decide(chosen.Code, chosen.Message, chosen.Push)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	}
+
+	mux.HandleFunc("/api/draft", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleDraftGet(w, r, draftState)
+			return
+		}
+		if r.Method == http.MethodPost {
+			handleDraftUpdate(w, r, draftState, draftSourceWeb)
+			return
+		}
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	})
+	mux.HandleFunc("/api/draft/events", func(w http.ResponseWriter, r *http.Request) {
+		handleDraftEvents(w, r, draftState)
+	})
 
 	// Pre-commit action endpoints (HTML buttons call these)
 	mux.HandleFunc("/commit", func(w http.ResponseWriter, r *http.Request) {
@@ -2140,6 +2457,9 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			return
 		}
 		msg := readCommitMessageFromRequest(r)
+		if snap, err := draftState.Update(msg, draftSourceWeb, 0); err == nil {
+			msg = snap.Text
+		}
 		handleDecision(w, decisionflow.DecisionCommit, msg, false)
 	})
 
@@ -2149,6 +2469,9 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			return
 		}
 		msg := readCommitMessageFromRequest(r)
+		if snap, err := draftState.Update(msg, draftSourceWeb, 0); err == nil {
+			msg = snap.Text
+		}
 		handleDecision(w, decisionflow.DecisionCommit, msg, true)
 	})
 
@@ -2158,6 +2481,9 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			return
 		}
 		msg := readCommitMessageFromRequest(r)
+		if snap, err := draftState.Update(msg, draftSourceWeb, 0); err == nil {
+			msg = snap.Text
+		}
 		handleDecision(w, decisionflow.DecisionSkip, msg, false)
 	})
 
@@ -2167,6 +2493,9 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			return
 		}
 		msg := readCommitMessageFromRequest(r)
+		if snap, err := draftState.Update(msg, draftSourceWeb, 0); err == nil {
+			msg = snap.Text
+		}
 		handleDecision(w, decisionflow.DecisionVouch, msg, false)
 	})
 
@@ -2175,6 +2504,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		draftState.Freeze()
 		handleDecision(w, decisionflow.DecisionAbort, "", false)
 	})
 
@@ -2217,7 +2547,33 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		RequireMessageForSkip:   true,
 		RequireMessageForVouch:  true,
 	}
-	tuiDecisionCh, _, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt)
+	publishTerminalDraft := func(text string) int64 {
+		snap, err := draftState.Update(text, draftSourceTerminal, 0)
+		if err != nil {
+			return 0
+		}
+		return snap.Version
+	}
+	openEditor := func() (string, int64, error) {
+		current := draftState.Snapshot()
+		edited, err := openDraftInEditor(current.Text)
+		if err != nil {
+			return "", 0, err
+		}
+		snap, err := draftState.Update(edited, draftSourceEditor, current.Version)
+		if err != nil {
+			return "", 0, err
+		}
+		return snap.Text, snap.Version, nil
+	}
+	tuiDecisionCh, _, setTUIDraft, stopTUI, tuiDone := startTerminalDecisionBubbleTea(prompt, publishTerminalDraft, openEditor)
+	updates, unsubscribe := draftState.Subscribe()
+	defer unsubscribe()
+	go func() {
+		for snap := range updates {
+			setTUIDraft(snap.Text, snap.Version)
+		}
+	}()
 
 	go func() {
 		<-sigChan
