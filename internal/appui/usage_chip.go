@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/HexmosTech/git-lrc/internal/reviewmodel"
+	setuptpl "github.com/HexmosTech/git-lrc/setup"
 	uicfg "github.com/HexmosTech/git-lrc/ui"
 )
 
@@ -78,6 +79,7 @@ func (s *connectorManagerServer) handleUsageChip(w http.ResponseWriter, r *http.
 		UsagePct:             0,
 		TopMembers:           make([]uicfg.UsageChipMember, 0),
 		CanViewTeamBreakdown: false,
+		CloudURL:             setuptpl.CloudAPIURL,
 		FetchedAt:            time.Now().UTC().Format(time.RFC3339),
 	}
 

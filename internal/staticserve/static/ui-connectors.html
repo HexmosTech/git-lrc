@@ -178,16 +178,16 @@
       gap: 10px;
     }
     .profile-chip {
-      min-width: 260px;
-      max-width: 420px;
+      min-width: 180px;
+      max-width: 320px;
       display: grid;
-      grid-template-columns: 42px minmax(0, 1fr);
+      grid-template-columns: 28px minmax(0, 1fr);
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       text-decoration: none;
       border: 1px solid var(--border-medium);
-      border-radius: 8px;
-      padding: 6px 8px;
+      border-radius: 6px;
+      padding: 4px 8px;
       background: linear-gradient(135deg, var(--profile-chip-grad-a), var(--profile-chip-grad-b));
     }
     .profile-chip:hover {
@@ -195,8 +195,8 @@
       background: linear-gradient(135deg, var(--profile-chip-hover-grad-a), var(--profile-chip-hover-grad-b));
     }
     .profile-chip-avatar {
-      width: 42px;
-      height: 42px;
+      width: 28px;
+      height: 28px;
       border-radius: 999px;
       object-fit: cover;
       border: 1px solid var(--border-medium);
@@ -208,7 +208,7 @@
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 14px;
+      font-size: 13px;
       color: var(--accent-blue-light);
       background: var(--profile-avatar-fallback-bg);
       border-color: var(--profile-avatar-fallback-border);
@@ -223,6 +223,8 @@
       color: var(--text-primary);
       font-size: 13px;
       font-weight: 600;
+      line-height: 1.25;
+      margin-bottom: 1px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;

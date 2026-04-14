@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/HexmosTech/git-lrc/internal/reviewmodel"
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"
 	"github.com/HexmosTech/git-lrc/network"
+	"github.com/HexmosTech/git-lrc/setup"
 	uicfg "github.com/HexmosTech/git-lrc/ui"
 )
 
@@ -90,6 +92,7 @@ func buildRuntimeUsageChipPayload(config *Config, verbose bool) uicfg.UsageChipR
 		TopMembers:           make([]uicfg.UsageChipMember, 0),
 		CanViewTeamBreakdown: false,
 		FetchedAt:            time.Now().UTC().Format(time.RFC3339),
+		CloudURL:             setup.CloudAPIURL,
 	}
 
 	if config == nil {
@@ -115,12 +118,36 @@ func buildRuntimeUsageChipPayload(config *Config, verbose bool) uicfg.UsageChipR
 	var myUsageResp runtimeMyUsageResponse
 	var membersResp runtimeMembersResponse
 
-	quotaErr := fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/quota/status", &quotaResp, verbose)
-	billingErr := fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/billing/status", &billingResp, verbose)
-	subscriptionErr := fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/subscriptions/current", &subscriptionResp, verbose)
-	upgradeErr := fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/billing/upgrade/request-status", &upgradeResp, verbose)
-	myUsageErr := fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/billing/usage/me", &myUsageResp, verbose)
-	membersErr := fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/billing/usage/members?limit=3&offset=0", &membersResp, verbose)
+	var (
+		quotaErr, billingErr, subscriptionErr, upgradeErr, myUsageErr, membersErr *runtimeUsageError
+		wg                                                                        sync.WaitGroup
+	)
+	wg.Add(6)
+	go func() {
+		defer wg.Done()
+		quotaErr = fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/quota/status", &quotaResp, verbose)
+	}()
+	go func() {
+		defer wg.Done()
+		billingErr = fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/billing/status", &billingResp, verbose)
+	}()
+	go func() {
+		defer wg.Done()
+		subscriptionErr = fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/subscriptions/current", &subscriptionResp, verbose)
+	}()
+	go func() {
+		defer wg.Done()
+		upgradeErr = fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/billing/upgrade/request-status", &upgradeResp, verbose)
+	}()
+	go func() {
+		defer wg.Done()
+		myUsageErr = fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/billing/usage/me", &myUsageResp, verbose)
+	}()
+	go func() {
+		defer wg.Done()
+		membersErr = fetchRuntimeUsageEndpoint(client, config, apiURL, "/api/v1/billing/usage/members?limit=3&offset=0", &membersResp, verbose)
+	}()
+	wg.Wait()
 
 	if quotaErr == nil && quotaResp.Envelope != nil {
 		env := quotaResp.Envelope

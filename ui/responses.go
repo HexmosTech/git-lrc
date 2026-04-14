@@ -49,5 +49,6 @@ type UsageChipResponse struct {
 	MySharePct           float64           `json:"my_share_pct"`
 	TopMembers           []UsageChipMember `json:"top_members"`
 	CanViewTeamBreakdown bool              `json:"can_view_team_breakdown"`
+	CloudURL             string            `json:"cloud_url,omitempty"`
 	FetchedAt            string            `json:"fetched_at"`
 }

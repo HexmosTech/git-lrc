@@ -12,6 +12,7 @@ import { getEventLog } from './components/EventLog.js';
 import { getSeverityFilter } from './components/SeverityFilter.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
+import { UsageBanner } from './components/UsageBanner.js';
 
 // Convert API response to UI data format
 // Backend uses snake_case JSON keys (file_path, old_start_line, etc.)
@@ -615,6 +616,9 @@ async function initApp() {
         
         // Status display
         const getStatusDisplay = () => {
+            if (reviewData?.blocked) {
+                return null;
+            }
             if (status === 'failed') {
                 return html`
                     <div class="status-container error">
@@ -658,6 +662,8 @@ async function initApp() {
                     `}
                     
                     ${getStatusDisplay()}
+                    
+                    <${UsageBanner} endpoint="/api/runtime/usage-chip" />
                     
                     ${summary && summary.trim() && status !== 'in_progress' && html`
                         <${Summary} 

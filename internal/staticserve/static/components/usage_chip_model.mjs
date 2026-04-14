@@ -44,6 +44,7 @@ export function normalizeUsagePayload(raw, fallbackReason = 'Usage data unavaila
             }))
             : [],
         canViewTeamBreakdown: Boolean(source.can_view_team_breakdown),
+        cloudURL: String(source.cloud_url || '').trim(),
         fetchedAt: String(source.fetched_at || '').trim(),
     };
 }

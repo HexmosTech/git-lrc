@@ -144,6 +144,8 @@ export function UsageChip({ endpoint, refreshMs = DEFAULT_REFRESH_MS }) {
                   Scope: organization usage in current billing period. Attribution is charged to the triggering actor.
                 </p>
 
+                ${''}
+
                 <div class="usage-chip-reset-card">
                   <p class="usage-chip-reset-title">Usage resets on ${formatResetAt(chip.resetAt)}</p>
                   <p class="usage-chip-reset-sub">Local timezone. New cycle usage starts immediately after this time.</p>

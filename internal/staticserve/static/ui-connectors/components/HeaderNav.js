@@ -1,6 +1,7 @@
 import { LOGO_DATA_URI } from '/static/components/utils.js';
 import { dedupeIdentityLines, getDisplayName, getInitials } from '/static/ui-connectors/session-utils.js';
 import { UsageChip } from '/static/components/UsageChip.js';
+import { UsageBanner } from '/static/components/UsageBanner.js';
 
 const { html, useEffect, useState } = window.preact;
 
@@ -86,6 +87,8 @@ export function HeaderNav({ activePath, session, reauthInProgress, orgSwitching,
           `}
         </div>
       </div>
+
+      <${UsageBanner} endpoint="/api/ui/usage-chip" />
 
       <nav class="ui-nav" aria-label="git-lrc manager navigation">
         <span class="nav-label">Menu</span>

@@ -23,7 +23,8 @@ type ReviewState struct {
 	StartedAt     time.Time `json:"-"`
 
 	// Status
-	Status string `json:"status"` // "in_progress", "completed", "failed"
+	Status  string `json:"status"` // "in_progress", "completed", "failed", "blocked"
+	Blocked bool   `json:"blocked"`
 
 	// Content
 	Summary string                             `json:"summary"`
@@ -53,6 +54,7 @@ type ReviewStateSnapshot struct {
 	TotalComments int
 	StartedAt     time.Time
 	Summary       string
+	Blocked       bool
 }
 
 // NewReviewState creates a new ReviewState with initial values
@@ -76,6 +78,9 @@ func NewReviewState(reviewID string, files []reviewmodel.DiffReviewFileResult, i
 // It merges comments into existing files rather than replacing them,
 // to preserve the hunk data from the initial diff parsing
 func (rs *ReviewState) UpdateFromResult(result *reviewmodel.DiffReviewResponse) {
+	if result == nil {
+		return
+	}
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
@@ -114,6 +119,13 @@ func (rs *ReviewState) SetFailed(errorSummary string) {
 	rs.ErrorSummary = errorSummary
 }
 
+// SetBlocked marks the review as blocked (e.g. quota exceeded)
+func (rs *ReviewState) SetBlocked(blocked bool) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.Blocked = blocked
+}
+
 // AddComments adds comments to the total count
 // Note: Comments are associated with files in the poll result,
 // so full comment merging happens via UpdateFromResult
@@ -134,6 +146,7 @@ func (rs *ReviewState) Snapshot() ReviewStateSnapshot {
 		TotalComments: rs.TotalComments,
 		StartedAt:     rs.StartedAt,
 		Summary:       rs.Summary,
+		Blocked:       rs.Blocked,
 	}
 }
 

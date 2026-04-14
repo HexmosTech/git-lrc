@@ -74,11 +74,7 @@ func formatLiveReviewTechnicalDetails(rawBody string) string {
 		return "(empty response body)"
 	}
 
-	var payload struct {
-		Error     string                         `json:"error"`
-		ErrorCode string                         `json:"error_code"`
-		Envelope  *reviewmodel.PlanUsageEnvelope `json:"envelope"`
-	}
+	var payload reviewmodel.APIErrorPayload
 	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
 		return trimmed
 	}
@@ -311,6 +307,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	}
 
 	// Submit review
+	var submissionFailed bool
+	var submissionBlockedReason string
 	var submitResp reviewmodel.DiffReviewCreateResponse
 	if fakeMode {
 		submitResp = buildFakeSubmitResponse()
@@ -323,7 +321,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		// Handle 413 Request Entity Too Large - prompt user to skip if interactive
 		var apiErr *reviewmodel.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized {
-			return liveReviewAuthFailureError(config.APIURL, apiErr.Body)
+			return liveReviewAuthFailureError(config.APIURL, formatLiveReviewTechnicalDetails(apiErr.Body))
 		}
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusRequestEntityTooLarge {
 			isInteractive := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
@@ -338,10 +336,6 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					return fmt.Errorf("failed to read input during 413 handling: %w (original error: %v)", rErr, err)
 				}
 				response = strings.ToLower(strings.TrimSpace(response))
-				if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusForbidden || apiErr.StatusCode == http.StatusTooManyRequests) {
-					fmt.Printf("\n⚠️  Review submission blocked by LiveReview limits.\n")
-					fmt.Printf("   %s\n\n", formatLiveReviewTechnicalDetails(apiErr.Body))
-				}
 
 				if response == "y" || response == "yes" {
 					fmt.Println("Proceeding with skipped review...")
@@ -356,7 +350,14 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				return fmt.Errorf("review submission aborted by user (diff too large)")
 			}
 		}
-		return fmt.Errorf("failed to submit review: %w", err)
+		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusForbidden || apiErr.StatusCode == http.StatusTooManyRequests) {
+			submissionFailed = true
+			submissionBlockedReason = "Usage quota exceeded"
+			err = nil // Continue to UI
+		}
+		if err != nil {
+			return fmt.Errorf("failed to submit review: %w", err)
+		}
 	}
 
 	reviewID := submitResp.ReviewID
@@ -415,7 +416,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		runningDraftHub = newDraftHub(initialMsg)
 	}
 
-	if !useInteractive {
+	if !useInteractive && !submissionFailed {
 		fmt.Printf("Review submitted, ID: %s\n", reviewID)
 		if submitResp.UserEmail != "" {
 			fmt.Printf("Account: %s\n", submitResp.UserEmail)
@@ -441,6 +442,11 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		// Initialize global review state for API-based UI
 		reviewStateMu.Lock()
 		currentReviewState = NewReviewState(reviewID, filesFromDiff, useInteractive, isPostCommitReview, initialMsg, config.APIURL)
+		if submissionFailed {
+			currentReviewState.Status = "failed"
+			currentReviewState.ErrorSummary = submissionBlockedReason
+			currentReviewState.SetBlocked(true)
+		}
 		reviewStateMu.Unlock()
 
 		// Start serving immediately in background
@@ -903,13 +909,16 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		var stopPollOnce sync.Once
 		stopPollFn := func() { stopPollOnce.Do(func() { close(stopPoll) }) }
 		go func() {
+			defer close(pollDone)
+			if submissionFailed || reviewID == "" {
+				return
+			}
 			if fakeMode {
 				pollResult, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, stopPoll, fakeBaseFiles, setTUIStatus)
 			} else {
 				pollUsedRecovery = true
 				pollResult, pollUpdatedConfig, pollErr = pollReviewWithRecovery(*config, reviewID, opts.PollInterval, opts.Timeout, verbose, stopPoll, setTUIStatus)
 			}
-			close(pollDone)
 		}()
 
 		var pollFinished bool
@@ -1015,7 +1024,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				result = pollResult
 				// Update review state with final result
 				reviewStateMu.Lock()
-				if currentReviewState != nil {
+				if currentReviewState != nil && pollResult != nil {
 					currentReviewState.UpdateFromResult(pollResult)
 				}
 				reviewStateMu.Unlock()
