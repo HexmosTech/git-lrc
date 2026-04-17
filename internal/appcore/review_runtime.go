@@ -1308,6 +1308,16 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	return nil
 }
 
+var standardTokenExclusions = []string{
+	`:(exclude)package-lock.json`,
+	`:(exclude)yarn.lock`,
+	`:(exclude)pnpm-lock.yaml`,
+	`:(exclude)go.sum`,
+	`:(exclude)Cargo.lock`,
+	`:(exclude)poetry.lock`,
+	`:(exclude)Gemfile.lock`,
+}
+
 func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 	diffSource := opts.DiffSource
 	verbose := opts.Verbose
@@ -1315,15 +1325,17 @@ func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 	switch diffSource {
 	case "staged":
 		if verbose {
-			log.Println("Collecting staged changes...")
+			log.Println("Collecting staged changes (excluding standard lockfiles)...")
 		}
-		return reviewapi.RunGitCommand("diff", "--staged")
+		args := append([]string{"diff", "--staged", "--", "."}, standardTokenExclusions...)
+		return reviewapi.RunGitCommand(args...)
 
 	case "working":
 		if verbose {
-			log.Println("Collecting working tree changes...")
+			log.Println("Collecting working tree changes (excluding standard lockfiles)...")
 		}
-		return reviewapi.RunGitCommand("diff")
+		args := append([]string{"diff", "--", "."}, standardTokenExclusions...)
+		return reviewapi.RunGitCommand(args...)
 
 	case "commit":
 		commitVal := opts.CommitVal
@@ -1331,15 +1343,16 @@ func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 			return nil, fmt.Errorf("--commit is required when diff-source=commit")
 		}
 		if verbose {
-			log.Printf("Collecting diff for commit: %s", commitVal)
+			log.Printf("Collecting diff for commit: %s (excluding standard lockfiles)", commitVal)
 		}
-		// Check if it's a range (contains .. or ...)
 		if strings.Contains(commitVal, "..") {
 			// It's a commit range, use git diff
-			return reviewapi.RunGitCommand("diff", commitVal)
+			args := append([]string{"diff", commitVal, "--"}, standardTokenExclusions...)
+			return reviewapi.RunGitCommand(args...)
 		}
 		// Single commit, use git show to get the commit's changes
-		return reviewapi.RunGitCommand("show", "--format=", commitVal)
+		args := append([]string{"show", "--format=", commitVal, "--"}, standardTokenExclusions...)
+		return reviewapi.RunGitCommand(args...)
 
 	case "range":
 		rangeVal := opts.RangeVal
@@ -1347,9 +1360,10 @@ func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 			return nil, fmt.Errorf("--range is required when diff-source=range")
 		}
 		if verbose {
-			log.Printf("Collecting diff for range: %s", rangeVal)
+			log.Printf("Collecting diff for range: %s (excluding standard lockfiles)", rangeVal)
 		}
-		return reviewapi.RunGitCommand("diff", rangeVal)
+		args := append([]string{"diff", rangeVal, "--"}, standardTokenExclusions...)
+		return reviewapi.RunGitCommand(args...)
 
 	case "file":
 		filePath := opts.DiffFile
@@ -1357,7 +1371,7 @@ func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 			return nil, fmt.Errorf("--diff-file is required when diff-source=file")
 		}
 		if verbose {
-			log.Printf("Reading diff from file: %s", filePath)
+			log.Printf("Reading diff from file (no automatic exclusions applied): %s", filePath)
 		}
 		return storage.ReadDiffFile(filePath)
 
