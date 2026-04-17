@@ -278,13 +278,6 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		return fmt.Errorf("no diff content collected")
 	}
 
-	// [Offline PII/Secret Pre-Flight Scanner]
-	// Run offline secret scanning before it's shipped across the network (LiveReview or BYOK).
-	if err := ScanDiffForSecrets(diffContent); err != nil {
-		fmt.Fprintf(os.Stderr, "\n[FATAL] %v\n", err)
-		return cli.Exit(err.Error(), 1)
-	}
-
 	var fakeBaseFiles []reviewmodel.DiffReviewFileResult
 	if fakeMode {
 		fakeBaseFiles, err = parseDiffToFiles(diffContent)
@@ -1318,7 +1311,24 @@ var standardTokenExclusions = []string{
 	`:(exclude)Gemfile.lock`,
 }
 
+// collectDiffWithOptions securely intercepts diff collection by filtering out lockfiles globally and running the local Offline Security scanner synchronously before any payload bubbles backwards gracefully.
 func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
+	diffContent, err := collectDiffWithOptionsRaw(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// [Offline PII/Secret Pre-Flight Scanner]
+	// Run offline secret scanning right as the subsystem collects bytes, protecting BOTH standard --review AND --vouch.
+	if err := ScanDiffForSecrets(diffContent); err != nil {
+		fmt.Fprintf(os.Stderr, "\n[FATAL] %v\n", err)
+		return nil, cli.Exit(err.Error(), 1)
+	}
+
+	return diffContent, nil
+}
+
+func collectDiffWithOptionsRaw(opts reviewopts.Options) ([]byte, error) {
 	diffSource := opts.DiffSource
 	verbose := opts.Verbose
 

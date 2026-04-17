@@ -32,7 +32,7 @@ var secretPatterns = []SecretPattern{
 	},
 	{
 		Name:    "Generic High Entropy Secret",
-		Pattern: regexp.MustCompile(`(?i)(?:sk|api_key|token|secret)[-_]?(?:key|token)?(?:[\s:=]+)(['"]?)([a-zA-Z0-9_\-\.]{20,})\1`),
+		Pattern: regexp.MustCompile(`(?i)(?:sk|api_key|token|secret)[-_]?(?:key|token)?(?:[\s:=]+)['"]?([a-zA-Z0-9_\-\.]{20,})['"]?`),
 	},
 }
 
