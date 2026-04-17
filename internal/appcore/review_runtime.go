@@ -278,6 +278,13 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		return fmt.Errorf("no diff content collected")
 	}
 
+	// [Offline PII/Secret Pre-Flight Scanner]
+	// Run offline secret scanning before it's shipped across the network (LiveReview or BYOK).
+	if err := ScanDiffForSecrets(diffContent); err != nil {
+		fmt.Fprintf(os.Stderr, "\n[FATAL] %v\n", err)
+		return cli.Exit(err.Error(), 1)
+	}
+
 	var fakeBaseFiles []reviewmodel.DiffReviewFileResult
 	if fakeMode {
 		fakeBaseFiles, err = parseDiffToFiles(diffContent)
