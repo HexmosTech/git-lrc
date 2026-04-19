@@ -12,6 +12,9 @@ func init() {
 	// io.Writer using fmt.Fprint.  This avoids any OS-specific pager or
 	// man-page lookup and ensures --help works identically on Windows,
 	// macOS, and Linux.
+	// HelpPrinterCustom renders the help template directly into w via
+	// text/template.Execute — no external pager, man-page, or shell command
+	// is invoked, which is what makes this safe on Windows/PowerShell.
 	cli.HelpPrinter = func(w io.Writer, templ string, data interface{}) {
 		cli.HelpPrinterCustom(w, templ, data, nil)
 	}
