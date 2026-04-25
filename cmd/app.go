@@ -2,9 +2,23 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/urfave/cli/v2"
 )
+
+func init() {
+	// Override the default HelpPrinter to write directly to the provided
+	// io.Writer using fmt.Fprint.  This avoids any OS-specific pager or
+	// man-page lookup and ensures --help works identically on Windows,
+	// macOS, and Linux.
+	// HelpPrinterCustom renders the help template directly into w via
+	// text/template.Execute — no external pager, man-page, or shell command
+	// is invoked, which is what makes this safe on Windows/PowerShell.
+	cli.HelpPrinter = func(w io.Writer, templ string, data interface{}) {
+		cli.HelpPrinterCustom(w, templ, data, nil)
+	}
+}
 
 // Handlers contains injected command actions so CLI wiring can live outside main.
 type Handlers struct {
