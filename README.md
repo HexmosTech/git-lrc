@@ -76,6 +76,15 @@ curl -fsSL https://hexmos.com/lrc-install.sh | bash
 iwr -useb https://hexmos.com/lrc-install.ps1 | iex
 ```
 
+<details>
+<summary><strong>GitHub Codespaces</strong></summary>
+
+```bash
+curl -fsSL https://git.new/lrc-install | bash
+```
+
+</details>
+
 Binary installed. Hooks set up globally. Done.
 
 ### Setup

@@ -218,6 +218,16 @@ func backupExistingConfig(slog *setupLog) error {
 	return nil
 }
 
+// isCodespace returns the public HTTPS callback URL for GitHub Codespaces
+func isCodespace(port int) (string, bool) {
+	name := os.Getenv("CODESPACE_NAME")
+	domain := os.Getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN")
+	if name == "" || domain == "" {
+		return "", false
+	}
+	return fmt.Sprintf("https://%s-%d.%s/callback", name, port, domain), true
+}
+
 // runHexmosLoginFlow starts a temporary server, opens the browser for Hexmos Login,
 // waits for the callback, and provisions the user in LiveReview.
 func runHexmosLoginFlow(slog *setupLog, apiURL string) (*setupResult, error) {
@@ -227,6 +237,9 @@ func runHexmosLoginFlow(slog *setupLog, apiURL string) (*setupResult, error) {
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	callbackURL := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
+	if csURL, ok := isCodespace(port); ok {
+		callbackURL = csURL
+	}
 
 	dataCh := make(chan *hexmosCallbackData, 1)
 	errCh := make(chan error, 1)
