@@ -16,7 +16,7 @@ func BuildSigninURL(callbackURL string) (string, error) {
 	if cbURL.Scheme != "http" && cbURL.Scheme != "https" {
 		return "", fmt.Errorf("invalid callback url scheme: %s", cbURL.Scheme)
 	}
-	if cbURL.Hostname() != "127.0.0.1" && cbURL.Hostname() != "localhost" {
+	if cbURL.Scheme == "http" && cbURL.Hostname() != "127.0.0.1" && cbURL.Hostname() != "localhost" {
 		return "", fmt.Errorf("callback url must use localhost/127.0.0.1")
 	}
 
