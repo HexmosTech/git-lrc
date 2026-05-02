@@ -370,3 +370,28 @@ For detailed terms, examples of permitted and prohibited uses, and definitions, 
 
 > Using `git-lrc` solo? Great. Building with a team? Check out **[LiveReview](https://hexmos.com/livereview)** — the full suite for team-wide AI code review, with dashboards, org-level policies, and review analytics. Everything `git-lrc` does, plus team coordination.
 Test PR by Vinanthi
+## ⚠️ Windows Setup Notes
+
+- Use **PowerShell**, not Command Prompt, for installation commands.
+- If `iwr` is not recognized, you are likely using CMD.
+
+## 🖥️ Opening the Project
+
+If `code .` does not work:
+
+1. Open Visual Studio Code manually
+2. Click File → Open Folder
+3. Select the project folder
+
+## 🔑 Gemini API Key Setup
+
+- Go to https://aistudio.google.com/api-keys
+- Create a new project (any name)
+- Generate an API key
+- Paste it during setup
+
+## 🛠️ Common Issues
+
+- `iwr not recognized` → Use PowerShell
+- `code . not working` → Open folder manually
+- `no diff content collected` → No staged changes
