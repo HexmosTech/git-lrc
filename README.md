@@ -369,3 +369,4 @@ For detailed terms, examples of permitted and prohibited uses, and definitions, 
 ## For Teams: LiveReview
 
 > Using `git-lrc` solo? Great. Building with a team? Check out **[LiveReview](https://hexmos.com/livereview)** — the full suite for team-wide AI code review, with dashboards, org-level policies, and review analytics. Everything `git-lrc` does, plus team coordination.
+Test PR by Vinanthi
