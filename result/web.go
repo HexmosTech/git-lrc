@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/fs"
+	"mime"
 	"net/http"
 	"strings"
 )
@@ -37,6 +38,7 @@ func RenderPreactHTML(data *HTMLTemplateData, staticFiles embed.FS) (string, err
 
 // GetStaticHandler returns an HTTP handler for serving static files.
 func GetStaticHandler(staticFiles embed.FS) http.Handler {
+	_ = mime.AddExtensionType(".mjs", "application/javascript; charset=utf-8")
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		panic(err)
@@ -54,7 +56,7 @@ func ServeStaticFile(w http.ResponseWriter, filename string, staticFiles embed.F
 	switch {
 	case strings.HasSuffix(filename, ".css"):
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-	case strings.HasSuffix(filename, ".js"):
+	case strings.HasSuffix(filename, ".js"), strings.HasSuffix(filename, ".mjs"):
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	case strings.HasSuffix(filename, ".html"):
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
