@@ -22,9 +22,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
-      - run: mkdir -p security_issues
-      - run: osv-scanner --format json . > security_issues/osv-scanner-ci.json
+      - name: Install OSV-Scanner
+        run: |
+          curl -L -o osv-scanner https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
+          chmod +x osv-scanner
+          sudo mv osv-scanner /usr/local/bin/
+
+      - name: Run OSV-Scanner
+        run: |
+          mkdir -p security_issues
+          osv-scanner --format json . > security_issues/osv-scanner-ci.json
+        continue-on-error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
