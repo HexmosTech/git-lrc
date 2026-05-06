@@ -12,7 +12,10 @@ export async function createFileBlock() {
         onToggle, 
         visibleSeverities,
         hiddenCommentKeys,
-        onToggleCommentVisibility
+        onToggleCommentVisibility,
+        reviewStartMs,
+        commentRenderTimes,
+        onCommentRendered
     }) {
         // Use file.ID if available (set by convertFilesToUIFormat), otherwise generate
         const fileId = file.ID || filePathToId(file.FilePath);
@@ -41,6 +44,9 @@ export async function createFileBlock() {
                         visibleSeverities=${visibleSeverities}
                         hiddenCommentKeys=${hiddenCommentKeys}
                         onToggleCommentVisibility=${onToggleCommentVisibility}
+                        reviewStartMs=${reviewStartMs}
+                        commentRenderTimes=${commentRenderTimes}
+                        onCommentRendered=${onCommentRendered}
                     />
                 </div>
             </div>

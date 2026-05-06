@@ -2,10 +2,16 @@
 import { waitForPreact, getBadgeClass, copyToClipboard } from './utils.js';
 
 export async function createComment() {
-    const { html, useState } = await waitForPreact();
+    const { html, useEffect, useState } = await waitForPreact();
     
-    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility }) {
+    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility, onFirstRender, renderTimingLabel }) {
         const [copied, setCopied] = useState(false);
+
+        useEffect(() => {
+            if (visibilityKey && onFirstRender) {
+                onFirstRender(visibilityKey);
+            }
+        }, [visibilityKey, onFirstRender]);
 
         const handleCopy = async (e) => {
             e.stopPropagation();
@@ -101,6 +107,9 @@ export async function createComment() {
                                         <span class="comment-badge ${badgeClass}">${comment.Severity}</span>
                                         ${comment.HasCategory && html`
                                             <span class="comment-category">${comment.Category}</span>
+                                        `}
+                                        ${renderTimingLabel && html`
+                                            <span class="comment-arrival">${renderTimingLabel}</span>
                                         `}
                                     </div>
                                     <div class="comment-body">${comment.Content}</div>

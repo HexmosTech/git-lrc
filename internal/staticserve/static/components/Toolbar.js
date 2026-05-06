@@ -7,6 +7,7 @@ export async function createToolbar() {
     return function Toolbar({ 
         activeTab, 
         onTabChange, 
+        performanceItems,
         allExpanded, 
         onToggleAll, 
         eventCount,
@@ -43,6 +44,17 @@ export async function createToolbar() {
                         `}
                     </button>
                 </div>
+
+                ${Array.isArray(performanceItems) && performanceItems.length > 0 && html`
+                    <div class="toolbar-performance" aria-label="Review performance summary">
+                        ${performanceItems.map(item => html`
+                            <div class="performance-pill" data-performance-key=${item.key}>
+                                <span class="performance-pill-label">${item.label}</span>
+                                <span class="performance-pill-value">${item.value}</span>
+                            </div>
+                        `)}
+                    </div>
+                `}
                 
                 ${activeTab === 'files' && html`
                     <div class="tab-actions">

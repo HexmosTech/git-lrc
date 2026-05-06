@@ -14,6 +14,9 @@ import { getSeverityFilter } from './components/SeverityFilter.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
+import { buildPerformanceSnapshot, getFirstRenderTime, getLoadingActivityMessage, getPerformanceNow, recordFirstRenderTime } from './components/review_performance_state.mjs';
+
+let domReadyStartMs = null;
 
 // Convert API response to UI data format
 // Backend uses snake_case JSON keys (file_path, old_start_line, etc.)
@@ -255,6 +258,8 @@ async function initApp() {
         const [hiddenCommentKeys, setHiddenCommentKeys] = useState(new Set());
         const [copyFeedback, setCopyFeedback] = useState({ status: 'idle', message: '' });
         const [handoffModal, setHandoffModal] = useState({ isOpen: false, type: '', message: '' });
+        const [performanceNowMs, setPerformanceNowMs] = useState(domReadyStartMs || getPerformanceNow());
+        const [commentRenderTimes, setCommentRenderTimes] = useState({});
         
         const eventsPollingRef = useRef(null);
         const eventsListRef = useRef(null);
@@ -264,6 +269,8 @@ async function initApp() {
         const lastSeenEventTimeRef = useRef(null);
         const finalFetchStartedRef = useRef(false);
         const eventsInFlightRef = useRef(false);
+        const reviewStartMsRef = useRef(domReadyStartMs || getPerformanceNow());
+        const reviewCompletedMsRef = useRef(null);
         const [logsCopied, setLogsCopied] = useState(false);
 
         useEffect(() => {
@@ -613,6 +620,11 @@ async function initApp() {
             }
         }, []);
 
+        const handleCommentRendered = useCallback((commentKey) => {
+            const renderMs = getPerformanceNow();
+            setCommentRenderTimes((prev) => recordFirstRenderTime(prev, commentKey, renderMs));
+        }, []);
+
         useEffect(() => {
             return () => {
                 if (copyFeedbackTimerRef.current) {
@@ -621,6 +633,44 @@ async function initApp() {
                 }
             };
         }, []);
+
+        const status = reviewData?.status || 'in_progress';
+        const showLoader = Boolean(reviewData) && status === 'in_progress';
+        const summary = reviewData?.summary || '';
+        const files = reviewData?.Files || [];
+        const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
+        const firstCommentRenderMs = getFirstRenderTime(commentRenderTimes);
+        const performanceSnapshot = buildPerformanceSnapshot({
+            baselineMs: reviewStartMsRef.current,
+            nowMs: performanceNowMs,
+            firstCommentMs: firstCommentRenderMs,
+            totalComments,
+            completedMs: reviewCompletedMsRef.current,
+        });
+        const loadingActivityMessage = getLoadingActivityMessage(events, performanceSnapshot.elapsedMs);
+        const loaderHeadline = firstCommentRenderMs === null ? 'Review in progress' : 'Comments are still streaming';
+        const loaderMeta = firstCommentRenderMs === null
+            ? `Elapsed ${performanceSnapshot.elapsedLabel} • first comment pending`
+            : `First comment in ${performanceSnapshot.firstCommentLabel} • ${totalComments} comment${totalComments !== 1 ? 's' : ''} so far`;
+
+        useEffect(() => {
+            if (status === 'completed' || status === 'failed') {
+                if (reviewCompletedMsRef.current === null) {
+                    const completedMs = getPerformanceNow();
+                    reviewCompletedMsRef.current = completedMs;
+                    setPerformanceNowMs(completedMs);
+                }
+                return undefined;
+            }
+
+            const interval = setInterval(() => {
+                setPerformanceNowMs(getPerformanceNow());
+            }, 1000);
+
+            return () => {
+                clearInterval(interval);
+            };
+        }, [status]);
         
         // Tail log handler - toggle tailing on/off
         const handleTailLog = useCallback(() => {
@@ -687,11 +737,6 @@ async function initApp() {
                 </div>
             `;
         }
-        
-        const status = reviewData?.status || 'in_progress';
-        const showLoader = status === 'in_progress';
-        const summary = reviewData?.summary || '';
-        const files = reviewData?.Files || [];
         
         // Toggle severity visibility
         const toggleSeverity = useCallback((severity) => {
@@ -768,9 +813,6 @@ async function initApp() {
         // Stable key that only changes when the actual comment set changes
         const commentKey = commentIds.join(',');
         
-        // Calculate totalComments from actual files - single source of truth
-        const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
-        
         // Calculate visible comments for the agent button
         let totalVisibleComments = 0;
         files.forEach(file => {
@@ -832,7 +874,11 @@ async function initApp() {
                         <div class="loader-container">
                             <div class="loader-content">
                                 <div class="spinner"></div>
-                                <span class="loader-message">Review in progress...</span>
+                                <div class="loader-copy">
+                                    <span class="loader-message">${loaderHeadline}</span>
+                                    <span class="loader-detail">${loadingActivityMessage}</span>
+                                    <span class="loader-meta">${loaderMeta}</span>
+                                </div>
                             </div>
                         </div>
                     `}
@@ -865,6 +911,7 @@ async function initApp() {
                     <${Toolbar}
                         activeTab=${activeTab}
                         onTabChange=${handleTabChange}
+                        performanceItems=${performanceSnapshot.summaryItems}
                         allExpanded=${allExpanded}
                         onToggleAll=${toggleAll}
                         eventCount=${newEventCount}
@@ -901,6 +948,9 @@ async function initApp() {
                                     visibleSeverities=${visibleSeverities}
                                     hiddenCommentKeys=${hiddenCommentKeys}
                                     onToggleCommentVisibility=${toggleCommentVisibility}
+                                    reviewStartMs=${reviewStartMsRef.current}
+                                    commentRenderTimes=${commentRenderTimes}
+                                    onCommentRendered=${handleCommentRendered}
                                 />
                             `)
                             : html`
@@ -977,8 +1027,15 @@ async function initApp() {
 }
 
 // Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
-} else {
+function startApp() {
+    if (domReadyStartMs === null) {
+        domReadyStartMs = getPerformanceNow();
+    }
     initApp();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startApp);
+} else {
+    startApp();
 }

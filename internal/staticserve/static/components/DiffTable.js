@@ -1,6 +1,7 @@
 // DiffTable component - renders diff hunks with lines and comments
-import { waitForPreact, getBadgeClass, filePathToId, getCommentVisibilityKey, buildIssueCodeExcerpt } from './utils.js';
+import { waitForPreact, filePathToId, getCommentVisibilityKey, buildIssueCodeExcerpt } from './utils.js';
 import { getComment } from './Comment.js';
+import { getCommentRenderLabel } from './review_performance_state.mjs';
 
 export async function createDiffTable() {
     const { html } = await waitForPreact();
@@ -12,7 +13,10 @@ export async function createDiffTable() {
         fileId, 
         visibleSeverities,
         hiddenCommentKeys,
-        onToggleCommentVisibility
+        onToggleCommentVisibility,
+        reviewStartMs,
+        commentRenderTimes,
+        onCommentRendered
     }) {
         if (!hunks || hunks.length === 0) {
             return html`
@@ -47,8 +51,10 @@ export async function createDiffTable() {
                                 const commentId = `comment-${resolvedFileId}-${comment.Line}-${commentIdx}`;
                                 const visibilityKey = getCommentVisibilityKey(filePath, comment);
                                 const isHidden = hiddenCommentKeys && hiddenCommentKeys.has(visibilityKey);
+                                const renderTimingLabel = getCommentRenderLabel(reviewStartMs, commentRenderTimes?.[visibilityKey]);
                                 return html`
                                     <${Comment} 
+                                        key=${visibilityKey}
                                         comment=${comment} 
                                         filePath=${filePath}
                                         codeExcerpt=${codeExcerpt}
@@ -56,6 +62,8 @@ export async function createDiffTable() {
                                         isHidden=${isHidden}
                                         visibilityKey=${visibilityKey}
                                         onToggleVisibility=${onToggleCommentVisibility}
+                                        onFirstRender=${onCommentRendered}
+                                        renderTimingLabel=${renderTimingLabel}
                                     />
                                 `;
                             })}

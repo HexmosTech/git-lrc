@@ -55,6 +55,24 @@
     font-size: 14px;
 }
 
+.loader-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.loader-detail {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.loader-meta {
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
 .loading-error-title {
     color: var(--accent-red);
     font-size: 18px;
@@ -1047,10 +1065,19 @@ body {
 .comment-header {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 8px;
+    padding-right: 150px;
     font-weight: 700;
     color: var(--text-secondary);
+}
+
+.comment-arrival {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+    letter-spacing: 0.01em;
 }
 
 .comment-copy-btn {
@@ -1312,10 +1339,42 @@ body {
 .toolbar-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--space-md);
     padding: var(--space-sm) 0;
     margin-bottom: var(--space-md);
     border-bottom: 1px solid var(--border-subtle);
+}
+
+.toolbar-performance {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.performance-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.performance-pill-label {
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.performance-pill-value {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
 }
 
 /* Tab actions container - right side of tabs */
@@ -1750,6 +1809,28 @@ body {
 
 .loader-message {
     color: var(--text-muted);
+}
+
+@media (max-width: 980px) {
+    .toolbar-performance {
+        order: 3;
+        width: 100%;
+    }
+
+    .tab-actions {
+        order: 2;
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 640px) {
+    .comment-header {
+        padding-right: 0;
+    }
+
+    .loader-content {
+        align-items: flex-start;
+    }
 }
 
 /* Status Messages */
