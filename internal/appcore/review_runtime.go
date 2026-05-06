@@ -659,7 +659,11 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
 				}
-				body, _ := io.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					http.Error(w, "Failed to read request body", http.StatusBadRequest)
+					return
+				}
 				handleProgressiveDecision(w, decisionflow.DecisionHandoff, string(body), false)
 			})
 			// Proxy endpoint for review-events API to avoid CORS
@@ -2678,7 +2682,11 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		body, _ := io.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
 		handleDecision(w, decisionflow.DecisionHandoff, string(body), false)
 	})
 
