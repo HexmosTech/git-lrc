@@ -2,6 +2,7 @@
 // Fetches data from /api/review and updates reactively
 
 import { waitForPreact, filePathToId, transformEvent, getBadgeClass, formatIssueForCopy, getCommentVisibilityKey } from './components/utils.js';
+import { appendStreamedCommentsToFiles, buildEventsURL, extractExternalCommentsFromEvents, extractNewEvents, inferReviewStatusFromEvents } from './components/review_stream_state.mjs';
 import { getHeader } from './components/Header.js';
 import { getSidebar } from './components/Sidebar.js';
 import { getSummary } from './components/Summary.js';
@@ -165,6 +166,62 @@ function convertFilesToUIFormat(files) {
     });
 }
 
+function getRawFiles(payload, previousRawFiles) {
+    if (Array.isArray(payload?.files)) {
+        return payload.files;
+    }
+    if (Array.isArray(previousRawFiles)) {
+        return previousRawFiles;
+    }
+    return [];
+}
+
+function getReviewID(payload) {
+    return payload?.reviewID || payload?.ReviewID || '';
+}
+
+function getReviewStatus(payload) {
+    return payload?.status || payload?.Status || '';
+}
+
+function withDerivedReviewFields(next, prev, setExpandedFiles) {
+    if (!next) return next;
+
+    const rawFiles = getRawFiles(next, prev?.files);
+    const uiFiles = convertFilesToUIFormat(rawFiles);
+    const actualCommentCount = countCommentsFromFiles(rawFiles);
+
+    if (!prev) {
+        const expanded = new Set();
+        uiFiles.forEach(file => {
+            if (file.HasComments) {
+                expanded.add(file.ID);
+            }
+        });
+        if (expanded.size > 0) {
+            setExpandedFiles(expanded);
+        }
+    } else {
+        const prevCommentCounts = new Map((prev.Files || []).map(file => [file.FilePath, file.CommentCount || 0]));
+        const filesNeedingExpansion = uiFiles.filter(file => (prevCommentCounts.get(file.FilePath) || 0) === 0 && file.CommentCount > 0);
+        if (filesNeedingExpansion.length > 0) {
+            setExpandedFiles(prevExpanded => {
+                const nextExpanded = new Set(prevExpanded);
+                filesNeedingExpansion.forEach(file => nextExpanded.add(file.ID));
+                return nextExpanded;
+            });
+        }
+    }
+
+    return {
+        ...next,
+        files: rawFiles,
+        Files: uiFiles,
+        TotalFiles: uiFiles.length,
+        TotalComments: actualCommentCount
+    };
+}
+
 async function initApp() {
     const { h, render, useState, useEffect, useCallback, useRef, html } = await waitForPreact();
     
@@ -199,65 +256,36 @@ async function initApp() {
         const [copyFeedback, setCopyFeedback] = useState({ status: 'idle', message: '' });
         const [handoffModal, setHandoffModal] = useState({ isOpen: false, type: '', message: '' });
         
-        const pollingRef = useRef(null);
         const eventsPollingRef = useRef(null);
         const eventsListRef = useRef(null);
         const copyFeedbackTimerRef = useRef(null);
+        const activeTabRef = useRef('files');
+        const seenEventIdsRef = useRef(new Set());
+        const lastSeenEventTimeRef = useRef(null);
+        const finalFetchStartedRef = useRef(false);
+        const eventsInFlightRef = useRef(false);
         const [logsCopied, setLogsCopied] = useState(false);
+
+        useEffect(() => {
+            activeTabRef.current = activeTab;
+        }, [activeTab]);
+
+        const commitReviewData = useCallback((updater) => {
+            setReviewData(prev => {
+                const next = typeof updater === 'function' ? updater(prev) : updater;
+                return withDerivedReviewFields(next, prev, setExpandedFiles);
+            });
+        }, []);
         
         // Fetch review data from API
-        const fetchReviewData = useCallback(async () => {
+        const fetchInitialReviewData = useCallback(async () => {
             try {
                 const response = await fetch('/api/review');
                 if (!response.ok) {
                     throw new Error(`Failed to fetch review data: ${response.status}`);
                 }
                 const data = await response.json();
-                
-                // Convert files to UI format
-                const uiFiles = convertFilesToUIFormat(data.files);
-                
-                // Calculate actual comment count from files (don't trust API counter)
-                const actualCommentCount = countCommentsFromFiles(data.files);
-                
-                setReviewData(prev => {
-                    // Auto-expand files with comments
-                    // On first load: expand all files with comments
-                    // On updates: also expand any NEW files that have comments
-                    if (!prev) {
-                        // First load - expand all files with comments
-                        const expanded = new Set();
-                        uiFiles.forEach(file => {
-                            if (file.HasComments) {
-                                expanded.add(file.ID);
-                            }
-                        });
-                        if (expanded.size > 0) {
-                            setExpandedFiles(expanded);
-                        }
-                    } else {
-                        // Subsequent updates - expand any new files with comments
-                        const prevFileIds = new Set((prev.Files || []).map(f => f.ID));
-                        const newFilesWithComments = uiFiles.filter(
-                            file => file.HasComments && !prevFileIds.has(file.ID)
-                        );
-                        if (newFilesWithComments.length > 0) {
-                            setExpandedFiles(prevExpanded => {
-                                const next = new Set(prevExpanded);
-                                newFilesWithComments.forEach(file => next.add(file.ID));
-                                return next;
-                            });
-                        }
-                    }
-                    
-                    return {
-                        ...data,
-                        Files: uiFiles,
-                        TotalFiles: uiFiles.length,
-                        TotalComments: actualCommentCount  // Derived from actual file comments
-                    };
-                });
-                
+                commitReviewData(data);
                 setLoading(false);
                 return data;
             } catch (err) {
@@ -266,66 +294,144 @@ async function initApp() {
                 setLoading(false);
                 return null;
             }
-        }, []);
+        }, [commitReviewData]);
+
+        const fetchFinalReviewData = useCallback(async (reviewID) => {
+            if (!reviewID) return null;
+
+            const fetchTargets = [
+                `/api/v1/diff-review/${reviewID}`,
+                '/api/review'
+            ];
+
+            for (const url of fetchTargets) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        continue;
+                    }
+                    const data = await response.json();
+                    commitReviewData(prev => {
+                        if (!prev) {
+                            return data;
+                        }
+                        return {
+                            ...prev,
+                            ...data,
+                            files: prev.files || data.files || []
+                        };
+                    });
+                    return data;
+                } catch (err) {
+                    console.error(`Error fetching final review data from ${url}:`, err);
+                }
+            }
+
+            return null;
+        }, [commitReviewData]);
         
-        // Fetch events for the event log
+        // Fetch events for live logs and comments
         const fetchEvents = useCallback(async (reviewID) => {
             if (!reviewID) return;
+            if (eventsInFlightRef.current) return;
+            eventsInFlightRef.current = true;
             
             try {
-                const response = await fetch(`/api/v1/diff-review/${reviewID}/events?limit=1000`);
+                const response = await fetch(buildEventsURL(reviewID, lastSeenEventTimeRef.current));
                 if (!response.ok) return;
                 
                 const data = await response.json();
                 const backendEvents = data.events || [];
-                const transformedEvents = backendEvents.map(transformEvent);
-                
-                setEvents(prev => {
-                    if (transformedEvents.length > prev.length) {
-                        const addedCount = transformedEvents.length - prev.length;
-                        if (activeTab !== 'events') {
-                            setNewEventCount(count => count + addedCount);
+                const { newEvents, nextSeenEventIds, lastSeenAt } = extractNewEvents(backendEvents, seenEventIdsRef.current);
+
+                if (lastSeenAt) {
+                    lastSeenEventTimeRef.current = lastSeenAt;
+                }
+                if (newEvents.length === 0 && !data.meta?.status) {
+                    return;
+                }
+
+                seenEventIdsRef.current = nextSeenEventIds;
+
+                const transformedEvents = newEvents.map(transformEvent);
+                if (transformedEvents.length > 0) {
+                    setEvents(prev => {
+                        if (activeTabRef.current !== 'events') {
+                            setNewEventCount(count => count + transformedEvents.length);
                         }
+                        return prev.concat(transformedEvents);
+                    });
+                }
+
+                const streamedComments = extractExternalCommentsFromEvents(newEvents);
+                const liveStatus = data.meta?.status || inferReviewStatusFromEvents(newEvents);
+
+                if (streamedComments.length > 0 || liveStatus) {
+                    commitReviewData(prev => {
+                        if (!prev) return prev;
+
+                        const next = { ...prev };
+                        if (liveStatus) {
+                            next.status = liveStatus;
+                            next.Status = liveStatus;
+                        }
+                        if (streamedComments.length > 0) {
+                            next.files = appendStreamedCommentsToFiles(prev.files || [], streamedComments);
+                        }
+                        return next;
+                    });
+                }
+
+                if ((liveStatus === 'completed' || liveStatus === 'failed') && !finalFetchStartedRef.current) {
+                    finalFetchStartedRef.current = true;
+                    if (eventsPollingRef.current) {
+                        clearInterval(eventsPollingRef.current);
+                        eventsPollingRef.current = null;
                     }
-                    return transformedEvents;
-                });
+                    await fetchFinalReviewData(reviewID);
+                }
             } catch (err) {
                 console.error('Error fetching events:', err);
+            } finally {
+                eventsInFlightRef.current = false;
             }
-        }, [activeTab]);
+        }, [commitReviewData, fetchFinalReviewData]);
         
         // Initial load and polling setup
         useEffect(() => {
-            // Initial fetch
-            fetchReviewData().then(data => {
-                if (data?.reviewID) {
-                    fetchEvents(data.reviewID);
+            let cancelled = false;
+
+            const start = async () => {
+                const data = await fetchInitialReviewData();
+                if (cancelled || !data) {
+                    return;
                 }
-            });
-            
-            // Poll for updates every 2 seconds
-            pollingRef.current = setInterval(async () => {
-                const data = await fetchReviewData();
-                if (data?.reviewID) {
-                    fetchEvents(data.reviewID);
+
+                const reviewID = getReviewID(data);
+                const status = getReviewStatus(data);
+                if (reviewID) {
+                    await fetchEvents(reviewID);
                 }
-                
-                // Stop polling when review is complete
-                if (data?.status === 'completed' || data?.status === 'failed') {
-                    if (pollingRef.current) {
-                        clearInterval(pollingRef.current);
-                        pollingRef.current = null;
-                    }
+                if (cancelled || !reviewID || finalFetchStartedRef.current || status === 'completed' || status === 'failed') {
+                    return;
                 }
-            }, 2000);
+
+                eventsPollingRef.current = setInterval(() => {
+                    fetchEvents(reviewID);
+                }, 1000);
+            };
+
+            start();
             
             // Cleanup
             return () => {
-                if (pollingRef.current) {
-                    clearInterval(pollingRef.current);
+                cancelled = true;
+                if (eventsPollingRef.current) {
+                    clearInterval(eventsPollingRef.current);
+                    eventsPollingRef.current = null;
                 }
             };
-        }, [fetchReviewData, fetchEvents]);
+        }, [fetchInitialReviewData, fetchEvents]);
         
         // Update page title with friendly name
         useEffect(() => {
