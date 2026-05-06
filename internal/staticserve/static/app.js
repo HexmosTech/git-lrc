@@ -442,6 +442,44 @@ async function initApp() {
             });
         }, []);
 
+        const handleSendToAgent = useCallback(async () => {
+            const filteredFiles = (reviewData.files || reviewData.Files || []).map(file => {
+                const filePath = file.file_path || file.filePath || file.FilePath;
+                const newComments = (file.comments || file.Comments || []).filter(c => {
+                    const sev = (c.severity || c.Severity || '').toLowerCase();
+                    if (!visibleSeverities.has(sev)) return false;
+                    const key = getCommentVisibilityKey(filePath, c);
+                    return !hiddenCommentKeys.has(key);
+                });
+                return { ...file, comments: newComments, Comments: newComments };
+            }).filter(file => file.comments.length > 0);
+            
+            if (filteredFiles.length === 0) {
+                alert("No visible comments to send to the AI agent. Please show some comments first.");
+                return;
+            }
+            
+            const payload = {
+                ...reviewData,
+                files: filteredFiles,
+                Files: filteredFiles,
+                summary: "AI Agent Handoff generated for selected issues.",
+                status: "completed"
+            };
+            
+            try {
+                const response = await fetch('/handoff', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error("Handoff failed");
+                alert("Handoff successful! Claude Agent is now starting in your terminal.");
+            } catch (e) {
+                alert("Failed to send to agent: " + e.message);
+            }
+        }, [reviewData, visibleSeverities, hiddenCommentKeys]);
+
         const showCopyFeedback = useCallback((status, message) => {
             setCopyFeedback({ status, message });
             if (copyFeedbackTimerRef.current) {
@@ -614,6 +652,25 @@ async function initApp() {
         // Calculate totalComments from actual files - single source of truth
         const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
         
+        // Calculate visible comments for the agent button
+        let totalVisibleComments = 0;
+        files.forEach(file => {
+            if (!file.HasComments) return;
+            file.Hunks.forEach(hunk => {
+                hunk.Lines.forEach(line => {
+                    if (line.IsComment && line.Comments) {
+                        line.Comments.forEach((comment) => {
+                            const sev = (comment.Severity || '').toLowerCase();
+                            if (!visibleSeverities.has(sev)) return;
+                            const visibilityKey = getCommentVisibilityKey(file.FilePath, comment);
+                            if (visibilityKey && hiddenCommentKeys.has(visibilityKey)) return;
+                            totalVisibleComments++;
+                        });
+                    }
+                });
+            });
+        });
+        
         // Status display
         const getStatusDisplay = () => {
             if (reviewData?.blocked) {
@@ -708,6 +765,8 @@ async function initApp() {
                             hiddenCommentKeys=${hiddenCommentKeys}
                             copyFeedbackStatus=${copyFeedback.status}
                             copyFeedbackMessage=${copyFeedback.message}
+                            onSendToAgent=${handleSendToAgent}
+                            visibleCount=${totalVisibleComments}
                         />
                     `}
                     

@@ -11,7 +11,9 @@ export async function createSeverityFilter() {
         onCopyVisibleIssues, 
         hiddenCommentKeys,
         copyFeedbackStatus,
-        copyFeedbackMessage
+        copyFeedbackMessage,
+        onSendToAgent,
+        visibleCount
     }) {
         const counts = countIssuesBySeverity(files, visibleSeverities, hiddenCommentKeys);
         if (counts.total === 0) return null;
@@ -66,7 +68,7 @@ export async function createSeverityFilter() {
                     </button>
                 </div>
                 <span class="severity-filter-summary">${filterLabel}</span>
-                <div class="copy-visible-wrapper">
+                <div class="copy-visible-wrapper" style="flex-direction: row; align-items: center; gap: 8px;">
                     <button 
                         class="btn btn-primary copy-visible-btn ${buttonState}"
                         onClick=${onCopyVisibleIssues} 
@@ -76,6 +78,13 @@ export async function createSeverityFilter() {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                         ${buttonLabel}
+                    </button>
+                    <button
+                        class="btn btn-primary"
+                        onClick=${onSendToAgent}
+                        title="Send visible issues to Claude"
+                    >
+                        Send to Claude (${visibleCount})
                     </button>
                     ${copyFeedbackMessage && html`
                         <div class="copy-feedback copy-feedback-${copyFeedbackStatus}" role="status" aria-live="polite">

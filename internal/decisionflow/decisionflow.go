@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	DecisionCommit = 0 // proceed with commit
-	DecisionAbort  = 1 // abort commit
-	DecisionSkip   = 2 // skip review, proceed with commit
-	DecisionVouch  = 4 // vouch for changes, proceed with commit
+	DecisionCommit  = 0 // proceed with commit
+	DecisionAbort   = 1 // abort commit
+	DecisionSkip    = 2 // skip review, proceed with commit
+	DecisionVouch   = 4 // vouch for changes, proceed with commit
+	DecisionHandoff = 5 // handoff to AI agent
 )
 
 type Phase int
@@ -25,7 +26,7 @@ func ActionAllowedInPhase(code int, phase Phase) bool {
 		return true
 	case DecisionSkip, DecisionVouch:
 		return phase == PhaseReviewRunning
-	case DecisionCommit:
+	case DecisionCommit, DecisionHandoff:
 		return phase == PhaseReviewComplete
 	default:
 		return false

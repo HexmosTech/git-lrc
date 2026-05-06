@@ -1082,6 +1082,27 @@ body {
     font-size: 12px;
 }
 
+.comment-visibility-btn {
+    background: rgba(139,92,246,0.15);
+    border: 1px solid rgba(139,92,246,0.3);
+    color: #c4b5fd;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.comment-visibility-btn:hover {
+    background: rgba(139,92,246,0.25);
+    border-color: rgba(139,92,246,0.5);
+    transform: scale(1.05);
+}
+
 .comment-copy-btn.copied {
     background: rgba(34,197,94,0.15);
     border-color: rgba(34,197,94,0.3);

@@ -3,9 +3,12 @@ package appcore
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/HexmosTech/git-lrc/internal/decisionflow"
+	"github.com/HexmosTech/git-lrc/internal/reviewapi"
 	"github.com/urfave/cli/v2"
 )
 
@@ -98,6 +101,38 @@ func executeDecision(code int, message string, push bool, ctx decisionExecutionC
 			return err
 		}
 		return nil
+	case decisionflow.DecisionHandoff:
+		syncedPrintln("\n🤖 Handing off Claude Code...")
+
+		gitDir, err := reviewapi.ResolveGitDir()
+		if err != nil {
+			return fmt.Errorf("failed to resolve git directory: %w", err)
+		}
+
+		reviewDir := filepath.Join(gitDir, "lrc", "reviews", ctx.reviewID)
+		if err := os.MkdirAll(reviewDir, 0755); err != nil {
+			return fmt.Errorf("failed to create review directory: %w", err)
+		}
+
+		jsonPath := filepath.Join(reviewDir, "review_findings.json")
+		if err := os.WriteFile(jsonPath, []byte(message), 0644); err != nil {
+			return fmt.Errorf("failed to write review findings: %w", err)
+		}
+
+		promptMsg := fmt.Sprintf("Read %s. This JSON contains code review feedback on my recent changes. The 'hunks' show the current buggy code, and 'comments' explain the issues. Please modify the source files in this workspace to fix the errors mentioned in the comments. Do not treat the 'hunks' as the solution. Briefly explain what you fixed, and then politely remind me that I can type /exit to close this session.", jsonPath)
+		cmdArgs := []string{promptMsg}
+		syncedPrintln("🚀 Running: claude code")
+
+		cmd := exec.Command("claude", cmdArgs...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("claude agent failed: %w", err)
+		}
+
+		return cli.Exit("", 0) // exit cleanly after fix
 	default:
 		return fmt.Errorf("invalid decision code: %d", code)
 	}

@@ -654,6 +654,14 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				}
 				handleProgressiveDecision(w, decisionflow.DecisionAbort, "", false)
 			})
+			mux.HandleFunc("/handoff", func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					return
+				}
+				body, _ := io.ReadAll(r.Body)
+				handleProgressiveDecision(w, decisionflow.DecisionHandoff, string(body), false)
+			})
 			// Proxy endpoint for review-events API to avoid CORS
 			mux.HandleFunc("/api/v1/diff-review/", func(w http.ResponseWriter, r *http.Request) {
 				if fakeMode {
@@ -2663,6 +2671,15 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		}
 		draftState.Freeze()
 		handleDecision(w, decisionflow.DecisionAbort, "", false)
+	})
+
+	mux.HandleFunc("/handoff", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		handleDecision(w, decisionflow.DecisionHandoff, string(body), false)
 	})
 
 	// Start server in background using the already-open listener
