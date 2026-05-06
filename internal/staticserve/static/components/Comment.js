@@ -68,7 +68,7 @@ export async function createComment() {
                                     </div>
                                     <span class="comment-hidden-title">Comment hidden</span>
                                     <span class="comment-hidden-meta">${filePath}${lineLabel}</span>
-                                    <span class="comment-hidden-note">Hidden comments are excluded from Copy Visible Issues and Claude Agent.</span>
+                                    <span class="comment-hidden-note">Hidden comments are excluded from Copy Visible Issues and the Claude Agent.</span>
                                 </div>
                             `
                             : html`

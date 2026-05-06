@@ -102,7 +102,7 @@ func executeDecision(code int, message string, push bool, ctx decisionExecutionC
 		}
 		return nil
 	case decisionflow.DecisionHandoff:
-		syncedPrintln("\n🤖 Handing off Claude Code...")
+		syncedPrintln("\n🤖 Handing off to Claude Code...")
 
 		gitDir, err := reviewapi.ResolveGitDir()
 		if err != nil {

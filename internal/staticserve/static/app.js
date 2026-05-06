@@ -468,7 +468,7 @@ async function initApp() {
                 ...reviewData,
                 files: filteredFiles,
                 Files: filteredFiles,
-                summary: "AI Agent Handoff generated for selected issues.",
+                summary: "AI Agent Handoff generated for visible issues.",
                 status: "completed"
             };
             
@@ -811,11 +811,19 @@ async function initApp() {
                         <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
                             <div class="modal-content" style="background: var(--bg-card); padding: 32px; border-radius: 12px; max-width: 400px; width: 90%; border: 1px solid var(--border-color); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); text-align: center;">
                                 ${handoffModal.type === 'success' 
-                                    ? html`<div style="font-size: 48px; margin-bottom: 16px;">🚀</div>`
+                                    ? html`
+                                        <div style="margin-bottom: 16px; color: #8b5cf6;">
+                                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="2" y="3" width="20" height="18" rx="2" ry="2"></rect>
+                                                <polyline points="6 8 10 12 6 16"></polyline>
+                                                <line x1="14" y1="16" x2="18" y2="16"></line>
+                                            </svg>
+                                        </div>
+                                    `
                                     : html`<div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>`
                                 }
                                 <h3 style="margin: 0 0 12px 0; font-size: 20px; color: var(--text-primary);">
-                                    ${handoffModal.type === 'success' ? 'Handoff Successful' : 'Notice'}
+                                    ${handoffModal.type === 'success' ? 'Check Your Terminal' : 'Notice'}
                                 </h3>
                                 <p style="margin: 0 0 24px 0; color: var(--text-secondary); line-height: 1.5;">
                                     ${handoffModal.message}
