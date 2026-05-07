@@ -13,6 +13,7 @@ import { getEventLog } from './components/EventLog.js';
 import { getSeverityFilter } from './components/SeverityFilter.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
+import { getStoryPage } from './components/StoryPage.js';
 import { UsageBanner } from './components/UsageBanner.js';
 import { buildPerformanceSnapshot, getFirstRenderTime, getLoadingActivityMessage, getPerformanceNow, recordFirstRenderTime } from './components/review_performance_state.mjs';
 
@@ -187,6 +188,24 @@ function getReviewStatus(payload) {
     return payload?.status || payload?.Status || '';
 }
 
+function storyRefKey(ref) {
+    if (!ref) return '';
+    const providerID = ref.provider_id || ref.providerId || ref.ProviderID || '';
+    const sessionID = ref.session_id || ref.sessionId || ref.SessionID || '';
+    return JSON.stringify([providerID, sessionID]);
+}
+
+function buildStorySessionsURL() {
+    return '/api/story/sessions';
+}
+
+function buildStorySessionURL(ref) {
+    const params = new URLSearchParams();
+    params.set('provider', ref.provider_id || ref.providerId || ref.ProviderID || '');
+    params.set('session_id', ref.session_id || ref.sessionId || ref.SessionID || '');
+    return `/api/story/session?${params.toString()}`;
+}
+
 function withDerivedReviewFields(next, prev, setExpandedFiles) {
     if (!next) return next;
 
@@ -239,6 +258,7 @@ async function initApp() {
     const SeverityFilter = await getSeverityFilter();
     const Toolbar = await getToolbar();
     const CommentNav = await getCommentNav();
+    const StoryPage = await getStoryPage();
     
     function App() {
         // Core data state - fetched from API
@@ -247,6 +267,7 @@ async function initApp() {
         const [error, setError] = useState(null);
         
         // UI state
+        const [activePage, setActivePage] = useState('review');
         const [activeTab, setActiveTab] = useState('files');
         const [expandedFiles, setExpandedFiles] = useState(new Set());
         const [allExpanded, setAllExpanded] = useState(false);
@@ -260,10 +281,20 @@ async function initApp() {
         const [handoffModal, setHandoffModal] = useState({ isOpen: false, type: '', message: '' });
         const [performanceNowMs, setPerformanceNowMs] = useState(domReadyStartMs || getPerformanceNow());
         const [commentRenderTimes, setCommentRenderTimes] = useState({});
+        const [storySessions, setStorySessions] = useState([]);
+        const [storyCommitContext, setStoryCommitContext] = useState(null);
+        const [recommendedStoryRef, setRecommendedStoryRef] = useState(null);
+        const [selectedStoryRef, setSelectedStoryRef] = useState(null);
+        const [storyChat, setStoryChat] = useState(null);
+        const [storyLoading, setStoryLoading] = useState(false);
+        const [storyChatLoading, setStoryChatLoading] = useState(false);
+        const [storyError, setStoryError] = useState(null);
+        const [storyManualSelection, setStoryManualSelection] = useState(false);
         
         const eventsPollingRef = useRef(null);
         const eventsListRef = useRef(null);
         const copyFeedbackTimerRef = useRef(null);
+        const activePageRef = useRef('review');
         const activeTabRef = useRef('files');
         const seenEventIdsRef = useRef(new Set());
         const lastSeenEventTimeRef = useRef(null);
@@ -272,6 +303,10 @@ async function initApp() {
         const reviewStartMsRef = useRef(domReadyStartMs || getPerformanceNow());
         const reviewCompletedMsRef = useRef(null);
         const [logsCopied, setLogsCopied] = useState(false);
+
+        useEffect(() => {
+            activePageRef.current = activePage;
+        }, [activePage]);
 
         useEffect(() => {
             activeTabRef.current = activeTab;
@@ -363,7 +398,7 @@ async function initApp() {
                 const transformedEvents = newEvents.map(transformEvent);
                 if (transformedEvents.length > 0) {
                     setEvents(prev => {
-                        if (activeTabRef.current !== 'events') {
+                        if (activePageRef.current !== 'review' || activeTabRef.current !== 'events') {
                             setNewEventCount(count => count + transformedEvents.length);
                         }
                         return prev.concat(transformedEvents);
@@ -480,6 +515,7 @@ async function initApp() {
         // Handle sidebar file click
         const handleFileClick = useCallback((fileId) => {
             // Always switch to files tab when clicking a file in sidebar
+            setActivePage('review');
             setActiveTab('files');
             setActiveFileId(fileId);
             setExpandedFiles(prev => {
@@ -506,6 +542,7 @@ async function initApp() {
         // Navigate to comment
         const navigateToComment = useCallback((commentId, fileId) => {
             // Switch to files tab first
+            setActivePage('review');
             setActiveTab('files');
             
             // Expand the file containing the comment
@@ -537,6 +574,76 @@ async function initApp() {
             setActiveTab(tab);
             if (tab === 'events') {
                 setNewEventCount(0);
+            }
+        }, []);
+
+        const handlePageChange = useCallback((page) => {
+            setActivePage(page);
+        }, []);
+
+        const handleStorySessionSelect = useCallback((sessionRef) => {
+            setSelectedStoryRef(sessionRef);
+            setStoryManualSelection(true);
+        }, []);
+
+        const fetchStorySessions = useCallback(async () => {
+            setStoryLoading(true);
+            setStoryError(null);
+            try {
+                const response = await fetch(buildStorySessionsURL());
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch story sessions: ${response.status}`);
+                }
+                const data = await response.json();
+                const sessions = data.sessions || [];
+                const commitContext = data.commit || null;
+                const recommended = data.recommended || null;
+                setStorySessions(sessions);
+                setStoryCommitContext(commitContext);
+                setRecommendedStoryRef(recommended);
+                setSelectedStoryRef((prev) => {
+                    const prevKey = storyRefKey(prev);
+                    const hasPrev = sessions.some((session) => storyRefKey(session) === prevKey);
+                    if (storyManualSelection && hasPrev) {
+                        return prev;
+                    }
+                    if (recommended) {
+                        return recommended;
+                    }
+                    return sessions[0] || null;
+                });
+            } catch (err) {
+                console.error('Error fetching story sessions:', err);
+                setStoryError(err.message);
+                setStorySessions([]);
+                setStoryCommitContext(null);
+                setRecommendedStoryRef(null);
+                setSelectedStoryRef(null);
+            } finally {
+                setStoryLoading(false);
+            }
+        }, [storyManualSelection]);
+
+        const fetchStoryChat = useCallback(async (sessionRef) => {
+            if (!sessionRef) {
+                setStoryChat(null);
+                return;
+            }
+            setStoryChatLoading(true);
+            setStoryError(null);
+            try {
+                const response = await fetch(buildStorySessionURL(sessionRef));
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch story session: ${response.status}`);
+                }
+                const data = await response.json();
+                setStoryChat(data);
+            } catch (err) {
+                console.error('Error fetching story session:', err);
+                setStoryError(err.message);
+                setStoryChat(null);
+            } finally {
+                setStoryChatLoading(false);
             }
         }, []);
 
@@ -812,6 +919,23 @@ async function initApp() {
         });
         // Stable key that only changes when the actual comment set changes
         const commentKey = commentIds.join(',');
+        useEffect(() => {
+            if (activePage !== 'story') {
+                return;
+            }
+            fetchStorySessions();
+        }, [activePage, reviewData?.reviewID, reviewData?.ReviewID, status, files.length, fetchStorySessions]);
+
+        useEffect(() => {
+            if (activePage !== 'story') {
+                return;
+            }
+            if (!selectedStoryRef) {
+                setStoryChat(null);
+                return;
+            }
+            fetchStoryChat(selectedStoryRef);
+        }, [activePage, selectedStoryRef?.provider_id, selectedStoryRef?.session_id, fetchStoryChat]);
         
         // Calculate visible comments for the agent button
         let totalVisibleComments = 0;
@@ -857,14 +981,31 @@ async function initApp() {
         };
         
         return html`
-            <${Sidebar} 
-                files=${files}
-                activeFileId=${activeFileId}
-                onFileClick=${handleFileClick}
-                visibleSeverities=${visibleSeverities}
-            />
-            <div class="main-content">
+            ${activePage === 'review' && html`
+                <${Sidebar} 
+                    files=${files}
+                    activeFileId=${activeFileId}
+                    onFileClick=${handleFileClick}
+                    visibleSeverities=${visibleSeverities}
+                />
+            `}
+            <div class="main-content ${activePage === 'story' ? 'main-content-story' : ''}">
                 <div class="container">
+                    <div class="main-nav" role="navigation" aria-label="Main sections">
+                        <button
+                            class="main-nav-btn ${activePage === 'review' ? 'active' : ''}"
+                            onClick=${() => handlePageChange('review')}
+                        >
+                            Review
+                        </button>
+                        <button
+                            class="main-nav-btn ${activePage === 'story' ? 'active' : ''}"
+                            onClick=${() => handlePageChange('story')}
+                        >
+                            Story
+                        </button>
+                    </div>
+
                     <${Header} 
                         generatedTime=${reviewData?.generatedTime || reviewData?.GeneratedTime}
                         friendlyName=${reviewData?.friendlyName || reviewData?.FriendlyName}
@@ -908,60 +1049,83 @@ async function initApp() {
                         status=${status}
                     />
                     
-                    <${Toolbar}
-                        activeTab=${activeTab}
-                        onTabChange=${handleTabChange}
-                        performanceItems=${performanceSnapshot.summaryItems}
-                        allExpanded=${allExpanded}
-                        onToggleAll=${toggleAll}
-                        eventCount=${newEventCount}
-                        showEventBadge=${activeTab !== 'events'}
-                        onTailLog=${handleTailLog}
-                        isTailing=${isTailing}
-                        onCopyLogs=${handleCopyLogs}
-                        logsCopied=${logsCopied}
-                    />
-                    
-                    ${activeTab === 'files' && html`
-                        <${SeverityFilter}
-                            files=${files}
-                            visibleSeverities=${visibleSeverities}
-                            onToggleSeverity=${toggleSeverity}
-                            onCopyVisibleIssues=${handleCopyVisibleIssues}
-                            hiddenCommentKeys=${hiddenCommentKeys}
-                            copyFeedbackStatus=${copyFeedback.status}
-                            copyFeedbackMessage=${copyFeedback.message}
-                            onSendToAgent=${handleSendToAgent}
-                            visibleCount=${totalVisibleComments}
+                    ${activePage === 'review' && html`
+                        <${Toolbar}
+                            activeTab=${activeTab}
+                            onTabChange=${handleTabChange}
+                            performanceItems=${performanceSnapshot.summaryItems}
+                            allExpanded=${allExpanded}
+                            onToggleAll=${toggleAll}
+                            eventCount=${newEventCount}
+                            showEventBadge=${activeTab !== 'events'}
+                            onTailLog=${handleTailLog}
+                            isTailing=${isTailing}
+                            onCopyLogs=${handleCopyLogs}
+                            logsCopied=${logsCopied}
+                        />
+
+                        ${activeTab === 'files' && html`
+                            <${SeverityFilter}
+                                files=${files}
+                                visibleSeverities=${visibleSeverities}
+                                onToggleSeverity=${toggleSeverity}
+                                onCopyVisibleIssues=${handleCopyVisibleIssues}
+                                hiddenCommentKeys=${hiddenCommentKeys}
+                                copyFeedbackStatus=${copyFeedback.status}
+                                copyFeedbackMessage=${copyFeedback.message}
+                                onSendToAgent=${handleSendToAgent}
+                                visibleCount=${totalVisibleComments}
+                            />
+                        `}
+
+                        <div id="files-tab" class="tab-content ${activeTab === 'files' ? 'active' : ''}" style="display: ${activeTab === 'files' ? 'block' : 'none'}">
+                            ${files.length > 0
+                                ? files.map(file => html`
+                                    <${FileBlock}
+                                        key=${file.ID}
+                                        file=${file}
+                                        expanded=${expandedFiles.has(file.ID)}
+                                        onToggle=${toggleFile}
+                                        visibleSeverities=${visibleSeverities}
+                                        hiddenCommentKeys=${hiddenCommentKeys}
+                                        onToggleCommentVisibility=${toggleCommentVisibility}
+                                        reviewStartMs=${reviewStartMsRef.current}
+                                        commentRenderTimes=${commentRenderTimes}
+                                        onCommentRendered=${handleCommentRendered}
+                                    />
+                                `)
+                                : html`
+                                    <div style="padding: 40px 20px; text-align: center; color: #57606a;">
+                                        ${status === 'in_progress'
+                                            ? 'Waiting for review results...'
+                                            : 'No files reviewed or no comments generated.'}
+                                    </div>
+                                `
+                            }
+                        </div>
+
+                        <div id="events-tab" class="tab-content ${activeTab === 'events' ? 'active' : ''}" style="display: ${activeTab === 'events' ? 'block' : 'none'}">
+                            <${EventLog}
+                                events=${events}
+                                status=${status}
+                                isTailing=${isTailing}
+                                listRef=${eventsListRef}
+                            />
+                        </div>
+                    `}
+
+                    ${activePage === 'story' && html`
+                        <${StoryPage}
+                            commitContext=${storyCommitContext}
+                            sessions=${storySessions}
+                            selectedSession=${selectedStoryRef || recommendedStoryRef}
+                            chat=${storyChat}
+                            loadingSessions=${storyLoading}
+                            loadingChat=${storyChatLoading}
+                            error=${storyError}
+                            onSelectSession=${handleStorySessionSelect}
                         />
                     `}
-                    
-                    <!-- Files Tab -->
-                    <div id="files-tab" class="tab-content ${activeTab === 'files' ? 'active' : ''}" style="display: ${activeTab === 'files' ? 'block' : 'none'}">
-                        ${files.length > 0 
-                            ? files.map(file => html`
-                                <${FileBlock}
-                                    key=${file.ID}
-                                    file=${file}
-                                    expanded=${expandedFiles.has(file.ID)}
-                                    onToggle=${toggleFile}
-                                    visibleSeverities=${visibleSeverities}
-                                    hiddenCommentKeys=${hiddenCommentKeys}
-                                    onToggleCommentVisibility=${toggleCommentVisibility}
-                                    reviewStartMs=${reviewStartMsRef.current}
-                                    commentRenderTimes=${commentRenderTimes}
-                                    onCommentRendered=${handleCommentRendered}
-                                />
-                            `)
-                            : html`
-                                <div style="padding: 40px 20px; text-align: center; color: #57606a;">
-                                    ${status === 'in_progress' 
-                                        ? 'Waiting for review results...' 
-                                        : 'No files reviewed or no comments generated.'}
-                                </div>
-                            `
-                        }
-                    </div>
                     
                     ${handoffModal.isOpen && html`
                         <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
@@ -995,16 +1159,6 @@ async function initApp() {
                         </div>
                     `}
                     
-                    <!-- Events Tab -->
-                    <div id="events-tab" class="tab-content ${activeTab === 'events' ? 'active' : ''}" style="display: ${activeTab === 'events' ? 'block' : 'none'}">
-                        <${EventLog}
-                            events=${events}
-                            status=${status}
-                            isTailing=${isTailing}
-                            listRef=${eventsListRef}
-                        />
-                    </div>
-                    
                     <div class="footer">
                         ${status === 'in_progress' 
                             ? `Review in progress: ${totalComments} comment(s) so far`
@@ -1017,7 +1171,7 @@ async function initApp() {
                 allComments=${allComments}
                 commentKey=${commentKey}
                 onNavigate=${navigateToComment}
-                activeTab=${activeTab}
+                activeTab=${activePage === 'review' ? activeTab : 'story'}
             />
         `;
     }

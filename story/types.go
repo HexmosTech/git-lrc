@@ -12,7 +12,8 @@ type DiscoverOptions struct {
 }
 
 type ListSessionsOptions struct {
-	UserDataDir string
+	UserDataDir              string
+	IncludeTranscriptSummary bool
 }
 
 type InspectSessionOptions struct {
@@ -32,21 +33,29 @@ type Source struct {
 	WorkspaceID         string `json:"workspace_id,omitempty"`
 	WorkspaceStorageDir string `json:"workspace_storage_dir,omitempty"`
 	TranscriptDir       string `json:"transcript_dir,omitempty"`
+	ChatSessionDir      string `json:"chat_session_dir,omitempty"`
 	GlobalStorageDir    string `json:"global_storage_dir,omitempty"`
-	TranscriptCount     int    `json:"transcript_count"`
+	TranscriptCount     int    `json:"transcript_count,omitempty"`
+	ChatSessionCount    int    `json:"chat_session_count,omitempty"`
 }
 
 type SessionSummary struct {
-	ProviderID     string     `json:"provider_id"`
-	SessionID      string     `json:"session_id"`
-	WorkspaceID    string     `json:"workspace_id,omitempty"`
-	UserDataRoot   string     `json:"user_data_root,omitempty"`
-	TranscriptPath string     `json:"transcript_path"`
-	Preview        string     `json:"preview,omitempty"`
-	StartedAt      *time.Time `json:"started_at,omitempty"`
-	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
-	EventCount     int        `json:"event_count"`
-	Warnings       []string   `json:"warnings,omitempty"`
+	ProviderID          string     `json:"provider_id"`
+	SessionID           string     `json:"session_id"`
+	WorkspaceID         string     `json:"workspace_id,omitempty"`
+	UserDataRoot        string     `json:"user_data_root,omitempty"`
+	SessionScope        string     `json:"session_scope,omitempty"`
+	TranscriptPath      string     `json:"transcript_path"`
+	ChatSessionPath     string     `json:"chat_session_path,omitempty"`
+	DisplayTitle        string     `json:"display_title,omitempty"`
+	Preview             string     `json:"preview,omitempty"`
+	DraftInput          string     `json:"draft_input,omitempty"`
+	StartedAt           *time.Time `json:"started_at,omitempty"`
+	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
+	EventCount          int        `json:"event_count"`
+	VisibleMessageCount int        `json:"visible_message_count,omitempty"`
+	ToolRequestCount    int        `json:"tool_request_count,omitempty"`
+	Warnings            []string   `json:"warnings,omitempty"`
 }
 
 type SessionInspect struct {
@@ -58,18 +67,22 @@ type SessionInspect struct {
 }
 
 type CommonChat struct {
-	SchemaVersion string            `json:"schema_version"`
-	ProviderID    string            `json:"provider_id"`
-	SessionID     string            `json:"session_id"`
-	WorkspaceID   string            `json:"workspace_id,omitempty"`
-	UserDataRoot  string            `json:"user_data_root,omitempty"`
-	SourcePath    string            `json:"source_path"`
-	StartedAt     *time.Time        `json:"started_at,omitempty"`
-	UpdatedAt     *time.Time        `json:"updated_at,omitempty"`
-	ExtractedAt   time.Time         `json:"extracted_at"`
-	Warnings      []string          `json:"warnings,omitempty"`
-	Events        []CommonChatEvent `json:"events"`
-	Raw           CommonChatRaw     `json:"raw"`
+	SchemaVersion   string            `json:"schema_version"`
+	ProviderID      string            `json:"provider_id"`
+	SessionID       string            `json:"session_id"`
+	WorkspaceID     string            `json:"workspace_id,omitempty"`
+	UserDataRoot    string            `json:"user_data_root,omitempty"`
+	SessionScope    string            `json:"session_scope,omitempty"`
+	DisplayTitle    string            `json:"display_title,omitempty"`
+	DraftInput      string            `json:"draft_input,omitempty"`
+	ChatSessionPath string            `json:"chat_session_path,omitempty"`
+	SourcePath      string            `json:"source_path"`
+	StartedAt       *time.Time        `json:"started_at,omitempty"`
+	UpdatedAt       *time.Time        `json:"updated_at,omitempty"`
+	ExtractedAt     time.Time         `json:"extracted_at"`
+	Warnings        []string          `json:"warnings,omitempty"`
+	Events          []CommonChatEvent `json:"events"`
+	Raw             CommonChatRaw     `json:"raw"`
 }
 
 type CommonChatRaw struct {

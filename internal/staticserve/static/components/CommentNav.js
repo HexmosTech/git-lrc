@@ -29,7 +29,7 @@ export async function createCommentNav() {
                 anchorIndexRef.current = nextState.anchorIdx;
                 return nextState.currentIdx;
             });
-        }, [commentKey, allComments]);
+        }, [commentKey]);
 
         // Guard against stale index when list mutates between events.
         useEffect(() => {

@@ -574,6 +574,22 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				handleRuntimeUsageChip(w, r, config, verbose)
 			})
 
+			mux.HandleFunc("/api/story/sessions", func(w http.ResponseWriter, r *http.Request) {
+				if !allowLocalStoryRequest(w, r) {
+					return
+				}
+				reviewStateMu.RLock()
+				state := currentReviewState
+				reviewStateMu.RUnlock()
+				handleReviewStorySessions(w, r, state)
+			})
+			mux.HandleFunc("/api/story/session", func(w http.ResponseWriter, r *http.Request) {
+				if !allowLocalStoryRequest(w, r) {
+					return
+				}
+				handleReviewStorySession(w, r)
+			})
+
 			if runningDraftHub != nil {
 				mux.HandleFunc("/api/draft", func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet {

@@ -10,8 +10,8 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 
 - Storage boundary: local file system and local SQLite only (no outbound API calls in this package).
 - Modes represented: file, db.
-- Operation count tracked: 47 operations.
-- Severity distribution: High 10, Medium 15, Low 22.
+- Operation count tracked: 52 operations.
+- Severity distribution: High 10, Medium 20, Low 22.
 - Primary sensitive data in scope: API keys and connector state in config, review metadata in SQLite, hook scripts and metadata, update lock/state metadata.
 - Highest-risk operation classes: credential file read/write, recursive deletion, permission changes, direct SQL execution wrappers.
 - Primary compensating controls already present: atomic writes for critical files, SQLite WAL mode and busy timeout, explicit chmod utility usage, typed wrapper functions and contextual error wrapping.
@@ -19,7 +19,7 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 - Current diff note: hook install reliability fix now handles wrapped file-not-found errors and normalizes hooksPath values before install/uninstall orchestration; no new storage operation APIs added in this increment.
 - Current diff note: uninstall shell source-line cleanup now preserves original LF/CRLF style and replaces string literals with named constants for maintainability.
 - Current diff note: RemoveFileIfExists now avoids stat-then-remove TOCTOU on non-dry-run path, shell-line splitting now respects detected line ending delimiter, and fish managed-marker string is constantized.
-- Current diff note: story phase-1 transcript extraction adds VS Code/Copilot discovery and transcript read wrappers in storage for filesystem-bound chat history discovery.
+- Current diff note: story session extraction now reads only VS Code chat session metadata prefixes and uses file modtime for recency, avoiding full append-log reads for large Copilot sessions.
 
 ## Severity Rubric
 
@@ -94,14 +94,19 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 | RemoveManagedFishLRCConfig | file | fish conf.d file content/path | Remove installer-managed fish integration file | Low | Low risk because removal is gated on managed-file marker content | Compensated by strict marker check before delete; acceptable risk | [storage/uninstall_io.go](uninstall_io.go#L99) |
 | RemoveDirIfEmptyIfExists | file | Directory path | Remove now-empty installer directory without recursion | Low | Low risk of unintended deletion because operation is empty-dir constrained | Compensated by explicit emptiness check before removal; acceptable risk | [storage/uninstall_io.go](uninstall_io.go#L123) |
 
-## Inventory: Story Transcript Discovery And Extraction
+## Inventory: Story Session Discovery And Extraction
 
 | Operation | Mode | Data Handled | Purpose | Severity | Risk Acknowledgement | Compensation Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PathExists | file | Candidate local path metadata | Check whether explicit or default VS Code user-data roots exist before discovery | Low | Low risk helper can reveal only local path presence | Compensated by read-only stat semantics and narrow discovery-only use; acceptable risk | [story_vscode_io.go](story_vscode_io.go#L11) |
-| ListVSCodeWorkspaceStorageDirs | file | Workspace storage directory names | Enumerate VS Code workspace storage roots under a user-data directory | Low | Low risk of listing local directory names outside requested scope | Compensated by fixed workspaceStorage boundary under user-data root; acceptable risk | [story_vscode_io.go](story_vscode_io.go#L22) |
-| ListCopilotTranscriptFiles | file | Copilot transcript file paths | Enumerate available GitHub Copilot transcript JSONL files for a workspace | Medium | Medium confidentiality risk because transcript file names and presence reveal chat activity | Compensated by read-only enumeration limited to provider transcript directory; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L43) |
-| ReadCopilotTranscriptFile | file | Transcript JSONL bytes containing visible chat content and raw provenance | Load one Copilot transcript for story inspection/export | Medium | Medium confidentiality risk because transcripts may contain prompts, tool calls, and reasoning provenance | Compensated by local read-only path with explicit caller-controlled export flow; residual risk acceptable for phase-1 local extraction | [story_vscode_io.go](story_vscode_io.go#L67) |
+| PathExists | file | Candidate local path metadata | Check whether explicit or default VS Code user-data roots exist before discovery | Low | Low risk helper can reveal only local path presence | Compensated by read-only stat semantics and narrow discovery-only use; acceptable risk | [story_vscode_io.go](story_vscode_io.go#L13) |
+| ListVSCodeWorkspaceStorageDirs | file | Workspace storage directory names | Enumerate VS Code workspace storage roots under a user-data directory | Low | Low risk of listing local directory names outside requested scope | Compensated by fixed workspaceStorage boundary under user-data root; acceptable risk | [story_vscode_io.go](story_vscode_io.go#L24) |
+| ListCopilotTranscriptFiles | file | Copilot transcript file paths | Enumerate available GitHub Copilot transcript JSONL files for a workspace | Medium | Medium confidentiality risk because transcript file names and presence reveal chat activity | Compensated by read-only enumeration limited to provider transcript directory; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L45) |
+| ListVSCodeChatSessionFiles | file | Workspace chat session JSONL file paths | Enumerate top-level VS Code chat session patch logs for a workspace | Medium | Medium confidentiality risk because session file names and presence reveal chat activity and workspace usage | Compensated by read-only enumeration limited to workspace chatSessions directory; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L50) |
+| ListVSCodeEmptyWindowChatSessionFiles | file | Empty-window chat session JSONL file paths | Enumerate VS Code empty-window chat sessions outside a workspace context | Medium | Medium confidentiality risk because empty-window sessions may reveal exploratory or cross-repo chat activity | Compensated by read-only enumeration limited to VS Code emptyWindowChatSessions directory; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L55) |
+| ReadCopilotTranscriptFile | file | Transcript JSONL bytes containing visible chat content and raw provenance | Load one Copilot transcript for story inspection/export | Medium | Medium confidentiality risk because transcripts may contain prompts, tool calls, and reasoning provenance | Compensated by local read-only path with explicit caller-controlled export flow; residual risk acceptable for phase-1 local extraction | [story_vscode_io.go](story_vscode_io.go#L83) |
+| ReadVSCodeChatSessionFile | file | VS Code chat session patch-log JSONL bytes containing titles, draft input state, request timestamps, and session metadata | Load one full VS Code chat session metadata log when full-file access is explicitly needed | Medium | Medium confidentiality risk because session metadata may expose prompt drafts, titles, and session timing | Compensated by local read-only path with explicit caller-controlled export flow; residual risk acceptable for phase-1 local extraction | [story_vscode_io.go](story_vscode_io.go#L91) |
+| ReadVSCodeChatSessionFilePrefix | file | Leading prefix bytes from a VS Code chat session patch log | Load only the metadata-bearing prefix of a chat session file to avoid full append-log reads during session listing | Medium | Medium confidentiality risk because prefixes still contain prompt drafts and titles | Compensated by explicit byte limit and read-only local access; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L99) |
+| StatFileModTime | file | Local file metadata timestamps | Read chat session file modification time for recency ranking without parsing full request history | Medium | Medium confidentiality risk because timestamp metadata reveals user activity timing | Compensated by read-only stat semantics and narrow story-ranking use; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L113) |
 
 ## Inventory: Self-Update State And Lock Files
 
