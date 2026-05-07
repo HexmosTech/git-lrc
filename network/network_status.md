@@ -17,6 +17,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 - Current diff note: uninstall shell cleanup robustness update (line-ending preservation and constant extraction) is storage-only; no network operation surface change.
 - Current diff note: uninstall storage refinements (TOCTOU-safe remove path and delimiter-aware line splitting) are storage-only; no network operation surface change.
 - Current diff note: story phase-1 VS Code Copilot transcript discovery/export is storage-and-appcore only; no network operation surface change.
+- Current diff note: story commit attachment, sparse markdown export, and commit-time attestation refresh are local appcore/storage flows only; no outbound network operation surface change.
 - Primary sensitive data in scope: API keys, bearer tokens, org-context headers, diff content, connector validation payloads, update manifest metadata, binary download stream.
 - Highest-risk operation classes: review submission/polling, setup credential operations, proxy forwarding paths, binary download operations.
 - Primary compensating controls already present: explicit auth header usage by flow, URL normalization helpers, host allowlist check for self-update download sources, timeout-based polling with cancellation support.
@@ -74,8 +75,8 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | Client.DoJSON | api | Request/response JSON payload bytes | Standard JSON HTTP call wrapper | Medium | Medium risk from broad transport usage and status-handling variance | Compensated by centralized transport wrapper with timeout controls; acceptable risk | [network/http_client.go](http_client.go#L43) |
 | Client.Do | api | Raw HTTP request/response bytes | Generic HTTP call wrapper for non-JSON/raw workflows | Medium | Medium risk from raw payload handling flexibility | Partially compensated by shared client boundary; Suggestion: document callsite expectations for raw bodies | [network/http_client.go](http_client.go#L89) |
 | SetupEnsureCloudUserURL | api | Base URL plus endpoint normalization inputs | Normalize endpoint composition and reduce path ambiguity | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L13) |
-| PollReview | api | Review IDs, status payloads, timeout state | Timeout-bounded polling orchestration in review runtime | High | High availability/latency risk if review service is degraded | Compensated by bounded timeout and interval controls; residual risk acceptable | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L161) |
-| formatJSONParseError | api | Response body text for parse diagnostics | Improve operator diagnostics when endpoint/port mismatches occur | Low | Low risk diagnostic utility behavior | Compensated by safer error interpretation path; acceptable risk | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L89) |
+| PollReview | api | Review IDs, status payloads, timeout state | Timeout-bounded polling orchestration in review runtime | High | High availability/latency risk if review service is degraded | Compensated by bounded timeout and interval controls; residual risk acceptable | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L181) |
+| formatJSONParseError | api | Response body text for parse diagnostics | Improve operator diagnostics when endpoint/port mismatches occur | Low | Low risk diagnostic utility behavior | Compensated by safer error interpretation path; acceptable risk | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L109) |
 
 ## Control Signals For Security Review
 

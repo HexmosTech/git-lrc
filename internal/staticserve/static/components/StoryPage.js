@@ -225,12 +225,16 @@ export async function createStoryPage() {
 	return function StoryPage({
 		commitContext,
 		sessions,
+		attachedSession,
 		selectedSession,
 		chat,
 		loadingSessions,
 		loadingChat,
+		attaching,
 		error,
 		onSelectSession,
+		onAttachSession,
+		onDetachSession,
 	}) {
 		const renderableEvents = getRenderableStoryEvents(chat);
 		const timelineEntries = buildStoryTimelineEntries(renderableEvents);
@@ -238,6 +242,7 @@ export async function createStoryPage() {
 		const [relativeNowMs, setRelativeNowMs] = useState(Date.now());
 		const loadMoreRef = useRef(null);
 		const selectedKey = storyRefKey(selectedSession);
+		const attachedKey = storyRefKey(attachedSession);
 		const selectedSessionSummary = sessions.find((session) => storyRefKey(session) === selectedKey) || null;
 		const changedFiles = commitContext?.changed_files || [];
 		const headCommit = commitContext?.head_commit || '';
@@ -246,6 +251,7 @@ export async function createStoryPage() {
 		const selectedChatTitle = selectedSessionSummary?.display_title || selectedSessionSummary?.DisplayTitle || chat?.display_title || chat?.DisplayTitle || 'Selected chat';
 		const selectedDraftInput = selectedSessionSummary?.draft_input || selectedSessionSummary?.DraftInput || getStoryOpeningPrompt(chat, renderableEvents);
 		const selectedSessionID = selectedSessionSummary?.session_id || selectedSessionSummary?.SessionID || chat?.session_id || chat?.SessionID || selectedSession?.session_id || selectedSession?.SessionID || '';
+		const selectedIsAttached = selectedKey !== '' && selectedKey === attachedKey;
 
 		useEffect(() => {
 			setVisibleEventCount(INITIAL_RENDERABLE_EVENT_LIMIT);
@@ -322,43 +328,63 @@ export async function createStoryPage() {
 						${sessions.map((session) => {
 							const sessionRef = { provider_id: session.provider_id, session_id: session.session_id };
 							const isSelected = storyRefKey(sessionRef) === selectedKey;
+							const isAttached = storyRefKey(sessionRef) === attachedKey;
 							const title = session.display_title || session.preview || session.session_id;
 							const sessionPreview = truncateStoryText(session.draft_input || session.preview || '');
 							return html`
-								<button
-									key=${storyRefKey(sessionRef)}
-									class="story-session-item ${isSelected ? 'active' : ''}"
-									onClick=${() => onSelectSession(sessionRef)}
-								>
-									<div class="story-session-topline">
-										<div class="story-session-topline-left">
-											<span class="story-session-provider">${session.provider_id}</span>
-											${session.workspace_id && html`<span class="story-secondary-meta">${session.session_scope || 'workspace'} · ${session.workspace_id}</span>`}
+								<div key=${storyRefKey(sessionRef)} class="story-session-card">
+									<button
+										class="story-session-item ${isSelected ? 'active' : ''}"
+										onClick=${() => onSelectSession(sessionRef)}
+									>
+										<div class="story-session-topline">
+											<div class="story-session-topline-left">
+												<span class="story-session-provider">${session.provider_id}</span>
+												${session.workspace_id && html`<span class="story-secondary-meta">${session.session_scope || 'workspace'} · ${session.workspace_id}</span>`}
+											</div>
+											<time class="story-session-updated" title=${formatStoryAbsoluteDate(session.updated_at)} dateTime=${session.updated_at || ''}>
+												${formatStoryRelativeDate(session.updated_at, relativeNowMs)}
+											</time>
 										</div>
-										<time class="story-session-updated" title=${formatStoryAbsoluteDate(session.updated_at)} dateTime=${session.updated_at || ''}>
-											${formatStoryRelativeDate(session.updated_at, relativeNowMs)}
-										</time>
+										<div class="story-session-title">${title}</div>
+										${sessionPreview && html`<p class="story-session-preview">${sessionPreview}</p>`}
+										<div class="story-session-footnote">
+											<div class="story-session-badge-row">
+												${session.recommended && html`<span class="story-session-badge">Suggested</span>`}
+												${session.within_commit_window && html`<span class="story-session-badge window">In window</span>`}
+												${isAttached && html`<span class="story-session-badge attached">Attached</span>`}
+											</div>
+											<span class="story-session-id" title=${session.session_id}>${shortenStoryID(session.session_id, 6, 5)}</span>
+										</div>
+										${Array.isArray(session.matched_files) && session.matched_files.length > 0 && html`
+											<div class="story-match-reasons">
+												${session.matched_files.slice(0, 4).map((filePath) => html`<span key=${filePath} class="story-match-pill">${filePath}</span>`)}
+											</div>
+										`}
+										${Array.isArray(session.match_reasons) && session.match_reasons.length > 0 && html`
+											<div class="story-match-reasons">
+												${session.match_reasons.map((reason) => html`<span key=${reason} class="story-match-pill">${reason}</span>`)}
+											</div>
+										`}
+									</button>
+									<div class="story-session-actions">
+										<button
+											class="btn ${isAttached ? 'btn-secondary' : 'btn-ghost'} story-attach-btn"
+											disabled=${attaching}
+											onClick=${(event) => {
+												event.stopPropagation();
+												if (isAttached) {
+													onDetachSession();
+													return;
+												}
+												onAttachSession(sessionRef);
+											}}
+										>
+											${attaching ? 'Working…' : isAttached ? 'Detach' : 'Attach'}
+										</button>
+										${isAttached && attachedSession?.path && html`<span class="story-attachment-path" title=${attachedSession.path}>${attachedSession.path}</span>`}
 									</div>
-									<div class="story-session-title">${title}</div>
-									${sessionPreview && html`<p class="story-session-preview">${sessionPreview}</p>`}
-									<div class="story-session-footnote">
-										<div class="story-session-badge-row">
-										${session.recommended && html`<span class="story-session-badge">Suggested</span>`}
-										${session.within_commit_window && html`<span class="story-session-badge window">In window</span>`}
-										</div>
-										<span class="story-session-id" title=${session.session_id}>${shortenStoryID(session.session_id, 6, 5)}</span>
-									</div>
-									${Array.isArray(session.matched_files) && session.matched_files.length > 0 && html`
-										<div class="story-match-reasons">
-											${session.matched_files.slice(0, 4).map((filePath) => html`<span key=${filePath} class="story-match-pill">${filePath}</span>`)}
-										</div>
-									`}
-									${Array.isArray(session.match_reasons) && session.match_reasons.length > 0 && html`
-										<div class="story-match-reasons">
-											${session.match_reasons.map((reason) => html`<span key=${reason} class="story-match-pill">${reason}</span>`)}
-										</div>
-									`}
-								</button>
+								</div>
 							`;
 						})}
 					</div>
@@ -379,6 +405,12 @@ export async function createStoryPage() {
 
 						${!loadingChat && chat && html`
 							<div class="story-chat-summary">
+								${selectedIsAttached && html`
+									<div class="story-attachment-banner">
+										<span class="story-session-badge attached">Attached to commit</span>
+										${attachedSession?.path && html`<span class="story-attachment-path" title=${attachedSession.path}>${attachedSession.path}</span>`}
+									</div>
+								`}
 								<h4 class="story-chat-title">${selectedChatTitle}</h4>
 								${selectedDraftInput && html`
 									<p class="story-chat-prompt">${selectedDraftInput}</p>

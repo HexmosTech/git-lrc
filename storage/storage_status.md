@@ -10,8 +10,8 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 
 - Storage boundary: local file system and local SQLite only (no outbound API calls in this package).
 - Modes represented: file, db.
-- Operation count tracked: 52 operations.
-- Severity distribution: High 10, Medium 20, Low 22.
+- Operation count tracked: 59 operations.
+- Severity distribution: High 10, Medium 23, Low 26.
 - Primary sensitive data in scope: API keys and connector state in config, review metadata in SQLite, hook scripts and metadata, update lock/state metadata.
 - Highest-risk operation classes: credential file read/write, recursive deletion, permission changes, direct SQL execution wrappers.
 - Primary compensating controls already present: atomic writes for critical files, SQLite WAL mode and busy timeout, explicit chmod utility usage, typed wrapper functions and contextual error wrapping.
@@ -20,6 +20,7 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 - Current diff note: uninstall shell source-line cleanup now preserves original LF/CRLF style and replaces string literals with named constants for maintainability.
 - Current diff note: RemoveFileIfExists now avoids stat-then-remove TOCTOU on non-dry-run path, shell-line splitting now respects detected line ending delimiter, and fish managed-marker string is constantized.
 - Current diff note: story session extraction now reads only VS Code chat session metadata prefixes and uses file modtime for recency, avoiding full append-log reads for large Copilot sessions.
+- Current diff note: story commit attachment now persists one pending sparse markdown export under .lrc plus repo-local attachment metadata under .git/lrc, still entirely within the storage boundary.
 
 ## Severity Rubric
 
@@ -94,7 +95,7 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 | RemoveManagedFishLRCConfig | file | fish conf.d file content/path | Remove installer-managed fish integration file | Low | Low risk because removal is gated on managed-file marker content | Compensated by strict marker check before delete; acceptable risk | [storage/uninstall_io.go](uninstall_io.go#L99) |
 | RemoveDirIfEmptyIfExists | file | Directory path | Remove now-empty installer directory without recursion | Low | Low risk of unintended deletion because operation is empty-dir constrained | Compensated by explicit emptiness check before removal; acceptable risk | [storage/uninstall_io.go](uninstall_io.go#L123) |
 
-## Inventory: Story Session Discovery And Extraction
+## Inventory: Story Session Discovery, Extraction, And Attachment Staging
 
 | Operation | Mode | Data Handled | Purpose | Severity | Risk Acknowledgement | Compensation Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -107,6 +108,13 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 | ReadVSCodeChatSessionFile | file | VS Code chat session patch-log JSONL bytes containing titles, draft input state, request timestamps, and session metadata | Load one full VS Code chat session metadata log when full-file access is explicitly needed | Medium | Medium confidentiality risk because session metadata may expose prompt drafts, titles, and session timing | Compensated by local read-only path with explicit caller-controlled export flow; residual risk acceptable for phase-1 local extraction | [story_vscode_io.go](story_vscode_io.go#L91) |
 | ReadVSCodeChatSessionFilePrefix | file | Leading prefix bytes from a VS Code chat session patch log | Load only the metadata-bearing prefix of a chat session file to avoid full append-log reads during session listing | Medium | Medium confidentiality risk because prefixes still contain prompt drafts and titles | Compensated by explicit byte limit and read-only local access; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L99) |
 | StatFileModTime | file | Local file metadata timestamps | Read chat session file modification time for recency ranking without parsing full request history | Medium | Medium confidentiality risk because timestamp metadata reveals user activity timing | Compensated by read-only stat semantics and narrow story-ranking use; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L113) |
+| StoryAttachmentMetadataPath | file | Repo-local pending attachment metadata path under .git/lrc | Resolve the canonical metadata location for the pending Story commit attachment | Low | Low risk path-construction helper scoped to repo-local state | Compensated by deterministic repo-local path and no direct I/O side effects; acceptable risk | [story_attachment_io.go](story_attachment_io.go#L22) |
+| StoryAttachmentMarkdownPath | file | Sparse markdown artifact path under .lrc | Resolve the canonical worktree path for the attached Story markdown note | Low | Low risk path-construction helper scoped to worktree-local state | Compensated by deterministic .lrc target path and no direct I/O side effects; acceptable risk | [story_attachment_io.go](story_attachment_io.go#L26) |
+| ReadStoryAttachmentState | file | Pending attachment metadata JSON containing provider/session ids, tree hash, and target path | Load pending Story attachment state before UI display, detach, or commit finalization | Medium | Medium integrity/confidentiality risk because metadata links local commit state to conversation provenance | Compensated by repo-local read path and narrow caller scope; residual risk acceptable | [story_attachment_io.go](story_attachment_io.go#L30) |
+| WriteStoryAttachmentState | file | Pending attachment metadata JSON containing provider/session ids, tree hash, and target path | Persist the single pending Story attachment selection for the current repo | Medium | Medium integrity risk if attachment state is partially written or tampered with | Compensated by atomic write semantics with 0600 permissions; residual risk acceptable | [story_attachment_io.go](story_attachment_io.go#L47) |
+| RemoveStoryAttachmentState | file | Pending attachment metadata file | Clear repo-local Story attachment state after detach or commit finalization | Low | Low risk of leaving stale attachment state if delete fails | Compensated by explicit cleanup path and narrow file target; acceptable risk | [story_attachment_io.go](story_attachment_io.go#L60) |
+| WriteStoryAttachmentMarkdown | file | Sparse markdown note containing selected user prompt and assistant responses | Persist the commit-attached Story note under .lrc for later staging into the commit | Medium | Medium confidentiality/integrity risk because markdown note contains local prompt/output excerpts | Compensated by atomic write semantics and deterministic repo-local path; residual risk acceptable | [story_attachment_io.go](story_attachment_io.go#L67) |
+| RemoveStoryAttachmentMarkdown | file | Sparse markdown Story note under .lrc | Remove the pending Story note when the attachment is detached or replaced | Low | Low risk of stale worktree artifact if delete fails | Compensated by explicit cleanup path and narrow deterministic target; acceptable risk | [story_attachment_io.go](story_attachment_io.go#L74) |
 
 ## Inventory: Self-Update State And Lock Files
 

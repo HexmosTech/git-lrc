@@ -99,22 +99,29 @@ func existingAttestationAction() (string, error) {
 	return strings.TrimSpace(payload.Action), nil
 }
 
-// readCurrentAttestation reads and parses the full attestation payload for the current tree.
-func readCurrentAttestation() (*attestationPayload, error) {
-	treeHash, err := reviewapi.CurrentTreeHash()
-	if err != nil {
-		return nil, err
-	}
-	if treeHash == "" {
-		return nil, nil
+func attestationPathForTreeHash(treeHash string) (string, error) {
+	trimmedTreeHash := strings.TrimSpace(treeHash)
+	if trimmedTreeHash == "" {
+		return "", nil
 	}
 
 	gitDir, err := reviewapi.ResolveGitDir()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	attestPath := filepath.Join(gitDir, "lrc", "attestations", fmt.Sprintf("%s.json", treeHash))
+	return filepath.Join(gitDir, "lrc", "attestations", fmt.Sprintf("%s.json", trimmedTreeHash)), nil
+}
+
+func readAttestationForTree(treeHash string) (*attestationPayload, error) {
+	attestPath, err := attestationPathForTreeHash(treeHash)
+	if err != nil {
+		return nil, err
+	}
+	if attestPath == "" {
+		return nil, nil
+	}
+
 	data, err := storage.ReadAttestationFile(attestPath)
 	if err != nil {
 		return nil, nil
@@ -126,6 +133,15 @@ func readCurrentAttestation() (*attestationPayload, error) {
 	}
 
 	return &payload, nil
+}
+
+// readCurrentAttestation reads and parses the full attestation payload for the current tree.
+func readCurrentAttestation() (*attestationPayload, error) {
+	treeHash, err := reviewapi.CurrentTreeHash()
+	if err != nil {
+		return nil, err
+	}
+	return readAttestationForTree(treeHash)
 }
 
 // runAttestationTrailer outputs the formatted commit trailer from the current
@@ -165,16 +181,13 @@ func writeAttestationForCurrentTree(action string) (string, error) {
 	return writeAttestationFullForCurrentTree(attestationPayload{Action: action})
 }
 
-func writeAttestationFullForCurrentTree(payload attestationPayload) (string, error) {
+func writeAttestationFullForTree(treeHash string, payload attestationPayload) (string, error) {
 	if strings.TrimSpace(payload.Action) == "" {
 		return "", fmt.Errorf("attestation action cannot be empty")
 	}
 
-	treeHash, err := reviewapi.CurrentTreeHash()
-	if err != nil {
-		return "", fmt.Errorf("failed to compute tree hash: %w", err)
-	}
-	if treeHash == "" {
+	trimmedTreeHash := strings.TrimSpace(treeHash)
+	if trimmedTreeHash == "" {
 		return "", fmt.Errorf("empty tree hash")
 	}
 
@@ -199,12 +212,44 @@ func writeAttestationFullForCurrentTree(payload attestationPayload) (string, err
 		return "", fmt.Errorf("failed to marshal attestation: %w", err)
 	}
 
-	target := filepath.Join(attestDir, fmt.Sprintf("%s.json", treeHash))
+	target := filepath.Join(attestDir, fmt.Sprintf("%s.json", trimmedTreeHash))
 	if err := storage.WriteFileAtomically(target, data, 0644); err != nil {
 		return "", fmt.Errorf("failed to write attestation: %w", err)
 	}
 
 	return target, nil
+}
+
+func writeAttestationFullForCurrentTree(payload attestationPayload) (string, error) {
+	if strings.TrimSpace(payload.Action) == "" {
+		return "", fmt.Errorf("attestation action cannot be empty")
+	}
+
+	treeHash, err := reviewapi.CurrentTreeHash()
+	if err != nil {
+		return "", fmt.Errorf("failed to compute tree hash: %w", err)
+	}
+	if treeHash == "" {
+		return "", fmt.Errorf("empty tree hash")
+	}
+
+	return writeAttestationFullForTree(treeHash, payload)
+}
+
+func deleteAttestationForTree(treeHash string) error {
+	attestPath, err := attestationPathForTreeHash(treeHash)
+	if err != nil {
+		return fmt.Errorf("failed to resolve attestation path: %w", err)
+	}
+	if attestPath == "" {
+		return nil
+	}
+
+	if err := storage.RemoveAttestationFile(attestPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("failed to delete attestation %s: %w", attestPath, err)
+	}
+
+	return nil
 }
 
 func deleteAttestationForCurrentTree() error {
@@ -216,15 +261,5 @@ func deleteAttestationForCurrentTree() error {
 		return nil
 	}
 
-	gitDir, err := reviewapi.ResolveGitDir()
-	if err != nil {
-		return fmt.Errorf("failed to resolve git dir: %w", err)
-	}
-
-	attestPath := filepath.Join(gitDir, "lrc", "attestations", fmt.Sprintf("%s.json", treeHash))
-	if err := storage.RemoveAttestationFile(attestPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("failed to delete attestation %s: %w", attestPath, err)
-	}
-
-	return nil
+	return deleteAttestationForTree(treeHash)
 }

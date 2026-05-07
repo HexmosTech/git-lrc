@@ -53,12 +53,23 @@ type reviewStorySession struct {
 	ChatSessionPath     string     `json:"chat_session_path,omitempty"`
 	Transcript          string     `json:"transcript_path,omitempty"`
 	ProviderRef         string     `json:"provider_ref,omitempty"`
+	Attached            bool       `json:"attached,omitempty"`
+}
+
+type reviewStoryAttachmentSummary struct {
+	ProviderID     string    `json:"provider_id"`
+	SessionID      string    `json:"session_id"`
+	ReviewTreeHash string    `json:"review_tree_hash"`
+	Path           string    `json:"path"`
+	DisplayTitle   string    `json:"display_title,omitempty"`
+	AttachedAt     time.Time `json:"attached_at"`
 }
 
 type reviewStorySessionsResponse struct {
-	Commit      reviewStoryCommitContext `json:"commit"`
-	Sessions    []reviewStorySession     `json:"sessions"`
-	Recommended *reviewStorySessionRef   `json:"recommended,omitempty"`
+	Commit      reviewStoryCommitContext      `json:"commit"`
+	Sessions    []reviewStorySession          `json:"sessions"`
+	Recommended *reviewStorySessionRef        `json:"recommended,omitempty"`
+	Attachment  *reviewStoryAttachmentSummary `json:"attachment,omitempty"`
 }
 
 func handleReviewStorySessions(w http.ResponseWriter, r *http.Request, state *ReviewState) {
@@ -119,7 +130,11 @@ func handleReviewStorySession(w http.ResponseWriter, r *http.Request) {
 
 func buildReviewStorySessionsResponse(state *ReviewState, now time.Time) (*reviewStorySessionsResponse, error) {
 	commitContext := buildReviewStoryCommitContext(state, now)
-	response := &reviewStorySessionsResponse{Commit: commitContext}
+	attachment, err := readReviewStoryAttachmentSummary()
+	if err != nil {
+		return nil, err
+	}
+	response := &reviewStorySessionsResponse{Commit: commitContext, Attachment: attachment}
 
 	providers := storyRegistry().ProviderIDs()
 	for _, providerID := range providers {
@@ -166,6 +181,7 @@ func buildReviewStorySessionsResponse(state *ReviewState, now time.Time) (*revie
 			}
 
 			candidate.MatchReasons = uniqueStoryStrings(candidate.MatchReasons)
+			candidate.Attached = attachment != nil && attachment.ProviderID == candidate.ProviderID && attachment.SessionID == candidate.SessionID
 			response.Sessions = append(response.Sessions, candidate)
 		}
 	}

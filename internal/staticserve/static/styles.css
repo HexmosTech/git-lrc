@@ -1654,7 +1654,7 @@ body {
 .story-session-item {
     width: 100%;
     text-align: left;
-    margin-bottom: 10px;
+    margin-bottom: 0;
     padding: 14px 14px 16px;
     background: rgba(255,255,255,0.02);
     border: 1px solid rgba(255,255,255,0.05);
@@ -1675,6 +1675,32 @@ body {
     background: rgba(0,120,212,0.09);
     border-color: rgba(79, 195, 247, 0.18);
     transform: translateY(-1px);
+}
+
+.story-session-card {
+    margin-bottom: 10px;
+}
+
+.story-session-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 8px 4px 0;
+}
+
+.story-attach-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.story-attachment-path {
+    color: var(--text-dim);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .story-session-topline {
@@ -1715,6 +1741,11 @@ body {
 .story-session-badge.window {
     background: rgba(0,120,212,0.18);
     color: #bfdbfe;
+}
+
+.story-session-badge.attached {
+    background: rgba(78, 201, 176, 0.18);
+    color: var(--accent-teal);
 }
 
 .story-session-title {
@@ -1796,6 +1827,18 @@ body {
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 16px;
     background: rgba(255,255,255,0.02);
+}
+
+.story-attachment-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(78, 201, 176, 0.22);
+    background: rgba(78, 201, 176, 0.08);
 }
 
 .story-chat-title {

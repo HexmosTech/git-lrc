@@ -199,6 +199,14 @@ function buildStorySessionsURL() {
     return '/api/story/sessions';
 }
 
+function buildStoryAttachURL() {
+    return '/api/story/attach';
+}
+
+function buildStoryDetachURL() {
+    return '/api/story/detach';
+}
+
 function buildStorySessionURL(ref) {
     const params = new URLSearchParams();
     params.set('provider', ref.provider_id || ref.providerId || ref.ProviderID || '');
@@ -285,9 +293,11 @@ async function initApp() {
         const [storyCommitContext, setStoryCommitContext] = useState(null);
         const [recommendedStoryRef, setRecommendedStoryRef] = useState(null);
         const [selectedStoryRef, setSelectedStoryRef] = useState(null);
+        const [storyAttachment, setStoryAttachment] = useState(null);
         const [storyChat, setStoryChat] = useState(null);
         const [storyLoading, setStoryLoading] = useState(false);
         const [storyChatLoading, setStoryChatLoading] = useState(false);
+        const [storyAttachLoading, setStoryAttachLoading] = useState(false);
         const [storyError, setStoryError] = useState(null);
         const [storyManualSelection, setStoryManualSelection] = useState(false);
         
@@ -392,7 +402,6 @@ async function initApp() {
                 if (newEvents.length === 0 && !data.meta?.status) {
                     return;
                 }
-
                 seenEventIdsRef.current = nextSeenEventIds;
 
                 const transformedEvents = newEvents.map(transformEvent);
@@ -438,7 +447,7 @@ async function initApp() {
                 eventsInFlightRef.current = false;
             }
         }, [commitReviewData, fetchFinalReviewData]);
-        
+
         // Initial load and polling setup
         useEffect(() => {
             let cancelled = false;
@@ -598,14 +607,22 @@ async function initApp() {
                 const sessions = data.sessions || [];
                 const commitContext = data.commit || null;
                 const recommended = data.recommended || null;
+                const attachment = data.attachment || null;
                 setStorySessions(sessions);
                 setStoryCommitContext(commitContext);
                 setRecommendedStoryRef(recommended);
+                setStoryAttachment(attachment);
                 setSelectedStoryRef((prev) => {
                     const prevKey = storyRefKey(prev);
                     const hasPrev = sessions.some((session) => storyRefKey(session) === prevKey);
                     if (storyManualSelection && hasPrev) {
                         return prev;
+                    }
+                    if (attachment) {
+                        return {
+                            provider_id: attachment.provider_id,
+                            session_id: attachment.session_id,
+                        };
                     }
                     if (recommended) {
                         return recommended;
@@ -618,6 +635,7 @@ async function initApp() {
                 setStorySessions([]);
                 setStoryCommitContext(null);
                 setRecommendedStoryRef(null);
+                setStoryAttachment(null);
                 setSelectedStoryRef(null);
             } finally {
                 setStoryLoading(false);
@@ -646,6 +664,51 @@ async function initApp() {
                 setStoryChatLoading(false);
             }
         }, []);
+
+        const handleStoryAttach = useCallback(async (sessionRef) => {
+            setStoryAttachLoading(true);
+            setStoryError(null);
+            try {
+                const response = await fetch(buildStoryAttachURL(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider_id: sessionRef?.provider_id || '',
+                        session_id: sessionRef?.session_id || '',
+                    }),
+                });
+                if (!response.ok) {
+                    throw new Error(`Failed to attach story session: ${response.status}`);
+                }
+                setSelectedStoryRef(sessionRef);
+                setStoryManualSelection(true);
+                await fetchStorySessions();
+            } catch (err) {
+                console.error('Error attaching story session:', err);
+                setStoryError(err.message);
+            } finally {
+                setStoryAttachLoading(false);
+            }
+        }, [fetchStorySessions]);
+
+        const handleStoryDetach = useCallback(async () => {
+            setStoryAttachLoading(true);
+            setStoryError(null);
+            try {
+                const response = await fetch(buildStoryDetachURL(), {
+                    method: 'POST',
+                });
+                if (!response.ok) {
+                    throw new Error(`Failed to detach story session: ${response.status}`);
+                }
+                await fetchStorySessions();
+            } catch (err) {
+                console.error('Error detaching story session:', err);
+                setStoryError(err.message);
+            } finally {
+                setStoryAttachLoading(false);
+            }
+        }, [fetchStorySessions]);
 
         const toggleCommentVisibility = useCallback((visibilityKey) => {
             if (!visibilityKey) {
@@ -1118,12 +1181,16 @@ async function initApp() {
                         <${StoryPage}
                             commitContext=${storyCommitContext}
                             sessions=${storySessions}
+                            attachedSession=${storyAttachment}
                             selectedSession=${selectedStoryRef || recommendedStoryRef}
                             chat=${storyChat}
                             loadingSessions=${storyLoading}
                             loadingChat=${storyChatLoading}
+                            attaching=${storyAttachLoading}
                             error=${storyError}
                             onSelectSession=${handleStorySessionSelect}
+                            onAttachSession=${handleStoryAttach}
+                            onDetachSession=${handleStoryDetach}
                         />
                     `}
                     

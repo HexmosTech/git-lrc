@@ -589,6 +589,18 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				}
 				handleReviewStorySession(w, r)
 			})
+			mux.HandleFunc("/api/story/attach", func(w http.ResponseWriter, r *http.Request) {
+				if !allowLocalStoryRequest(w, r) {
+					return
+				}
+				handleReviewStoryAttach(w, r)
+			})
+			mux.HandleFunc("/api/story/detach", func(w http.ResponseWriter, r *http.Request) {
+				if !allowLocalStoryRequest(w, r) {
+					return
+				}
+				handleReviewStoryDetach(w, r)
+			})
 
 			if runningDraftHub != nil {
 				mux.HandleFunc("/api/draft", func(w http.ResponseWriter, r *http.Request) {

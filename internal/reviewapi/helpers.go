@@ -39,6 +39,26 @@ func CurrentTreeHash() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// ResolveRepoRoot returns the absolute path to the repository root.
+func ResolveRepoRoot() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to locate repository root: %w", err)
+	}
+
+	repoRoot := strings.TrimSpace(string(out))
+	if repoRoot == "" {
+		return "", fmt.Errorf("repository root path is empty")
+	}
+
+	if filepath.IsAbs(repoRoot) {
+		return repoRoot, nil
+	}
+
+	return filepath.Abs(repoRoot)
+}
+
 // resolveGitDir returns the absolute path to the repository's .git directory.
 func ResolveGitDir() (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--git-dir")

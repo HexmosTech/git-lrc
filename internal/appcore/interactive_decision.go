@@ -49,6 +49,9 @@ func executeDecision(code int, message string, push bool, ctx decisionExecutionC
 			finalMsg = strings.TrimSpace(ctx.initialMsg)
 		}
 		if ctx.precommit {
+			if err := finalizePendingStoryAttachment(ctx.verbose); err != nil {
+				return err
+			}
 			if ctx.commitMsgPath != "" {
 				if strings.TrimSpace(finalMsg) != "" {
 					if err := persistCommitMessage(ctx.commitMsgPath, finalMsg); err != nil {
@@ -69,6 +72,9 @@ func executeDecision(code int, message string, push bool, ctx decisionExecutionC
 
 			return cli.Exit("", decisionflow.DecisionCommit)
 		}
+		if err := finalizePendingStoryAttachment(ctx.verbose); err != nil {
+			return err
+		}
 		if err := runCommitAndMaybePush(finalMsg, push, ctx.verbose); err != nil {
 			return err
 		}
@@ -76,6 +82,9 @@ func executeDecision(code int, message string, push bool, ctx decisionExecutionC
 	case decisionflow.DecisionSkip:
 		syncedPrintln("\n⏭️  Review skipped, proceeding with commit")
 		if err := ensureAttestation("skipped", ctx.verbose, ctx.attestationWritten); err != nil {
+			return err
+		}
+		if err := finalizePendingStoryAttachment(ctx.verbose); err != nil {
 			return err
 		}
 		if ctx.precommit {
@@ -91,6 +100,9 @@ func executeDecision(code int, message string, push bool, ctx decisionExecutionC
 		syncedPrintln("\n✅ Vouched, proceeding with commit")
 		if err := recordCoverageAndAttest("vouched", ctx.diffContent, ctx.reviewID, ctx.verbose, ctx.attestationWritten); err != nil {
 			return fmt.Errorf("vouch failed: %w", err)
+		}
+		if err := finalizePendingStoryAttachment(ctx.verbose); err != nil {
+			return err
 		}
 		if ctx.precommit {
 			_ = clearCommitMessageFile(ctx.commitMsgPath)
