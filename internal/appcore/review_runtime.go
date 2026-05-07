@@ -353,7 +353,29 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusForbidden || apiErr.StatusCode == http.StatusTooManyRequests) {
 			submissionFailed = true
 			submissionBlockedReason = "Usage quota exceeded"
-			err = nil // Continue to UI
+			var upgradeURL string
+			
+			// Try to parse structured error payload for a better message
+			var payload reviewmodel.APIErrorPayload
+			if jErr := json.Unmarshal([]byte(apiErr.Body), &payload); jErr == nil && payload.Error != "" {
+				submissionBlockedReason = payload.Error
+				upgradeURL = payload.UpgradeURL
+			}
+
+			// If not serving the UI, fail fast with a clear message instead of proceeding to an empty-ID poll
+			if !opts.Serve {
+				fmt.Fprintf(os.Stderr, "\033[31m%s\033[0m\n", submissionBlockedReason)
+				if upgradeURL != "" {
+					fullUpgradeURL := upgradeURL
+					if strings.HasPrefix(upgradeURL, "/") {
+						base := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(config.APIURL, "/"), "/api"), "/api/v1")
+						fullUpgradeURL = base + upgradeURL
+					}
+					fmt.Fprintf(os.Stderr, "\033[33mUpgrade your plan at: \033[0m%s\n", highlightURL(fullUpgradeURL))
+				}
+				return ErrAuthHandled // Silently exit via main.go's error handler
+			}
+			err = nil // Continue to UI to show the blocking message there
 		}
 		if err != nil {
 			return fmt.Errorf("failed to submit review: %w", err)
@@ -724,6 +746,12 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		var pollErr error
 		pollDone := make(chan struct{})
 		go func() {
+			if submissionFailed || reviewID == "" {
+				// Don't poll if submission failed; it leads to unclear 404 errors
+				close(pollDone)
+				return
+			}
+
 			if fakeMode {
 				result, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, stopPoll, fakeBaseFiles, setStatusUI)
 			} else {
