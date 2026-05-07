@@ -28,9 +28,10 @@ type PlanUsageEnvelope struct {
 }
 
 type APIErrorPayload struct {
-	Error     string             `json:"error,omitempty"`
-	ErrorCode string             `json:"error_code,omitempty"`
-	Envelope  *PlanUsageEnvelope `json:"envelope,omitempty"`
+	Error      string             `json:"error,omitempty"`
+	ErrorCode  string             `json:"error_code,omitempty"`
+	Envelope   *PlanUsageEnvelope `json:"envelope,omitempty"`
+	UpgradeURL string             `json:"upgrade_url,omitempty"`
 }
 
 // DiffReviewRequest models the POST payload to /api/v1/diff-review.
