@@ -15,6 +15,7 @@ import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
 import { buildPerformanceSnapshot, getFirstRenderTime, getLoadingActivityMessage, getPerformanceNow, recordFirstRenderTime } from './components/review_performance_state.mjs';
+import { shouldShowAllClear } from './components/review_outcome_state.mjs';
 
 let domReadyStartMs = null;
 
@@ -639,6 +640,8 @@ async function initApp() {
         const summary = reviewData?.summary || '';
         const files = reviewData?.Files || [];
         const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
+        const errorSummary = reviewData?.errorSummary || '';
+        const showAllClear = shouldShowAllClear({ status, totalComments, errorSummary });
         const firstCommentRenderMs = getFirstRenderTime(commentRenderTimes);
         const performanceSnapshot = buildPerformanceSnapshot({
             baselineMs: reviewStartMsRef.current,
@@ -887,11 +890,12 @@ async function initApp() {
                     
                     <${UsageBanner} endpoint="/api/runtime/usage-chip" />
                     
-                    ${summary && summary.trim() && status !== 'in_progress' && html`
+                    ${(showAllClear || (summary && summary.trim())) && status !== 'in_progress' && html`
                         <${Summary} 
                             markdown=${summary}
                             status=${status}
-                            errorSummary=${reviewData?.errorSummary || ''}
+                            errorSummary=${errorSummary}
+                            showAllClear=${showAllClear}
                         />
                     `}
                     

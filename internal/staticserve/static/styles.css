@@ -127,6 +127,7 @@
     --status-success-bg: rgba(76, 175, 80, 0.15);
     --status-success-border: rgba(76, 175, 80, 0.4);
     --status-success-text: #89d185;
+    --status-success-icon-bg: rgba(76, 175, 80, 0.22);
     --status-error-bg: rgba(241, 76, 76, 0.15);
     --status-error-border: rgba(241, 76, 76, 0.4);
     --status-error-text: #f48771;
@@ -799,6 +800,50 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border-subtle);
     border-radius: 4px;
+}
+
+.summary-all-clear {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    background: var(--status-success-bg);
+    border: 1px solid var(--status-success-border);
+    border-radius: 6px;
+}
+
+.summary-all-clear-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--status-success-icon-bg);
+    color: var(--accent-green-light);
+    font-size: 16px;
+    font-weight: 700;
+    flex: 0 0 auto;
+}
+
+.summary-all-clear-copy {
+    min-width: 0;
+}
+
+.summary-all-clear-title {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--accent-green-light);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.summary-all-clear-text {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
 }
 
 .summary h1 { font-size: 16px; font-weight: 600; margin-bottom: 10px; margin-top: 12px; color: var(--text-primary); }

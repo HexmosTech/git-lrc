@@ -93,7 +93,7 @@ function renderSafeMarkdown(container, markdown) {
 export async function createSummary() {
     const { html, useEffect, useRef } = await waitForPreact();
     
-    return function Summary({ markdown, status, errorSummary }) {
+    return function Summary({ markdown, status, errorSummary, showAllClear }) {
         const contentRef = useRef(null);
         
         useEffect(() => {
@@ -104,6 +104,15 @@ export async function createSummary() {
         
         return html`
             <div class="summary" id="summary-content">
+                ${showAllClear && html`
+                    <div class="summary-all-clear" role="status" aria-live="polite">
+                        <div class="summary-all-clear-icon" aria-hidden="true">✓</div>
+                        <div class="summary-all-clear-copy">
+                            <strong class="summary-all-clear-title">Good to go</strong>
+                            <p class="summary-all-clear-text">This review finished without any review comments. No issues were found in the reviewed diff.</p>
+                        </div>
+                    </div>
+                `}
                 ${isError && html`
                     <div style="padding: 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #991b1b; margin-bottom: 16px;">
                         <strong style="display: block; margin-bottom: 8px; font-size: 16px;">⚠️ Error Details:</strong>
@@ -112,7 +121,7 @@ export async function createSummary() {
                         </pre>
                     </div>
                 `}
-                <div ref=${contentRef}></div>
+                <div ref=${contentRef} style=${markdown && markdown.trim() ? '' : 'display: none;'}></div>
             </div>
         `;
     };
