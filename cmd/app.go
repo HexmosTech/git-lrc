@@ -10,6 +10,10 @@ import (
 type Handlers struct {
 	RunReviewSimple       cli.ActionFunc
 	RunReviewDebug        cli.ActionFunc
+	RunStorySources       cli.ActionFunc
+	RunStorySessions      cli.ActionFunc
+	RunStoryInspect       cli.ActionFunc
+	RunStoryExport        cli.ActionFunc
 	RunUninstall          cli.ActionFunc
 	RunHooksInstall       cli.ActionFunc
 	RunHooksUninstall     cli.ActionFunc
@@ -32,6 +36,36 @@ func BuildApp(version, buildTime, gitCommit string, baseFlags, debugFlags []cli.
 		Version: version,
 		Flags:   baseFlags,
 		Commands: []*cli.Command{
+			{
+				Name:  "story",
+				Usage: "Discover and export chat story sources",
+				Subcommands: []*cli.Command{
+					{
+						Name:   "sources",
+						Usage:  "Discover available chat transcript sources",
+						Flags:  storyFlags("pretty", false),
+						Action: h.RunStorySources,
+					},
+					{
+						Name:   "sessions",
+						Usage:  "List discovered chat sessions",
+						Flags:  storyFlags("pretty", false),
+						Action: h.RunStorySessions,
+					},
+					{
+						Name:   "inspect",
+						Usage:  "Inspect one discovered chat session",
+						Flags:  storyFlags("pretty", true),
+						Action: h.RunStoryInspect,
+					},
+					{
+						Name:   "export",
+						Usage:  "Export one discovered chat session to CommonChat JSON",
+						Flags:  storyFlags("json", true),
+						Action: h.RunStoryExport,
+					},
+				},
+			},
 			{
 				Name:  "uninstall",
 				Usage: "Uninstall lrc from your user environment",
@@ -244,4 +278,16 @@ func BuildApp(version, buildTime, gitCommit string, baseFlags, debugFlags []cli.
 		},
 		Action: h.RunReviewSimple,
 	}
+}
+
+func storyFlags(defaultOutput string, includeSessionID bool) []cli.Flag {
+	flags := []cli.Flag{
+		&cli.StringFlag{Name: "provider", Value: "vscode-copilot", Usage: "story provider id"},
+		&cli.StringFlag{Name: "user-data-dir", Usage: "override VS Code user-data root"},
+		&cli.StringFlag{Name: "output", Value: defaultOutput, Usage: "output format: pretty or json"},
+	}
+	if includeSessionID {
+		flags = append(flags, &cli.StringFlag{Name: "session-id", Usage: "target session id"})
+	}
+	return flags
 }

@@ -59,6 +59,10 @@ func main() {
 	app := cmdapp.BuildApp(version, buildTime, gitCommit, baseFlags, debugFlags, cmdapp.Handlers{
 		RunReviewSimple:       runReviewSimple,
 		RunReviewDebug:        runReviewDebug,
+		RunStorySources:       appcore.RunStorySources,
+		RunStorySessions:      appcore.RunStorySessions,
+		RunStoryInspect:       appcore.RunStoryInspect,
+		RunStoryExport:        appcore.RunStoryExport,
 		RunUninstall:          appcore.RunUninstall,
 		RunHooksInstall:       appcore.RunHooksInstall,
 		RunHooksUninstall:     appcore.RunHooksUninstall,

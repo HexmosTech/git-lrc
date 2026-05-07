@@ -16,6 +16,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 - Current diff note: hooks install reliability fix (wrapped not-exist handling and hooksPath normalization) changed only hooks/appcore logic; no network operation surface change.
 - Current diff note: uninstall shell cleanup robustness update (line-ending preservation and constant extraction) is storage-only; no network operation surface change.
 - Current diff note: uninstall storage refinements (TOCTOU-safe remove path and delimiter-aware line splitting) are storage-only; no network operation surface change.
+- Current diff note: story phase-1 VS Code Copilot transcript discovery/export is storage-and-appcore only; no network operation surface change.
 - Primary sensitive data in scope: API keys, bearer tokens, org-context headers, diff content, connector validation payloads, update manifest metadata, binary download stream.
 - Highest-risk operation classes: review submission/polling, setup credential operations, proxy forwarding paths, binary download operations.
 - Primary compensating controls already present: explicit auth header usage by flow, URL normalization helpers, host allowlist check for self-update download sources, timeout-based polling with cancellation support.

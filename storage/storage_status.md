@@ -10,8 +10,8 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 
 - Storage boundary: local file system and local SQLite only (no outbound API calls in this package).
 - Modes represented: file, db.
-- Operation count tracked: 43 operations.
-- Severity distribution: High 10, Medium 13, Low 20.
+- Operation count tracked: 47 operations.
+- Severity distribution: High 10, Medium 15, Low 22.
 - Primary sensitive data in scope: API keys and connector state in config, review metadata in SQLite, hook scripts and metadata, update lock/state metadata.
 - Highest-risk operation classes: credential file read/write, recursive deletion, permission changes, direct SQL execution wrappers.
 - Primary compensating controls already present: atomic writes for critical files, SQLite WAL mode and busy timeout, explicit chmod utility usage, typed wrapper functions and contextual error wrapping.
@@ -19,6 +19,7 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 - Current diff note: hook install reliability fix now handles wrapped file-not-found errors and normalizes hooksPath values before install/uninstall orchestration; no new storage operation APIs added in this increment.
 - Current diff note: uninstall shell source-line cleanup now preserves original LF/CRLF style and replaces string literals with named constants for maintainability.
 - Current diff note: RemoveFileIfExists now avoids stat-then-remove TOCTOU on non-dry-run path, shell-line splitting now respects detected line ending delimiter, and fish managed-marker string is constantized.
+- Current diff note: story phase-1 transcript extraction adds VS Code/Copilot discovery and transcript read wrappers in storage for filesystem-bound chat history discovery.
 
 ## Severity Rubric
 
@@ -92,6 +93,15 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 | RemoveLRCInstallerShellSourceLines | file | Shell rc file content | Remove installer-owned lrc startup snippets | Medium | Medium risk of modifying user shell startup files | Compensated by marker-based line matching constrained to installer signatures; residual risk acceptable | [storage/uninstall_io.go](uninstall_io.go#L43) |
 | RemoveManagedFishLRCConfig | file | fish conf.d file content/path | Remove installer-managed fish integration file | Low | Low risk because removal is gated on managed-file marker content | Compensated by strict marker check before delete; acceptable risk | [storage/uninstall_io.go](uninstall_io.go#L99) |
 | RemoveDirIfEmptyIfExists | file | Directory path | Remove now-empty installer directory without recursion | Low | Low risk of unintended deletion because operation is empty-dir constrained | Compensated by explicit emptiness check before removal; acceptable risk | [storage/uninstall_io.go](uninstall_io.go#L123) |
+
+## Inventory: Story Transcript Discovery And Extraction
+
+| Operation | Mode | Data Handled | Purpose | Severity | Risk Acknowledgement | Compensation Status | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PathExists | file | Candidate local path metadata | Check whether explicit or default VS Code user-data roots exist before discovery | Low | Low risk helper can reveal only local path presence | Compensated by read-only stat semantics and narrow discovery-only use; acceptable risk | [story_vscode_io.go](story_vscode_io.go#L11) |
+| ListVSCodeWorkspaceStorageDirs | file | Workspace storage directory names | Enumerate VS Code workspace storage roots under a user-data directory | Low | Low risk of listing local directory names outside requested scope | Compensated by fixed workspaceStorage boundary under user-data root; acceptable risk | [story_vscode_io.go](story_vscode_io.go#L22) |
+| ListCopilotTranscriptFiles | file | Copilot transcript file paths | Enumerate available GitHub Copilot transcript JSONL files for a workspace | Medium | Medium confidentiality risk because transcript file names and presence reveal chat activity | Compensated by read-only enumeration limited to provider transcript directory; residual risk acceptable | [story_vscode_io.go](story_vscode_io.go#L43) |
+| ReadCopilotTranscriptFile | file | Transcript JSONL bytes containing visible chat content and raw provenance | Load one Copilot transcript for story inspection/export | Medium | Medium confidentiality risk because transcripts may contain prompts, tool calls, and reasoning provenance | Compensated by local read-only path with explicit caller-controlled export flow; residual risk acceptable for phase-1 local extraction | [story_vscode_io.go](story_vscode_io.go#L67) |
 
 ## Inventory: Self-Update State And Lock Files
 
