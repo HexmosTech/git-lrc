@@ -10,7 +10,7 @@ import {
 export async function createCommentNav() {
     const { html, useState, useEffect, useCallback, useRef } = await waitForPreact();
 
-    return function CommentNav({ allComments, commentKey, onNavigate, activeTab, slideshowOpen }) {
+    return function CommentNav({ allComments, commentKey, onNavigate, activeTab, slideshowOpen, embeddedSlideshowActive }) {
         const [currentIdx, setCurrentIdx] = useState(-1);
         const activeCommentIdRef = useRef(null);
         const anchorIndexRef = useRef(0);
@@ -70,7 +70,7 @@ export async function createCommentNav() {
                 if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
                 if (e.target.isContentEditable) return;
                 // Only active on files tab and not while the slideshow is open.
-                if (activeTab !== 'files' || slideshowOpen) return;
+                if (activeTab !== 'files' || slideshowOpen || embeddedSlideshowActive) return;
                 if (allComments.length === 0) return;
 
                 if (e.key === 'j' || e.key === 'J') {
@@ -83,10 +83,10 @@ export async function createCommentNav() {
             };
             document.addEventListener('keydown', handler);
             return () => document.removeEventListener('keydown', handler);
-        }, [activeTab, slideshowOpen, allComments.length, goNext, goPrev]);
+        }, [activeTab, slideshowOpen, embeddedSlideshowActive, allComments.length, goNext, goPrev]);
 
         // Hide when no comments or not on files tab
-        if (allComments.length === 0 || activeTab !== 'files' || slideshowOpen) return null;
+        if (allComments.length === 0 || activeTab !== 'files' || slideshowOpen || embeddedSlideshowActive) return null;
 
         const display = currentIdx >= 0
             ? `${currentIdx + 1} / ${allComments.length}`

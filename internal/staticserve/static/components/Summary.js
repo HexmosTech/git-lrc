@@ -1,5 +1,6 @@
 // Summary component - renders markdown summary
 import { waitForPreact } from './utils.js';
+import { getSummarySlideshow } from './SummarySlideshow/SummarySlideshow.js';
 
 const ALLOWED_TAGS = new Set([
     'A', 'BLOCKQUOTE', 'BR', 'CODE', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
@@ -91,28 +92,82 @@ function renderSafeMarkdown(container, markdown) {
 }
 
 export async function createSummary() {
-    const { html, useEffect, useRef } = await waitForPreact();
+    const { html, useEffect, useRef, useState } = await waitForPreact();
+    const SummarySlideshow = await getSummarySlideshow();
     
-    return function Summary({ markdown, status, errorSummary, showAllClear, showPlayAction, onPlaySlideshow }) {
+    return function Summary({ markdown, status, errorSummary, showAllClear, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {} }) {
         const contentRef = useRef(null);
+        const summaryRootRef = useRef(null);
+        const [summaryViewMode, setSummaryViewMode] = useState('slides');
+        const [isSummaryInView, setIsSummaryInView] = useState(false);
+        const hasSummaryMarkdown = Boolean(markdown && markdown.trim());
         
         useEffect(() => {
             renderSafeMarkdown(contentRef.current, markdown);
         }, [markdown]);
+
+        useEffect(() => {
+            if (hasSummaryMarkdown) {
+                setSummaryViewMode('slides');
+            }
+        }, [markdown, hasSummaryMarkdown]);
+
+        useEffect(() => {
+            const element = summaryRootRef.current;
+            if (!element || typeof IntersectionObserver === 'undefined') {
+                setIsSummaryInView(true);
+                return undefined;
+            }
+
+            const observer = new IntersectionObserver((entries) => {
+                const entry = entries[0];
+                setIsSummaryInView(Boolean(entry?.isIntersecting));
+            }, { threshold: 0.35 });
+
+            observer.observe(element);
+            return () => observer.disconnect();
+        }, []);
+
+        const embeddedShortcutsActive = Boolean(
+            hasSummaryMarkdown
+            && summaryViewMode === 'slides'
+            && !isSlideshowModalOpen
+            && isSummaryInView
+        );
+
+        useEffect(() => {
+            if (typeof onEmbeddedShortcutActiveChange === 'function') {
+                onEmbeddedShortcutActiveChange(embeddedShortcutsActive);
+            }
+            return () => {
+                if (typeof onEmbeddedShortcutActiveChange === 'function') {
+                    onEmbeddedShortcutActiveChange(false);
+                }
+            };
+        }, [embeddedShortcutsActive, onEmbeddedShortcutActiveChange]);
         
         const isError = status === 'failed' || errorSummary;
         
         return html`
-            <div class="summary" id="summary-content">
-                ${showPlayAction && html`
+            <div class="summary" id="summary-content" ref=${summaryRootRef}>
+                ${hasSummaryMarkdown && html`
                     <div class="summary-header-row">
-                        <div class="summary-header-spacer"></div>
+                        <div class="summary-header-left">
+                            <button
+                                class="action-btn summary-mode-toggle"
+                                onClick=${() => setSummaryViewMode(summaryViewMode === 'slides' ? 'text' : 'slides')}
+                                title=${summaryViewMode === 'slides' ? 'Switch to text view' : 'Switch to slides view'}
+                                aria-label=${summaryViewMode === 'slides' ? 'Switch to text view' : 'Switch to slides view'}
+                            >
+                                ${summaryViewMode === 'slides' ? 'Text View' : 'Slides View'}
+                            </button>
+                        </div>
                         <div class="summary-actions">
-                            <button class="action-btn summary-play-btn" onClick=${onPlaySlideshow} title="View summary as presentation slides" aria-label="View summary as presentation slides">
+                            <button class="action-btn summary-play-btn" onClick=${onOpenSlideshowModal} title="Open slides in dialog" aria-label="Open slides in dialog">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6.82v10.36a1 1 0 001.53.848l8.25-5.18a1 1 0 000-1.696L9.53 5.972A1 1 0 008 6.82z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4h12v12M8 20h12M4 8v12h12" />
                                 </svg>
-                                Play Review
+                                Open Slides
                             </button>
                         </div>
                     </div>
@@ -134,7 +189,21 @@ export async function createSummary() {
                         </pre>
                     </div>
                 `}
-                <div ref=${contentRef} style=${markdown && markdown.trim() ? '' : 'display: none;'}></div>
+
+                ${hasSummaryMarkdown && summaryViewMode === 'slides' && html`
+                    <div class="summary-embedded-container">
+                        <${SummarySlideshow}
+                            markdown=${markdown}
+                            mode="embedded"
+                            isShortcutActive=${embeddedShortcutsActive}
+                            initialSlideIndex=${slideIndex}
+                            onSlideIndexChange=${onSlideIndexChange}
+                            className="summary-embedded-slideshow"
+                        />
+                    </div>
+                `}
+
+                <div ref=${contentRef} style=${hasSummaryMarkdown && summaryViewMode === 'text' ? '' : 'display: none;'}></div>
             </div>
         `;
     };

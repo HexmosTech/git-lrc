@@ -810,6 +810,13 @@ body {
     margin-bottom: 12px;
 }
 
+.summary-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
 .summary-header-spacer {
     flex: 1;
     min-width: 0;
@@ -824,6 +831,28 @@ body {
 
 .summary-play-btn {
     white-space: nowrap;
+}
+
+.summary-mode-toggle {
+    white-space: nowrap;
+}
+
+.summary-embedded-container {
+    margin-bottom: 12px;
+}
+
+.summary-slideshow-embedded {
+    width: 100%;
+    outline: none;
+}
+
+.summary-slideshow-embedded:focus-visible {
+    box-shadow: 0 0 0 2px var(--accent-blue);
+    border-radius: 8px;
+}
+
+.summary-slideshow-embedded-panel {
+    width: 100%;
 }
 
 .summary-all-clear {

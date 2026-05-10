@@ -262,6 +262,8 @@ async function initApp() {
         const [copyFeedback, setCopyFeedback] = useState({ status: 'idle', message: '' });
         const [handoffModal, setHandoffModal] = useState({ isOpen: false, type: '', message: '' });
         const [slideShowOpen, setSlideShowOpen] = useState(false);
+        const [embeddedSlideshowActive, setEmbeddedSlideshowActive] = useState(false);
+        const [summarySlideIndex, setSummarySlideIndex] = useState(0);
         const [performanceNowMs, setPerformanceNowMs] = useState(domReadyStartMs || getPerformanceNow());
         const [commentRenderTimes, setCommentRenderTimes] = useState({});
         
@@ -899,8 +901,11 @@ async function initApp() {
                             status=${status}
                             errorSummary=${errorSummary}
                             showAllClear=${showAllClear}
-                            showPlayAction=${summary && summary.trim().length > 0}
-                            onPlaySlideshow=${() => setSlideShowOpen(true)}
+                            isSlideshowModalOpen=${slideShowOpen}
+                            onOpenSlideshowModal=${() => setSlideShowOpen(true)}
+                            onEmbeddedShortcutActiveChange=${setEmbeddedSlideshowActive}
+                            slideIndex=${summarySlideIndex}
+                            onSlideIndexChange=${setSummarySlideIndex}
                         />
                     `}
                     
@@ -1028,11 +1033,15 @@ async function initApp() {
                 onNavigate=${navigateToComment}
                 activeTab=${activeTab}
                 slideshowOpen=${slideShowOpen}
+                embeddedSlideshowActive=${embeddedSlideshowActive}
             />
             
             <${SummarySlideshow}
                 markdown=${summary}
                 isOpen=${slideShowOpen}
+                mode="modal"
+                initialSlideIndex=${summarySlideIndex}
+                onSlideIndexChange=${setSummarySlideIndex}
                 onClose=${() => setSlideShowOpen(false)}
             />
         `;
