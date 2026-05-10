@@ -93,7 +93,7 @@ function renderSafeMarkdown(container, markdown) {
 export async function createSummary() {
     const { html, useEffect, useRef } = await waitForPreact();
     
-    return function Summary({ markdown, status, errorSummary, showAllClear }) {
+    return function Summary({ markdown, status, errorSummary, showAllClear, showPlayAction, onPlaySlideshow }) {
         const contentRef = useRef(null);
         
         useEffect(() => {
@@ -104,6 +104,19 @@ export async function createSummary() {
         
         return html`
             <div class="summary" id="summary-content">
+                ${showPlayAction && html`
+                    <div class="summary-header-row">
+                        <div class="summary-header-spacer"></div>
+                        <div class="summary-actions">
+                            <button class="action-btn summary-play-btn" onClick=${onPlaySlideshow} title="View summary as presentation slides" aria-label="View summary as presentation slides">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6.82v10.36a1 1 0 001.53.848l8.25-5.18a1 1 0 000-1.696L9.53 5.972A1 1 0 008 6.82z" />
+                                </svg>
+                                Play Review
+                            </button>
+                        </div>
+                    </div>
+                `}
                 ${showAllClear && html`
                     <div class="summary-all-clear" role="status" aria-live="polite">
                         <div class="summary-all-clear-icon" aria-hidden="true">✓</div>

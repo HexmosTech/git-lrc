@@ -14,6 +14,7 @@ import { getSeverityFilter } from './components/SeverityFilter.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
+import { getSummarySlideshow } from './components/SummarySlideshow/SummarySlideshow.js';
 import { buildPerformanceSnapshot, getFirstRenderTime, getLoadingActivityMessage, getPerformanceNow, recordFirstRenderTime } from './components/review_performance_state.mjs';
 import { shouldShowAllClear } from './components/review_outcome_state.mjs';
 
@@ -240,6 +241,7 @@ async function initApp() {
     const SeverityFilter = await getSeverityFilter();
     const Toolbar = await getToolbar();
     const CommentNav = await getCommentNav();
+    const SummarySlideshow = await getSummarySlideshow();
     
     function App() {
         // Core data state - fetched from API
@@ -259,6 +261,7 @@ async function initApp() {
         const [hiddenCommentKeys, setHiddenCommentKeys] = useState(new Set());
         const [copyFeedback, setCopyFeedback] = useState({ status: 'idle', message: '' });
         const [handoffModal, setHandoffModal] = useState({ isOpen: false, type: '', message: '' });
+        const [slideShowOpen, setSlideShowOpen] = useState(false);
         const [performanceNowMs, setPerformanceNowMs] = useState(domReadyStartMs || getPerformanceNow());
         const [commentRenderTimes, setCommentRenderTimes] = useState({});
         
@@ -896,6 +899,8 @@ async function initApp() {
                             status=${status}
                             errorSummary=${errorSummary}
                             showAllClear=${showAllClear}
+                            showPlayAction=${summary && summary.trim().length > 0}
+                            onPlaySlideshow=${() => setSlideShowOpen(true)}
                         />
                     `}
                     
@@ -1022,6 +1027,13 @@ async function initApp() {
                 commentKey=${commentKey}
                 onNavigate=${navigateToComment}
                 activeTab=${activeTab}
+                slideshowOpen=${slideShowOpen}
+            />
+            
+            <${SummarySlideshow}
+                markdown=${summary}
+                isOpen=${slideShowOpen}
+                onClose=${() => setSlideShowOpen(false)}
             />
         `;
     }

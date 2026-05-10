@@ -802,6 +802,30 @@ body {
     border-radius: 4px;
 }
 
+.summary-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.summary-header-spacer {
+    flex: 1;
+    min-width: 0;
+}
+
+.summary-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.summary-play-btn {
+    white-space: nowrap;
+}
+
 .summary-all-clear {
     display: flex;
     align-items: flex-start;
