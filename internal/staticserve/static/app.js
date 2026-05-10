@@ -484,7 +484,7 @@ async function initApp() {
         }, [allExpanded, reviewData?.Files]);
         
         // Handle sidebar file click
-        const handleFileClick = useCallback((fileId) => {
+        const handleFileClick = useCallback((fileId, lineNumber = null) => {
             // Always switch to files tab when clicking a file in sidebar
             setActiveTab('files');
             setActiveFileId(fileId);
@@ -501,6 +501,24 @@ async function initApp() {
                     const mainContent = document.querySelector('.main-content');
                     const header = document.querySelector('.header');
                     const headerHeight = header ? header.offsetHeight : 60;
+
+                    const parsedLine = Number(lineNumber);
+                    const hasTargetLine = Number.isFinite(parsedLine) && parsedLine > 0;
+                    const lineSelector = hasTargetLine
+                        ? `.diff-line[data-new-line="${parsedLine}"] , .diff-line[data-old-line="${parsedLine}"]`
+                        : '';
+                    const targetLineEl = hasTargetLine ? fileEl.querySelector(lineSelector) : null;
+
+                    if (targetLineEl && mainContent) {
+                        const lineRect = targetLineEl.getBoundingClientRect();
+                        const mainContentRect = mainContent.getBoundingClientRect();
+                        const scrollTarget = mainContent.scrollTop + lineRect.top - mainContentRect.top - headerHeight - 14;
+                        mainContent.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+                        targetLineEl.classList.add('line-highlight');
+                        setTimeout(() => targetLineEl.classList.remove('line-highlight'), 1800);
+                        return;
+                    }
+
                     const fileRect = fileEl.getBoundingClientRect();
                     const mainContentRect = mainContent.getBoundingClientRect();
                     const scrollTarget = mainContent.scrollTop + fileRect.top - mainContentRect.top - headerHeight - 10;
@@ -509,14 +527,57 @@ async function initApp() {
             }, 100);
         }, []);
 
-        const handleOpenFileFromSlide = useCallback((filePath) => {
+        const resolveSlideFileId = useCallback((filePath) => {
+            const normalized = (filePath || '').trim();
+            if (!normalized) {
+                return null;
+            }
+
+            const reviewFiles = reviewData?.Files || [];
+            if (!reviewFiles.length) {
+                return null;
+            }
+
+            const exact = reviewFiles.find(file => (file?.FilePath || '') === normalized);
+            if (exact) {
+                return exact.ID || filePathToId(exact.FilePath || normalized);
+            }
+
+            const normalizedLower = normalized.toLowerCase();
+            const suffixMatches = reviewFiles.filter(file => {
+                const candidate = (file?.FilePath || '').toLowerCase();
+                if (!candidate) {
+                    return false;
+                }
+                return candidate === normalizedLower || candidate.endsWith(`/${normalizedLower}`);
+            });
+
+            if (suffixMatches.length !== 1) {
+                return null;
+            }
+
+            const matched = suffixMatches[0];
+            return matched.ID || filePathToId(matched.FilePath || normalized);
+        }, [reviewData]);
+
+        const canOpenFileFromSlide = useCallback((filePath) => {
+            return Boolean(resolveSlideFileId(filePath));
+        }, [resolveSlideFileId]);
+
+        const handleOpenFileFromSlide = useCallback((filePath, lineNumber = null) => {
             if (!filePath) {
-                return;
+                return false;
+            }
+
+            const fileId = resolveSlideFileId(filePath);
+            if (!fileId) {
+                return false;
             }
 
             setSlideShowOpen(false);
-            handleFileClick(filePathToId(filePath));
-        }, [handleFileClick]);
+            handleFileClick(fileId, lineNumber);
+            return true;
+        }, [handleFileClick, resolveSlideFileId]);
         
         // Navigate to comment
         const navigateToComment = useCallback((commentId, fileId) => {
@@ -916,6 +977,7 @@ async function initApp() {
                             slideIndex=${summarySlideIndex}
                             onSlideIndexChange=${setSummarySlideIndex}
                             onOpenFileFromSlide=${handleOpenFileFromSlide}
+                            canOpenFileFromSlide=${canOpenFileFromSlide}
                         />
                     `}
                     
@@ -1053,6 +1115,7 @@ async function initApp() {
                 initialSlideIndex=${summarySlideIndex}
                 onSlideIndexChange=${setSummarySlideIndex}
                 onOpenFileFromSlide=${handleOpenFileFromSlide}
+                canOpenFileFromSlide=${canOpenFileFromSlide}
                 onClose=${() => setSlideShowOpen(false)}
             />
         `;

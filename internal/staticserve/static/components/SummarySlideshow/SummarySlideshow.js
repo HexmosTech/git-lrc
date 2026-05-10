@@ -152,7 +152,7 @@ function resolveSlideTypography(slide) {
 export async function createSummarySlideshow() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
 
-    return function SummarySlideshow({ markdown, isOpen = true, onClose = () => {}, mode = 'modal', isShortcutActive = false, className = '', initialSlideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {} }) {
+    return function SummarySlideshow({ markdown, isOpen = true, onClose = () => {}, mode = 'modal', isShortcutActive = false, className = '', initialSlideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false }) {
         const isModal = mode === 'modal';
         const isVisible = isModal ? isOpen : true;
         const [slides, setSlides] = useState([]);
@@ -426,7 +426,11 @@ export async function createSummarySlideshow() {
             if (!meta || !meta.filePath || typeof onOpenFileFromSlide !== 'function') {
                 return;
             }
-            onOpenFileFromSlide(meta.filePath, meta.line || null);
+
+            const opened = onOpenFileFromSlide(meta.filePath, meta.line || null);
+            if (!opened) {
+                setLiveMessage('File path was not found in the current diff.');
+            }
         };
 
         if (!isVisible || !slides.length) {
@@ -550,20 +554,37 @@ export async function createSummarySlideshow() {
                             : slide.kind === 'file-point' && slide.meta
                                 ? html`
                                     <div class="summary-file-point" style="max-width: ${typography.maxWidth}; width: 100%;">
-                                        <button
-                                            class="summary-file-chip"
-                                            title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
-                                            onClick=${() => handleOpenFile(slide.meta)}
-                                        >
-                                            ${slide.meta.pathShort}
-                                        </button>
-                                        <div class="summary-file-dir" title=${slide.meta.filePath}>${slide.meta.pathDir}</div>
+                                        ${slide.title && html`
+                                            <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
+                                                ${slide.title}
+                                            </div>
+                                        `}
+                                        ${canOpenFileFromSlide(slide.meta.filePath)
+                                            ? html`
+                                                <button
+                                                    class="summary-file-chip summary-file-chip-interactive summary-path-chip"
+                                                    data-tooltip="Open in diff: ${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
+                                                    title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
+                                                    onClick=${() => handleOpenFile(slide.meta)}
+                                                >
+                                                    ${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}
+                                                </button>
+                                            `
+                                            : html`
+                                                <code class="summary-file-inline-code">${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}</code>
+                                            `
+                                        }
                                         <div class="summary-file-description">${slide.content}</div>
                                     </div>
                                 `
                                 : slide.kind === 'label-point' && slide.meta
                                     ? html`
                                         <div class="summary-label-point" style="max-width: ${typography.maxWidth}; width: 100%;">
+                                            ${slide.title && html`
+                                                <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
+                                                    ${slide.title}
+                                                </div>
+                                            `}
                                             <div class="summary-label-chip">${slide.meta.label}</div>
                                             <div class="summary-label-body">${slide.content}</div>
                                         </div>

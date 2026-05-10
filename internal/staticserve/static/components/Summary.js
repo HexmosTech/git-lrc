@@ -66,7 +66,68 @@ function sanitizeNode(node) {
     return target;
 }
 
-function renderSafeMarkdown(container, markdown) {
+function parseFullPathToken(pathToken) {
+    const trimmed = (pathToken || '').trim();
+    const match = trimmed.match(/^(.*?)(?::(\d+))?$/);
+    if (!match) {
+        return null;
+    }
+
+    const filePath = (match[1] || '').trim();
+    if (!filePath || !filePath.includes('/') || !/\.[A-Za-z0-9]+$/.test(filePath)) {
+        return null;
+    }
+
+    const line = match[2] ? Number(match[2]) : null;
+    return {
+        filePath,
+        line,
+        display: line ? `${filePath}:${line}` : filePath
+    };
+}
+
+function enhanceTextWithFileChips(container, handlers = {}) {
+    if (!container) {
+        return;
+    }
+
+    const onOpenFileFromSlide = handlers.onOpenFileFromSlide;
+    const canOpenFileFromSlide = handlers.canOpenFileFromSlide;
+
+    const codeNodes = Array.from(container.querySelectorAll('code'));
+    codeNodes.forEach((node) => {
+        if (node.closest('pre')) {
+            return;
+        }
+
+        const parsed = parseFullPathToken(node.textContent || '');
+        if (!parsed) {
+            return;
+        }
+
+        if (typeof canOpenFileFromSlide !== 'function' || !canOpenFileFromSlide(parsed.filePath)) {
+            return;
+        }
+
+        const chip = document.createElement('button');
+        chip.setAttribute('type', 'button');
+        chip.setAttribute('class', 'summary-file-chip summary-file-chip-interactive summary-inline-file-chip summary-path-chip');
+        chip.setAttribute('data-tooltip', `Open in diff: ${parsed.display}`);
+        chip.setAttribute('title', parsed.display);
+        chip.textContent = parsed.display;
+        chip.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof onOpenFileFromSlide === 'function') {
+                onOpenFileFromSlide(parsed.filePath, parsed.line || null);
+            }
+        });
+
+        node.replaceWith(chip);
+    });
+}
+
+function renderSafeMarkdown(container, markdown, handlers = {}) {
     if (!container) {
         return;
     }
@@ -89,13 +150,14 @@ function renderSafeMarkdown(container, markdown) {
     }
 
     container.replaceChildren(fragment);
+    enhanceTextWithFileChips(container, handlers);
 }
 
 export async function createSummary() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
     const SummarySlideshow = await getSummarySlideshow();
     
-    return function Summary({ markdown, status, errorSummary, showAllClear, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {} }) {
+    return function Summary({ markdown, status, errorSummary, showAllClear, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false }) {
         const contentRef = useRef(null);
         const summaryRootRef = useRef(null);
         const [summaryViewMode, setSummaryViewMode] = useState('slides');
@@ -103,8 +165,8 @@ export async function createSummary() {
         const hasSummaryMarkdown = Boolean(markdown && markdown.trim());
         
         useEffect(() => {
-            renderSafeMarkdown(contentRef.current, markdown);
-        }, [markdown]);
+            renderSafeMarkdown(contentRef.current, markdown, { onOpenFileFromSlide, canOpenFileFromSlide });
+        }, [markdown, onOpenFileFromSlide, canOpenFileFromSlide]);
 
         useEffect(() => {
             if (hasSummaryMarkdown) {
@@ -214,6 +276,7 @@ export async function createSummary() {
                             initialSlideIndex=${slideIndex}
                             onSlideIndexChange=${onSlideIndexChange}
                             onOpenFileFromSlide=${onOpenFileFromSlide}
+                            canOpenFileFromSlide=${canOpenFileFromSlide}
                             className="summary-embedded-slideshow"
                         />
                     </div>

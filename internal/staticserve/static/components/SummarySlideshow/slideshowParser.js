@@ -5,7 +5,6 @@
 
 const MIN_SLIDE_SECONDS = 5;
 const MAX_SLIDE_SECONDS = 12;
-const SHORT_LIST_CHUNK_SIZE = 2;
 
 const SLIDE_COLORS = [
   {
@@ -276,22 +275,6 @@ function splitParagraphNode(paragraphNode) {
   return fragments.length ? fragments : [serializeNode(paragraphNode)];
 }
 
-function chunkListItems(items) {
-  if (items.length <= SHORT_LIST_CHUNK_SIZE) {
-    return [items];
-  }
-
-  const chunks = [];
-  let index = 0;
-  while (index < items.length) {
-    const remaining = items.length - index;
-    const chunkSize = remaining === 3 ? 1 : SHORT_LIST_CHUNK_SIZE;
-    chunks.push(items.slice(index, index + chunkSize));
-    index += chunkSize;
-  }
-  return chunks;
-}
-
 function cloneListChunk(listNode, items) {
   const clone = listNode.cloneNode(false);
   items.forEach(item => clone.appendChild(item.cloneNode(true)));
@@ -440,26 +423,16 @@ export function parseMarkdownToSlides(markdown) {
 
     if (tagName === 'UL' || tagName === 'OL') {
       const items = Array.from(element.children).filter(child => child.tagName === 'LI');
-      const genericRun = [];
-
-      const flushGenericRun = () => {
-        if (!genericRun.length) {
-          return;
-        }
-        chunkListItems(genericRun).forEach(chunk => {
-          slides.push(createSlide(cloneListChunk(element, chunk), nextColor(), { title: sectionTitle, kind: 'list' }));
-        });
-        genericRun.length = 0;
-      };
-
+      // One list point should map to one slide for readability and navigation clarity.
       items.forEach((item) => {
         const structured = parseStructuredListItem(item);
         if (!structured) {
-          genericRun.push(item);
+          slides.push(createSlide(cloneListChunk(element, [item]), nextColor(), {
+            title: sectionTitle,
+            kind: 'list'
+          }));
           return;
         }
-
-        flushGenericRun();
 
         if (structured.kind === 'file-point') {
           slides.push(createSlide(structured.description, nextColor(), {
@@ -476,8 +449,6 @@ export function parseMarkdownToSlides(markdown) {
           meta: structured
         }));
       });
-
-      flushGenericRun();
       return;
     }
 

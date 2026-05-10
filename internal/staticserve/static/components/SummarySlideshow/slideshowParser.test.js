@@ -33,14 +33,14 @@ function testListChunking() {
 - Item five`;
 
   const slides = parseMarkdownToSlides(markdown);
-  console.assert(slides.length === 3, `Expected 3 list slides, got ${slides.length}`);
-  console.assert(slides.every(slide => slide.kind === 'list'), 'List chunks should remain list slides');
-  console.assert(slides[0].title === 'Technical Highlights', 'Chunked slides should retain section title');
-  console.assert(slides[0].content.includes('<strong>bold</strong>'), 'Inline formatting should survive list chunking');
-  console.assert(slides[0].content.includes('Nested note one'), 'Nested list items should be preserved');
-  console.assert(slides[1].content.includes('Item three'), 'Second chunk should contain third item');
-  console.assert(slides[2].content.includes('Item five'), 'Last chunk should contain final item');
-  console.log('✓ List chunking test passed');
+  console.assert(slides.length === 5, `Expected 5 list slides (one per item), got ${slides.length}`);
+  console.assert(slides.every(slide => slide.kind === 'list'), 'Generic list items should remain list slides');
+  console.assert(slides[0].title === 'Technical Highlights', 'List slides should retain section title');
+  console.assert(slides[0].content.includes('<strong>bold</strong>'), 'Inline formatting should survive list splitting');
+  console.assert(slides[1].content.includes('Nested note one'), 'Nested list items should stay with their parent item');
+  console.assert(slides[2].content.includes('Item three'), 'Third item should be on its own slide');
+  console.assert(slides[4].content.includes('Item five'), 'Last item should be on its own slide');
+  console.log('✓ List one-item-per-slide test passed');
 }
 
 function testStructuredFilePoints() {
@@ -57,6 +57,20 @@ function testStructuredFilePoints() {
   console.log('✓ Structured file-point test passed');
 }
 
+function testBareFilenameStaysListItem() {
+  const markdown = `## Technical Highlights
+
+- slideshowParser.js: Adds one-point-per-slide list behavior.
+- SummarySlideshow.js: Improves interactive file-path rendering.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides.length === 2, `Expected 2 list slides for bare filenames, got ${slides.length}`);
+  console.assert(slides.every(slide => slide.kind === 'list'), 'Bare filename bullets should stay regular list slides');
+  console.assert(slides[0].content.includes('slideshowParser.js'), 'First bare filename should remain in content');
+  console.assert(slides[1].content.includes('SummarySlideshow.js'), 'Second bare filename should remain in content');
+  console.log('✓ Bare filename list fallback test passed');
+}
+
 function testStructuredLabelPoints() {
   const markdown = `## Impact
 
@@ -69,6 +83,23 @@ function testStructuredLabelPoints() {
   console.assert(slides[0].meta?.label.toLowerCase() === 'functionality', 'First label-point should preserve label');
   console.assert(slides[1].content.includes('Long paths'), 'Label-point should preserve body text');
   console.log('✓ Structured label-point test passed');
+}
+
+function testMixedListStaysSinglePointPerSlide() {
+  const markdown = `## Mixed List
+
+- Functionality: Open files directly from slides.
+- Item without structure.
+- internal/staticserve/static/styles.css: Refines point-slide styling.
+- Another plain item.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides.length === 4, `Expected 4 slides for 4 list points, got ${slides.length}`);
+  console.assert(slides[0].kind === 'label-point', 'First point should be a label-point slide');
+  console.assert(slides[1].kind === 'list', 'Second point should remain a generic list slide');
+  console.assert(slides[2].kind === 'file-point', 'Third point should be a file-point slide');
+  console.assert(slides[3].kind === 'list', 'Fourth point should remain a generic list slide');
+  console.log('✓ Mixed list one-item-per-slide test passed');
 }
 
 function testCodeBlocksStayWhole() {
@@ -181,7 +212,9 @@ export function runAllTests() {
     testIntroAndSectionSlides();
     testListChunking();
     testStructuredFilePoints();
+    testBareFilenameStaysListItem();
     testStructuredLabelPoints();
+    testMixedListStaysSinglePointPerSlide();
     testCodeBlocksStayWhole();
     testAbbreviationsAndDecimals();
     testUrlsAndInlineCode();
