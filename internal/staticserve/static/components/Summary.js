@@ -153,14 +153,29 @@ export async function createSummary() {
                 ${hasSummaryMarkdown && html`
                     <div class="summary-header-row">
                         <div class="summary-header-left">
-                            <button
-                                class="action-btn summary-mode-toggle"
-                                onClick=${() => setSummaryViewMode(summaryViewMode === 'slides' ? 'text' : 'slides')}
-                                title=${summaryViewMode === 'slides' ? 'Switch to text view' : 'Switch to slides view'}
-                                aria-label=${summaryViewMode === 'slides' ? 'Switch to text view' : 'Switch to slides view'}
-                            >
-                                ${summaryViewMode === 'slides' ? 'Text View' : 'Slides View'}
-                            </button>
+                            <div class="summary-view-toggle" role="group" aria-label="Summary display mode">
+                                <button
+                                    class="action-btn summary-view-btn ${summaryViewMode === 'slides' ? 'active' : ''}"
+                                    onClick=${() => setSummaryViewMode('slides')}
+                                    title="Show slides view"
+                                    aria-label="Show slides view"
+                                    aria-pressed=${summaryViewMode === 'slides'}
+                                >
+                                    Slides
+                                </button>
+                                <button
+                                    class="action-btn summary-view-btn ${summaryViewMode === 'text' ? 'active' : ''}"
+                                    onClick=${() => setSummaryViewMode('text')}
+                                    title="Show text view"
+                                    aria-label="Show text view"
+                                    aria-pressed=${summaryViewMode === 'text'}
+                                >
+                                    Text
+                                </button>
+                            </div>
+                        </div>
+                        <div class="summary-header-center" aria-hidden="true">
+                            Summary
                         </div>
                         <div class="summary-actions">
                             <button class="action-btn summary-play-btn" onClick=${onOpenSlideshowModal} title="Open slides in dialog" aria-label="Open slides in dialog">

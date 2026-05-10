@@ -110,13 +110,39 @@ function formatActualElapsed(startTime) {
     if (!startTime) {
         return '—';
     }
-    const seconds = Math.round((Date.now() - startTime) / 1000);
+    const seconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
     if (seconds < 60) {
         return `${seconds}s`;
     }
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return secs ? `${minutes}m ${secs}s` : `${minutes}m`;
+}
+
+function stripHtmlTags(input) {
+    return (input || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function resolveSlideTypography(slide) {
+    const kind = slide?.kind || 'detail';
+    const length = stripHtmlTags(slide?.content || '').length;
+
+    if (kind === 'sentence') {
+        if (length < 120) {
+            return { fontSize: 'clamp(34px, 4.1vw, 52px)', lineHeight: '1.3', maxWidth: '28ch' };
+        }
+        return { fontSize: 'clamp(30px, 3.6vw, 44px)', lineHeight: '1.34', maxWidth: '34ch' };
+    }
+
+    if (kind === 'list') {
+        return { fontSize: 'clamp(20px, 2.2vw, 27px)', lineHeight: '1.7', maxWidth: '64ch' };
+    }
+
+    if (kind === 'intro') {
+        return { fontSize: 'clamp(36px, 4.5vw, 56px)', lineHeight: '1.14', maxWidth: '20ch' };
+    }
+
+    return { fontSize: 'clamp(18px, 1.8vw, 24px)', lineHeight: '1.72', maxWidth: '72ch' };
 }
 
 export async function createSummarySlideshow() {
@@ -174,7 +200,7 @@ export async function createSummarySlideshow() {
             setCopied(false);
             setLiveMessage('');
             sessionStartRef.current = Date.now();
-        }, [markdown, isVisible, initialSlideIndex]);
+        }, [markdown, isVisible]);
 
         useEffect(() => {
             if (!slides.length) {
@@ -393,14 +419,16 @@ export async function createSummarySlideshow() {
         }
 
         const isIntro = !isAppreciation && slide?.kind === 'intro';
-        const panelBg = isAppreciation ? '#f8fafc' : (slide ? slide.color.surface : '#f8fafc');
+        const panelBg = isAppreciation ? '#1f2430' : (slide ? slide.color.surface : '#1f2430');
+        const typography = slide ? resolveSlideTypography(slide) : null;
 
         const panel = html`
             ${isHelpShown && html`
                 <div
+                    class="summary-slideshow-help"
                     style="
                         position: absolute; inset: auto auto 32px 32px;
-                        max-width: 360px; padding: 16px 18px;
+                        max-width: 360px; padding: 14px 16px;
                         border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.18);
                         background: rgba(14, 23, 42, 0.96); color: var(--text-secondary);
                         box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
@@ -410,7 +438,7 @@ export async function createSummarySlideshow() {
                 >
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px;">
                         <strong style="color: var(--text-primary); font-size: 13px;">Keyboard shortcuts</strong>
-                        <button class="action-btn" onClick=${() => setIsHelpShown(false)} title="Close keyboard help" aria-label="Close keyboard help">
+                        <button class="action-btn summary-slide-btn" onClick=${() => setIsHelpShown(false)} title="Close keyboard help" aria-label="Close keyboard help">
                             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -428,26 +456,26 @@ export async function createSummarySlideshow() {
             `}
 
             <div
-                class="${isModal ? '' : 'summary-slideshow-embedded-panel'}"
+                class="summary-slideshow-surface ${isModal ? '' : 'summary-slideshow-embedded-panel'}"
                 style="
                     width: ${isModal ? 'min(960px, calc(100vw - 56px))' : '100%'};
                     min-height: ${isModal ? 'min(640px, calc(100vh - 56px))' : '380px'};
                     max-height: ${isModal ? 'calc(100vh - 56px)' : '700px'};
                     display: flex; flex-direction: column;
-                    border-radius: 12px; overflow: hidden;
+                    border-radius: 14px; overflow: hidden;
                     background: ${panelBg};
                     transition: background 220ms ease;
-                    box-shadow: ${isModal ? '0 24px 64px rgba(15, 23, 42, 0.22)' : 'inset 0 0 0 1px rgba(0,0,0,0.06)'};
+                    box-shadow: ${isModal ? '0 28px 72px rgba(0, 0, 0, 0.4)' : 'inset 0 0 0 1px rgba(0,0,0,0.06)'};
                     position: relative;
                 "
                 onClick=${(event) => event.stopPropagation()}
             >
                 ${isModal && html`
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; background: rgba(255,255,255,0.72); border-bottom: 1px solid rgba(0,0,0,0.07); flex-shrink: 0;">
-                        <div style="font-size: 12px; color: #64748b; font-weight: 600; letter-spacing: 0.01em;">
+                    <div class="summary-slideshow-chrome" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; flex-shrink: 0;">
+                        <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.01em;">
                             Review slideshow
                         </div>
-                        <button class="action-btn" onClick=${handleClose} title="Close slideshow (Esc)" aria-label="Close slideshow">
+                        <button class="action-btn summary-slide-btn" onClick=${handleClose} title="Close slideshow (Esc)" aria-label="Close slideshow">
                             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -455,24 +483,24 @@ export async function createSummarySlideshow() {
                     </div>
                 `}
 
-                <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; ${isIntro || isAppreciation ? 'align-items: center; justify-content: center;' : 'padding: 28px 32px;'}">
+                <div class="summary-slideshow-body" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; ${isIntro || isAppreciation ? 'align-items: center; justify-content: center;' : 'padding: 28px 32px;'}">
                     ${isAppreciation ? html`
-                        <div style="text-align: center; padding: 40px 32px; max-width: 520px;">
-                            <div style="font-size: 32px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; margin-bottom: 12px;">
+                        <div class="summary-slideshow-complete" style="text-align: center; padding: 40px 32px; max-width: 520px;">
+                            <div style="font-size: 34px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; margin-bottom: 12px;">
                                 Review complete
                             </div>
-                            <div style="font-size: 16px; color: #475569; margin-bottom: 36px; line-height: 1.6;">
+                            <div style="font-size: 18px; color: var(--text-secondary); margin-bottom: 30px; line-height: 1.6;">
                                 You finished all ${slides.length} slides.
                             </div>
                             <div style="margin-bottom: 6px;">
-                                <span style="font-size: 28px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em;">${formatActualElapsed(sessionStartRef.current)}</span>
-                                <span style="font-size: 14px; color: #64748b; margin-left: 8px;">actual</span>
+                                <span style="font-size: 30px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">${formatActualElapsed(sessionStartRef.current)}</span>
+                                <span style="font-size: 15px; color: var(--text-muted); margin-left: 8px;">actual</span>
                             </div>
-                            <div style="font-size: 13px; color: #94a3b8; margin-bottom: 40px;">
+                            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 40px;">
                                 Planned: ${formatElapsed(slides)}
                             </div>
                             ${isModal && html`
-                                <button class="action-btn" onClick=${handleClose} title="Close and return to review">
+                                <button class="action-btn summary-slide-btn" onClick=${handleClose} title="Close and return to review">
                                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7" />
                                     </svg>
@@ -483,50 +511,51 @@ export async function createSummarySlideshow() {
                     ` : html`
                         ${isIntro
                             ? html`
-                                <div style="text-align: center; padding: 40px 28px; max-width: 640px;">
-                                    <h1 style="margin: 0; font-size: clamp(30px, 4vw, 48px); line-height: 1.16; color: ${slide.color.title}; font-weight: 700; letter-spacing: -0.03em;">
+                                <div class="summary-slideshow-intro" style="text-align: center; padding: 42px 28px; max-width: min(760px, 100%);">
+                                    <h1 style="margin: 0; font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; color: ${slide.color.title}; font-weight: 760; letter-spacing: -0.034em; max-width: ${typography.maxWidth}; margin-inline: auto; text-wrap: balance;">
                                         ${slide.title}
                                     </h1>
                                 </div>
                             `
                             : html`
                                 ${slide.title && html`
-                                    <div style="margin-bottom: 16px; font-size: 12px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
+                                    <div style="margin-bottom: 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
                                         ${slide.title}
                                     </div>
                                 `}
                                 <div
                                     ref=${contentRef}
+                                    class="summary-slideshow-content"
                                     style="
                                         color: ${slide.color.text};
-                                        font-size: ${slide.kind === 'sentence' ? '28px' : slide.kind === 'list' ? '20px' : '18px'};
-                                        line-height: ${slide.kind === 'sentence' ? '1.38' : '1.68'};
+                                        font-size: ${typography.fontSize};
+                                        line-height: ${typography.lineHeight};
                                         letter-spacing: -0.01em;
                                         overflow-wrap: break-word;
                                         word-break: break-word;
-                                        max-width: 100%;
+                                        max-width: ${typography.maxWidth};
                                     "
                                 ></div>
                             `}
                     `}
                 </div>
 
-                <div style="padding: 10px 16px 12px 16px; border-top: 1px solid rgba(0,0,0,0.07); background: rgba(255,255,255,0.72); flex-shrink: 0;">
+                <div class="summary-slideshow-controls" style="padding: 10px 16px 12px 16px; flex-shrink: 0;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <button class="action-btn" onClick=${prevSlide} title="Previous slide (H / K / Left Arrow)" aria-label="Previous slide" disabled=${currentSlide === 0 && !isAppreciation}>
+                            <button class="action-btn summary-slide-btn" onClick=${prevSlide} title="Previous slide (H / K / Left Arrow)" aria-label="Previous slide" disabled=${currentSlide === 0 && !isAppreciation}>
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                                 </svg>
                                 Prev
                             </button>
-                            <button class="action-btn" onClick=${nextSlide} title="Next slide (J / L / Right Arrow / Space)" aria-label="Next slide" disabled=${isAppreciation}>
+                            <button class="action-btn summary-slide-btn" onClick=${nextSlide} title="Next slide (J / L / Right Arrow / Space)" aria-label="Next slide" disabled=${isAppreciation}>
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                                 </svg>
                                 Next
                             </button>
-                            <button class="action-btn ${isAutoPlay ? 'active' : ''}" onClick=${toggleAutoPlay} title="Toggle auto-play (A)" aria-label="Toggle auto-play">
+                            <button class="action-btn summary-slide-btn ${isAutoPlay ? 'active' : ''}" onClick=${toggleAutoPlay} title="Toggle auto-play (A)" aria-label="Toggle auto-play">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     ${isAutoPlay
                                         ? html`<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6" />`
@@ -536,12 +565,12 @@ export async function createSummarySlideshow() {
                             </button>
                         </div>
 
-                        <div style="font-size: 12px; color: #64748b; min-width: 0; text-align: center;">
+                        <div class="summary-slideshow-counter" style="font-size: 13px; min-width: 0; text-align: center;">
                             ${isAppreciation ? `${slides.length}/${slides.length} \u00b7 complete` : `${currentSlide + 1}/${slides.length} \u00b7 ${formatRemainingTime(slides, currentSlide)} left`}
                         </div>
 
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <button class="action-btn ${copied ? 'copied' : ''}" onClick=${handleCopy} title="Copy current slide (C)" aria-label="Copy current slide">
+                            <button class="action-btn summary-slide-btn ${copied ? 'copied' : ''}" onClick=${handleCopy} title="Copy current slide (C)" aria-label="Copy current slide">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     ${copied
                                         ? html`<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />`
@@ -549,7 +578,7 @@ export async function createSummarySlideshow() {
                                 </svg>
                                 ${copied ? 'Copied!' : 'Copy'}
                             </button>
-                            <button class="action-btn" onClick=${() => setIsHelpShown(true)} title="Show keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">
+                            <button class="action-btn summary-slide-btn" onClick=${() => setIsHelpShown(true)} title="Show keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 1.918-2 3.522-2 2.071 0 3.75 1.343 3.75 3 0 1.268-.983 2.352-2.37 2.79-.488.154-.88.56-.88 1.012V15" />
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01" />
@@ -560,11 +589,11 @@ export async function createSummarySlideshow() {
                         </div>
                     </div>
 
-                    <div style="height: 3px; border-radius: 999px; overflow: hidden; background: rgba(148, 163, 184, 0.2);">
+                    <div style="height: 4px; border-radius: 999px; overflow: hidden; background: rgba(148, 163, 184, 0.2);">
                         <div style="height: 100%; width: ${progressValue}%; background: ${slide ? slide.color.accent : '#3b82f6'}; transition: width 180ms ease; border-radius: 999px;"></div>
                     </div>
 
-                    <div role="status" aria-live="polite" style="min-height: 16px; margin-top: 6px; font-size: 11px; color: #94a3b8;">
+                    <div role="status" aria-live="polite" class="summary-slideshow-status" style="min-height: 16px; margin-top: 6px; font-size: 12px;">
                         ${liveMessage || (isAutoPlay && !isAppreciation ? `Auto-play \u00b7 next in ${Math.max(1, Math.ceil(autoPlayRemainingMs / 1000))}s` : '')}
                     </div>
                 </div>

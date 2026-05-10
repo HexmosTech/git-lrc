@@ -9,38 +9,38 @@ const SHORT_LIST_CHUNK_SIZE = 2;
 
 const SLIDE_COLORS = [
   {
-    surface: '#eff6ff',
-    accent: '#2563eb',
-    title: '#0f172a',
-    text: '#1e293b',
-    name: 'sky'
+    surface: '#1f2733',
+    accent: '#4f8cff',
+    title: '#eaf1ff',
+    text: '#d7e2ff',
+    name: 'blue'
   },
   {
-    surface: '#ecfdf5',
-    accent: '#059669',
-    title: '#052e16',
-    text: '#14532d',
+    surface: '#1f2c29',
+    accent: '#38b28a',
+    title: '#e8fff7',
+    text: '#c8f5e8',
     name: 'mint'
   },
   {
-    surface: '#f5f3ff',
-    accent: '#7c3aed',
-    title: '#1e1b4b',
-    text: '#312e81',
-    name: 'lavender'
+    surface: '#26243a',
+    accent: '#9a7bff',
+    title: '#f0ecff',
+    text: '#ddd4ff',
+    name: 'violet'
   },
   {
-    surface: '#fff1f2',
-    accent: '#e11d48',
-    title: '#4c0519',
-    text: '#9f1239',
+    surface: '#33222c',
+    accent: '#ff6b94',
+    title: '#ffeaf2',
+    text: '#ffd1e2',
     name: 'rose'
   },
   {
-    surface: '#fffbeb',
-    accent: '#d97706',
-    title: '#422006',
-    text: '#92400e',
+    surface: '#30271b',
+    accent: '#f5a524',
+    title: '#fff4de',
+    text: '#ffe2b0',
     name: 'amber'
   }
 ];
