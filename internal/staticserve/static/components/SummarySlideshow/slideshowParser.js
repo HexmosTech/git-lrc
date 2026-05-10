@@ -298,6 +298,60 @@ function cloneListChunk(listNode, items) {
   return serializeNode(clone);
 }
 
+function parsePathToken(pathToken) {
+  const trimmed = (pathToken || '').trim();
+  const match = trimmed.match(/^(.*?)(?::(\d+))?$/);
+  if (!match) {
+    return null;
+  }
+
+  const filePath = (match[1] || '').trim();
+  if (!filePath || !filePath.includes('/') || !/\.[A-Za-z0-9]+$/.test(filePath)) {
+    return null;
+  }
+
+  const line = match[2] ? Number(match[2]) : null;
+  const baseName = filePath.split('/').pop() || filePath;
+  const parentPath = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : '';
+
+  return {
+    filePath,
+    line,
+    pathShort: line ? `${baseName}:${line}` : baseName,
+    pathDir: parentPath
+  };
+}
+
+function parseStructuredListItem(itemNode) {
+  const text = getDirectTextContent(itemNode);
+  if (!text) {
+    return null;
+  }
+
+  const fileMatch = text.match(/^([A-Za-z0-9._\/-]+(?:\.[A-Za-z0-9]+)?(?::\d+)?)\s*[:\-–]\s*(.+)$/);
+  if (fileMatch) {
+    const parsedPath = parsePathToken(fileMatch[1]);
+    if (parsedPath) {
+      return {
+        kind: 'file-point',
+        description: fileMatch[2].trim(),
+        ...parsedPath
+      };
+    }
+  }
+
+  const labelMatch = text.match(/^(Functionality|Risk|Impact|Recommendation|Action)\s*:\s*(.+)$/i);
+  if (labelMatch) {
+    return {
+      kind: 'label-point',
+      label: labelMatch[1],
+      body: labelMatch[2].trim()
+    };
+  }
+
+  return null;
+}
+
 function createSlide(content, color, options = {}) {
   const title = options.title || '';
   const readTime = estimateReadTimeSeconds(cleanContent(content), title);
@@ -309,7 +363,8 @@ function createSlide(content, color, options = {}) {
     readTime,
     readTimeFormatted: formatTime(readTime),
     color,
-    isMarkdown: false
+    isMarkdown: false,
+    meta: options.meta || null
   };
 }
 
@@ -385,9 +440,44 @@ export function parseMarkdownToSlides(markdown) {
 
     if (tagName === 'UL' || tagName === 'OL') {
       const items = Array.from(element.children).filter(child => child.tagName === 'LI');
-      chunkListItems(items).forEach(chunk => {
-        slides.push(createSlide(cloneListChunk(element, chunk), nextColor(), { title: sectionTitle, kind: 'list' }));
+      const genericRun = [];
+
+      const flushGenericRun = () => {
+        if (!genericRun.length) {
+          return;
+        }
+        chunkListItems(genericRun).forEach(chunk => {
+          slides.push(createSlide(cloneListChunk(element, chunk), nextColor(), { title: sectionTitle, kind: 'list' }));
+        });
+        genericRun.length = 0;
+      };
+
+      items.forEach((item) => {
+        const structured = parseStructuredListItem(item);
+        if (!structured) {
+          genericRun.push(item);
+          return;
+        }
+
+        flushGenericRun();
+
+        if (structured.kind === 'file-point') {
+          slides.push(createSlide(structured.description, nextColor(), {
+            title: sectionTitle,
+            kind: 'file-point',
+            meta: structured
+          }));
+          return;
+        }
+
+        slides.push(createSlide(structured.body, nextColor(), {
+          title: sectionTitle,
+          kind: 'label-point',
+          meta: structured
+        }));
       });
+
+      flushGenericRun();
       return;
     }
 

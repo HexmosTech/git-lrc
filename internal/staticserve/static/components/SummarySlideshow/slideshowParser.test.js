@@ -43,6 +43,34 @@ function testListChunking() {
   console.log('✓ List chunking test passed');
 }
 
+function testStructuredFilePoints() {
+  const markdown = `## Technical Highlights
+
+- internal/staticserve/static/components/Summary.js: Refactored summary view mode control.
+- internal/staticserve/static/components/SummarySlideshow/SummarySlideshow.js: Added dark-theme rendering and structured file cards.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides.length === 2, `Expected 2 file-point slides, got ${slides.length}`);
+  console.assert(slides.every(slide => slide.kind === 'file-point'), 'Structured file bullets should become file-point slides');
+  console.assert(slides[0].meta?.pathShort === 'Summary.js', 'First file-point should shorten to file name');
+  console.assert(slides[1].meta?.filePath === 'internal/staticserve/static/components/SummarySlideshow/SummarySlideshow.js', 'Second file-point should preserve full file path metadata');
+  console.log('✓ Structured file-point test passed');
+}
+
+function testStructuredLabelPoints() {
+  const markdown = `## Impact
+
+- Functionality: Users can now open specific files from slideshow points.
+- Risk: Long paths may reduce readability without structured formatting.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides.length === 2, `Expected 2 label-point slides, got ${slides.length}`);
+  console.assert(slides.every(slide => slide.kind === 'label-point'), 'Functionality/Risk bullets should become label-point slides');
+  console.assert(slides[0].meta?.label.toLowerCase() === 'functionality', 'First label-point should preserve label');
+  console.assert(slides[1].content.includes('Long paths'), 'Label-point should preserve body text');
+  console.log('✓ Structured label-point test passed');
+}
+
 function testCodeBlocksStayWhole() {
   const markdown = `## Example
 
@@ -152,6 +180,8 @@ export function runAllTests() {
   try {
     testIntroAndSectionSlides();
     testListChunking();
+    testStructuredFilePoints();
+    testStructuredLabelPoints();
     testCodeBlocksStayWhole();
     testAbbreviationsAndDecimals();
     testUrlsAndInlineCode();

@@ -508,6 +508,15 @@ async function initApp() {
                 }
             }, 100);
         }, []);
+
+        const handleOpenFileFromSlide = useCallback((filePath) => {
+            if (!filePath) {
+                return;
+            }
+
+            setSlideShowOpen(false);
+            handleFileClick(filePathToId(filePath));
+        }, [handleFileClick]);
         
         // Navigate to comment
         const navigateToComment = useCallback((commentId, fileId) => {
@@ -906,6 +915,7 @@ async function initApp() {
                             onEmbeddedShortcutActiveChange=${setEmbeddedSlideshowActive}
                             slideIndex=${summarySlideIndex}
                             onSlideIndexChange=${setSummarySlideIndex}
+                            onOpenFileFromSlide=${handleOpenFileFromSlide}
                         />
                     `}
                     
@@ -1042,6 +1052,7 @@ async function initApp() {
                 mode="modal"
                 initialSlideIndex=${summarySlideIndex}
                 onSlideIndexChange=${setSummarySlideIndex}
+                onOpenFileFromSlide=${handleOpenFileFromSlide}
                 onClose=${() => setSlideShowOpen(false)}
             />
         `;

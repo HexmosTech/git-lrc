@@ -138,6 +138,10 @@ function resolveSlideTypography(slide) {
         return { fontSize: 'clamp(20px, 2.2vw, 27px)', lineHeight: '1.7', maxWidth: '64ch' };
     }
 
+    if (kind === 'file-point' || kind === 'label-point') {
+        return { fontSize: 'clamp(19px, 1.95vw, 25px)', lineHeight: '1.68', maxWidth: '70ch' };
+    }
+
     if (kind === 'intro') {
         return { fontSize: 'clamp(36px, 4.5vw, 56px)', lineHeight: '1.14', maxWidth: '20ch' };
     }
@@ -148,7 +152,7 @@ function resolveSlideTypography(slide) {
 export async function createSummarySlideshow() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
 
-    return function SummarySlideshow({ markdown, isOpen = true, onClose = () => {}, mode = 'modal', isShortcutActive = false, className = '', initialSlideIndex = 0, onSlideIndexChange = () => {} }) {
+    return function SummarySlideshow({ markdown, isOpen = true, onClose = () => {}, mode = 'modal', isShortcutActive = false, className = '', initialSlideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {} }) {
         const isModal = mode === 'modal';
         const isVisible = isModal ? isOpen : true;
         const [slides, setSlides] = useState([]);
@@ -391,6 +395,10 @@ export async function createSummarySlideshow() {
             if (slide.title) {
                 copyParts.push(slide.title);
             }
+            if (slide.meta?.kind === 'file-point') {
+                const location = slide.meta.line ? `${slide.meta.filePath}:${slide.meta.line}` : slide.meta.filePath;
+                copyParts.push(location);
+            }
             if (slide.content) {
                 copyParts.push(slide.content);
             }
@@ -412,6 +420,13 @@ export async function createSummarySlideshow() {
         const toggleAutoPlay = () => {
             setIsAutoPlay(prev => !prev);
             setLiveMessage(isAutoPlay ? 'Auto-play paused.' : 'Auto-play started.');
+        };
+
+        const handleOpenFile = (meta) => {
+            if (!meta || !meta.filePath || typeof onOpenFileFromSlide !== 'function') {
+                return;
+            }
+            onOpenFileFromSlide(meta.filePath, meta.line || null);
         };
 
         if (!isVisible || !slides.length) {
@@ -486,11 +501,26 @@ export async function createSummarySlideshow() {
                 <div class="summary-slideshow-body" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; ${isIntro || isAppreciation ? 'align-items: center; justify-content: center;' : 'padding: 28px 32px;'}">
                     ${isAppreciation ? html`
                         <div class="summary-slideshow-complete" style="text-align: center; padding: 40px 32px; max-width: 520px;">
+                            <div class="summary-slideshow-celebration" aria-hidden="true">
+                                <svg viewBox="0 0 240 84" width="220" height="76">
+                                    <circle cx="32" cy="24" r="5" fill="#4f8cff"/>
+                                    <circle cx="58" cy="14" r="4" fill="#38b28a"/>
+                                    <circle cx="86" cy="28" r="4" fill="#f5a524"/>
+                                    <circle cx="152" cy="18" r="5" fill="#9a7bff"/>
+                                    <circle cx="188" cy="30" r="4" fill="#ff6b94"/>
+                                    <circle cx="212" cy="16" r="5" fill="#4f8cff"/>
+                                    <rect x="106" y="14" width="28" height="28" rx="14" fill="#233046" stroke="#7fb3ff" stroke-width="2"/>
+                                    <path d="M112 28l6 6 10-12" fill="none" stroke="#9ed8ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
                             <div style="font-size: 34px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; margin-bottom: 12px;">
                                 Review complete
                             </div>
                             <div style="font-size: 18px; color: var(--text-secondary); margin-bottom: 30px; line-height: 1.6;">
                                 You finished all ${slides.length} slides.
+                            </div>
+                            <div style="font-size: 15px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6;">
+                                Your commitment to higher engineering standards made this review excellent.
                             </div>
                             <div style="margin-bottom: 6px;">
                                 <span style="font-size: 30px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">${formatActualElapsed(sessionStartRef.current)}</span>
@@ -517,6 +547,27 @@ export async function createSummarySlideshow() {
                                     </h1>
                                 </div>
                             `
+                            : slide.kind === 'file-point' && slide.meta
+                                ? html`
+                                    <div class="summary-file-point" style="max-width: ${typography.maxWidth}; width: 100%;">
+                                        <button
+                                            class="summary-file-chip"
+                                            title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
+                                            onClick=${() => handleOpenFile(slide.meta)}
+                                        >
+                                            ${slide.meta.pathShort}
+                                        </button>
+                                        <div class="summary-file-dir" title=${slide.meta.filePath}>${slide.meta.pathDir}</div>
+                                        <div class="summary-file-description">${slide.content}</div>
+                                    </div>
+                                `
+                                : slide.kind === 'label-point' && slide.meta
+                                    ? html`
+                                        <div class="summary-label-point" style="max-width: ${typography.maxWidth}; width: 100%;">
+                                            <div class="summary-label-chip">${slide.meta.label}</div>
+                                            <div class="summary-label-body">${slide.content}</div>
+                                        </div>
+                                    `
                             : html`
                                 ${slide.title && html`
                                     <div style="margin-bottom: 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">

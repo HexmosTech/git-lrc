@@ -95,7 +95,7 @@ export async function createSummary() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
     const SummarySlideshow = await getSummarySlideshow();
     
-    return function Summary({ markdown, status, errorSummary, showAllClear, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {} }) {
+    return function Summary({ markdown, status, errorSummary, showAllClear, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {} }) {
         const contentRef = useRef(null);
         const summaryRootRef = useRef(null);
         const [summaryViewMode, setSummaryViewMode] = useState('slides');
@@ -213,6 +213,7 @@ export async function createSummary() {
                             isShortcutActive=${embeddedShortcutsActive}
                             initialSlideIndex=${slideIndex}
                             onSlideIndexChange=${onSlideIndexChange}
+                            onOpenFileFromSlide=${onOpenFileFromSlide}
                             className="summary-embedded-slideshow"
                         />
                     </div>
