@@ -1261,6 +1261,36 @@ body {
     padding: 0;
 }
 
+/* Keep slideshow typography independent from generic summary markdown sizing rules. */
+.summary .summary-slideshow-content p,
+.summary .summary-slideshow-content ul,
+.summary .summary-slideshow-content ol,
+.summary .summary-slideshow-content li,
+.summary .summary-slideshow-content blockquote {
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.summary .summary-slideshow-content ul,
+.summary .summary-slideshow-content ol {
+    margin-left: 0;
+    margin-bottom: 0.68em;
+    padding-left: 1.18em;
+}
+
+.summary .summary-slideshow-content code {
+    font-size: 0.62em;
+    color: inherit;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 0.14em 0.34em;
+}
+
+.summary .summary-slideshow-content pre code {
+    font-size: 0.88em;
+}
+
 .summary strong { font-weight: 600; color: var(--text-primary); }
 
 /* Stats */

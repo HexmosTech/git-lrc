@@ -135,7 +135,7 @@ function resolveSlideTypography(slide) {
     }
 
     if (kind === 'list') {
-        return { fontSize: 'clamp(20px, 2.2vw, 27px)', lineHeight: '1.7', maxWidth: '64ch' };
+        return { fontSize: 'clamp(23px, 2.75vw, 32px)', lineHeight: '1.54', maxWidth: '56ch' };
     }
 
     if (kind === 'file-point' || kind === 'label-point') {
