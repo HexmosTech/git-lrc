@@ -157,10 +157,10 @@ export async function createSummary() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
     const SummarySlideshow = await getSummarySlideshow();
     
-    return function Summary({ markdown, status, errorSummary, showAllClear, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false }) {
+    return function Summary({ markdown, status, errorSummary, showAllClear, slidesEnabled = true, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false }) {
         const contentRef = useRef(null);
         const summaryRootRef = useRef(null);
-        const [summaryViewMode, setSummaryViewMode] = useState('slides');
+        const [summaryViewMode, setSummaryViewMode] = useState(slidesEnabled ? 'slides' : 'text');
         const [isSummaryInView, setIsSummaryInView] = useState(false);
         const hasSummaryMarkdown = Boolean(markdown && markdown.trim());
         
@@ -170,9 +170,9 @@ export async function createSummary() {
 
         useEffect(() => {
             if (hasSummaryMarkdown) {
-                setSummaryViewMode('slides');
+                setSummaryViewMode(slidesEnabled ? 'slides' : 'text');
             }
-        }, [markdown, hasSummaryMarkdown]);
+        }, [markdown, hasSummaryMarkdown, slidesEnabled]);
 
         useEffect(() => {
             const element = summaryRootRef.current;
@@ -192,6 +192,7 @@ export async function createSummary() {
 
         const embeddedShortcutsActive = Boolean(
             hasSummaryMarkdown
+            && slidesEnabled
             && summaryViewMode === 'slides'
             && !isSlideshowModalOpen
             && isSummaryInView
@@ -215,37 +216,44 @@ export async function createSummary() {
                 ${hasSummaryMarkdown && html`
                     <div class="summary-header-row">
                         <div class="summary-header-left">
-                            <div class="summary-view-toggle" role="group" aria-label="Summary display mode">
-                                <button
-                                    class="action-btn summary-view-btn ${summaryViewMode === 'slides' ? 'active' : ''}"
-                                    onClick=${() => setSummaryViewMode('slides')}
-                                    title="Show slides view"
-                                    aria-label="Show slides view"
-                                    aria-pressed=${summaryViewMode === 'slides'}
-                                >
-                                    Slides
-                                </button>
-                                <button
-                                    class="action-btn summary-view-btn ${summaryViewMode === 'text' ? 'active' : ''}"
-                                    onClick=${() => setSummaryViewMode('text')}
-                                    title="Show text view"
-                                    aria-label="Show text view"
-                                    aria-pressed=${summaryViewMode === 'text'}
-                                >
-                                    Text
-                                </button>
-                            </div>
+                            ${slidesEnabled
+                                ? html`
+                                    <div class="summary-view-toggle" role="group" aria-label="Summary display mode">
+                                        <button
+                                            class="action-btn summary-view-btn ${summaryViewMode === 'slides' ? 'active' : ''}"
+                                            onClick=${() => setSummaryViewMode('slides')}
+                                            title="Show slides view"
+                                            aria-label="Show slides view"
+                                            aria-pressed=${summaryViewMode === 'slides'}
+                                        >
+                                            Slides
+                                        </button>
+                                        <button
+                                            class="action-btn summary-view-btn ${summaryViewMode === 'text' ? 'active' : ''}"
+                                            onClick=${() => setSummaryViewMode('text')}
+                                            title="Show text view"
+                                            aria-label="Show text view"
+                                            aria-pressed=${summaryViewMode === 'text'}
+                                        >
+                                            Text
+                                        </button>
+                                    </div>
+                                `
+                                : html`<span style="font-size: 12px; color: var(--text-muted);">Text view</span>`
+                            }
                         </div>
                         <div class="summary-header-center" aria-hidden="true">
                             Summary
                         </div>
                         <div class="summary-actions">
-                            <button class="action-btn summary-play-btn" onClick=${onOpenSlideshowModal} title="Open slides in dialog" aria-label="Open slides in dialog">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4h12v12M8 20h12M4 8v12h12" />
-                                </svg>
-                                Open Slides
-                            </button>
+                            ${slidesEnabled && html`
+                                <button class="action-btn summary-play-btn" onClick=${onOpenSlideshowModal} title="Open slides in dialog" aria-label="Open slides in dialog">
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4h12v12M8 20h12M4 8v12h12" />
+                                    </svg>
+                                    Open Slides
+                                </button>
+                            `}
                         </div>
                     </div>
                 `}
@@ -267,7 +275,7 @@ export async function createSummary() {
                     </div>
                 `}
 
-                ${hasSummaryMarkdown && summaryViewMode === 'slides' && html`
+                ${hasSummaryMarkdown && slidesEnabled && summaryViewMode === 'slides' && html`
                     <div class="summary-embedded-container">
                         <${SummarySlideshow}
                             markdown=${markdown}
@@ -285,7 +293,7 @@ export async function createSummary() {
                 <div
                     ref=${contentRef}
                     class="summary-text-content"
-                    style=${hasSummaryMarkdown && summaryViewMode === 'text' ? '' : 'display: none;'}
+                    style=${hasSummaryMarkdown && (!slidesEnabled || summaryViewMode === 'text') ? '' : 'display: none;'}
                 ></div>
             </div>
         `;

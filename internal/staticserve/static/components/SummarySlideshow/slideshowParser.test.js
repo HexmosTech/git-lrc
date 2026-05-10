@@ -1,5 +1,6 @@
 import {
   calculateTotalReadTime,
+  evaluateSummarySlidesEligibility,
   formatRemainingTime,
   formatTotalReadTime,
   getRemainingReadTime,
@@ -205,6 +206,83 @@ function testMetadataAndColorRotation() {
   console.log('✓ Metadata and color rotation test passed');
 }
 
+function testSlidesEligibilityRequiresSections() {
+  const valid = `# Review Summary
+
+## Overview
+
+This change improves line navigation and summary rendering behavior.
+
+## Technical Highlights
+
+- internal/staticserve/static/app.js: Adds resilient slideshow gating.
+
+## Impact
+
+- Functionality: Slides now appear only for valid summary structures.`;
+
+  const invalidMissingImpact = `# Review Summary
+
+## Overview
+
+This is a proper overview section.
+
+## Technical Highlights
+
+- internal/staticserve/static/app.js: Adds resilient slideshow gating.`;
+
+  const validResult = evaluateSummarySlidesEligibility(valid);
+  console.assert(validResult.eligible === true, 'Required sections with content should be eligible for slides');
+
+  const missingResult = evaluateSummarySlidesEligibility(invalidMissingImpact);
+  console.assert(missingResult.eligible === false, 'Missing required section should be ineligible for slides');
+  console.assert(missingResult.reason === 'missing-required-sections', 'Missing section reason should be reported');
+  console.log('✓ Slides eligibility required sections test passed');
+}
+
+function testSlidesEligibilityRejectsEmptySections() {
+  const markdown = `# Review Summary
+
+## Overview
+
+Valid overview body text is present here.
+
+## Technical Highlights
+
+Done.
+
+## Impact
+
+Okay.`;
+
+  const result = evaluateSummarySlidesEligibility(markdown);
+  console.assert(result.eligible === false, 'Sections with tiny bodies should be ineligible');
+  console.assert(result.reason === 'empty-required-sections', 'Empty section reason should be reported');
+  console.log('✓ Slides eligibility empty section test passed');
+}
+
+function testSlidesEligibilityAllowsAliases() {
+  const markdown = `# Review Summary
+
+## Summary
+
+This section introduces the review output and key context in a concise way.
+
+## Highlights
+
+- internal/staticserve/static/app.js: Adds centralized slideshow eligibility gating.
+- internal/staticserve/static/components/Summary.js: Defaults to text mode when slides are disabled.
+
+## Risks
+
+- Functionality: Aliased headings still unlock slides with predictable structure.`;
+
+  const result = evaluateSummarySlidesEligibility(markdown);
+  console.assert(result.eligible === true, 'Known heading aliases should be eligible for slides');
+  console.assert(result.reason === 'ok', 'Known heading aliases should pass with reason ok');
+  console.log('✓ Slides eligibility alias headings test passed');
+}
+
 export function runAllTests() {
   console.group('Running SlideshowParser Tests');
 
@@ -223,6 +301,9 @@ export function runAllTests() {
     testEmptyMarkdown();
     testReadTimeHelpers();
     testMetadataAndColorRotation();
+    testSlidesEligibilityRequiresSections();
+    testSlidesEligibilityRejectsEmptySections();
+    testSlidesEligibilityAllowsAliases();
     console.log('\n✅ All tests passed!');
   } catch (error) {
     console.error('❌ Test failed:', error);

@@ -53,6 +53,13 @@ const SENTENCE_PROTECTIONS = [
   /`[^`]+`/g
 ];
 
+const REQUIRED_SUMMARY_SECTIONS = ['overview', 'technical highlights', 'impact'];
+const REQUIRED_SUMMARY_SECTION_ALIASES = {
+  overview: new Set(['overview', 'summary']),
+  'technical highlights': new Set(['technical highlights', 'highlights']),
+  impact: new Set(['impact', 'risk', 'risks'])
+};
+
 function countWords(text) {
   const trimmed = (text || '').trim();
   return trimmed ? trimmed.split(/\s+/).length : 0;
@@ -118,7 +125,11 @@ function convertMarkdownToHtml(markdown) {
     return '';
   }
 
-  return marked.parse(markdown || '', { mangle: false, headerIds: false, gfm: true, breaks: true });
+  try {
+    return marked.parse(markdown || '', { mangle: false, headerIds: false, gfm: true, breaks: true });
+  } catch {
+    return '';
+  }
 }
 
 function createParsedHtmlRoot(markdown) {
@@ -126,9 +137,109 @@ function createParsedHtmlRoot(markdown) {
     return null;
   }
 
-  const html = convertMarkdownToHtml(markdown);
-  const parsed = new DOMParser().parseFromString(`<div id="slideshow-parser-root">${html}</div>`, 'text/html');
-  return parsed.getElementById('slideshow-parser-root');
+  try {
+    const html = convertMarkdownToHtml(markdown);
+    if (!html) {
+      return null;
+    }
+    const parsed = new DOMParser().parseFromString(`<div id="slideshow-parser-root">${html}</div>`, 'text/html');
+    return parsed.getElementById('slideshow-parser-root');
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHeading(text) {
+  return (text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resolveRequiredSection(heading) {
+  const normalized = normalizeHeading(heading);
+  if (!normalized) {
+    return null;
+  }
+
+  for (const section of REQUIRED_SUMMARY_SECTIONS) {
+    const aliases = REQUIRED_SUMMARY_SECTION_ALIASES[section] || new Set([section]);
+    if (aliases.has(normalized)) {
+      return section;
+    }
+  }
+
+  return null;
+}
+
+export function evaluateSummarySlidesEligibility(markdown) {
+  const raw = (markdown || '').trim();
+  if (!raw) {
+    return { eligible: false, reason: 'empty-summary' };
+  }
+
+  if (countWords(raw) < 20) {
+    return { eligible: false, reason: 'too-short' };
+  }
+
+  const root = createParsedHtmlRoot(markdown);
+  if (!root) {
+    return { eligible: false, reason: 'parse-failed' };
+  }
+
+  const sectionBodies = new Map(REQUIRED_SUMMARY_SECTIONS.map(name => [name, '']));
+  const seenSections = new Set();
+  let activeSection = null;
+
+  const blocks = Array.from(root.childNodes).filter(node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return Boolean((node.nodeValue || '').trim());
+    }
+    return node.nodeType === Node.ELEMENT_NODE;
+  });
+
+  blocks.forEach((block) => {
+    if (block.nodeType !== Node.ELEMENT_NODE) {
+      if (activeSection) {
+        const text = (block.nodeValue || '').trim();
+        if (text) {
+          sectionBodies.set(activeSection, `${sectionBodies.get(activeSection)} ${text}`.trim());
+        }
+      }
+      return;
+    }
+
+    const element = block;
+    if (/^H[1-6]$/.test(element.tagName)) {
+      activeSection = resolveRequiredSection(getDirectTextContent(element));
+      if (activeSection) {
+        seenSections.add(activeSection);
+      }
+      return;
+    }
+
+    if (!activeSection) {
+      return;
+    }
+
+    const text = getDirectTextContent(element);
+    if (text) {
+      sectionBodies.set(activeSection, `${sectionBodies.get(activeSection)} ${text}`.trim());
+    }
+  });
+
+  const missingSections = REQUIRED_SUMMARY_SECTIONS.filter(section => !seenSections.has(section));
+  if (missingSections.length > 0) {
+    return { eligible: false, reason: 'missing-required-sections', details: missingSections };
+  }
+
+  const emptySections = REQUIRED_SUMMARY_SECTIONS.filter(section => countWords(sectionBodies.get(section) || '') < 3);
+  if (emptySections.length > 0) {
+    return { eligible: false, reason: 'empty-required-sections', details: emptySections };
+  }
+
+  return { eligible: true, reason: 'ok' };
 }
 
 function getDirectTextContent(node) {
@@ -383,7 +494,8 @@ export function parseMarkdownToSlides(markdown) {
     return color;
   };
 
-  blocks.forEach((block, blockIndex) => {
+  try {
+    blocks.forEach((block, blockIndex) => {
     if (block.nodeType === Node.TEXT_NODE) {
       const text = (block.nodeValue || '').trim();
       if (!text) {
@@ -471,7 +583,10 @@ export function parseMarkdownToSlides(markdown) {
         slides.push(createSlide(sentenceHtml, nextColor(), { title: sectionTitle, kind: 'sentence' }));
       });
     }
-  });
+    });
+  } catch {
+    return [];
+  }
 
   const totalReadTime = slides.reduce((sum, slide) => sum + slide.readTime, 0);
   slides.forEach((slide, index) => {

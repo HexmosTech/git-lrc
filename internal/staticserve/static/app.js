@@ -15,6 +15,7 @@ import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
 import { getSummarySlideshow } from './components/SummarySlideshow/SummarySlideshow.js';
+import { evaluateSummarySlidesEligibility } from './components/SummarySlideshow/slideshowParser.js';
 import { buildPerformanceSnapshot, getFirstRenderTime, getLoadingActivityMessage, getPerformanceNow, recordFirstRenderTime } from './components/review_performance_state.mjs';
 import { shouldShowAllClear } from './components/review_outcome_state.mjs';
 
@@ -717,6 +718,9 @@ async function initApp() {
         const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
         const errorSummary = reviewData?.errorSummary || '';
         const showAllClear = shouldShowAllClear({ status, totalComments, errorSummary });
+        const hasSummary = Boolean(summary && summary.trim());
+        const summarySlidesEligibility = hasSummary ? evaluateSummarySlidesEligibility(summary) : { eligible: false, reason: 'empty-summary' };
+        const slidesEnabled = Boolean(summarySlidesEligibility.eligible && hasSummary);
         const firstCommentRenderMs = getFirstRenderTime(commentRenderTimes);
         const performanceSnapshot = buildPerformanceSnapshot({
             baselineMs: reviewStartMsRef.current,
@@ -730,6 +734,12 @@ async function initApp() {
         const loaderMeta = firstCommentRenderMs === null
             ? `Elapsed ${performanceSnapshot.elapsedLabel} • first comment pending`
             : `First comment in ${performanceSnapshot.firstCommentLabel} • ${totalComments} comment${totalComments !== 1 ? 's' : ''} so far`;
+
+        useEffect(() => {
+            if (!slidesEnabled && slideShowOpen) {
+                setSlideShowOpen(false);
+            }
+        }, [slidesEnabled, slideShowOpen]);
 
         useEffect(() => {
             if (status === 'completed' || status === 'failed') {
@@ -971,6 +981,7 @@ async function initApp() {
                             status=${status}
                             errorSummary=${errorSummary}
                             showAllClear=${showAllClear}
+                            slidesEnabled=${slidesEnabled}
                             isSlideshowModalOpen=${slideShowOpen}
                             onOpenSlideshowModal=${() => setSlideShowOpen(true)}
                             onEmbeddedShortcutActiveChange=${setEmbeddedSlideshowActive}
@@ -1108,16 +1119,18 @@ async function initApp() {
                 embeddedSlideshowActive=${embeddedSlideshowActive}
             />
             
-            <${SummarySlideshow}
-                markdown=${summary}
-                isOpen=${slideShowOpen}
-                mode="modal"
-                initialSlideIndex=${summarySlideIndex}
-                onSlideIndexChange=${setSummarySlideIndex}
-                onOpenFileFromSlide=${handleOpenFileFromSlide}
-                canOpenFileFromSlide=${canOpenFileFromSlide}
-                onClose=${() => setSlideShowOpen(false)}
-            />
+            ${slidesEnabled && html`
+                <${SummarySlideshow}
+                    markdown=${summary}
+                    isOpen=${slideShowOpen}
+                    mode="modal"
+                    initialSlideIndex=${summarySlideIndex}
+                    onSlideIndexChange=${setSummarySlideIndex}
+                    onOpenFileFromSlide=${handleOpenFileFromSlide}
+                    canOpenFileFromSlide=${canOpenFileFromSlide}
+                    onClose=${() => setSlideShowOpen(false)}
+                />
+            `}
         `;
     }
     
