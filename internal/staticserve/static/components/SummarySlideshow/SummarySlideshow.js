@@ -524,7 +524,7 @@ export async function createSummarySlideshow() {
                                 You finished all ${slides.length} slides.
                             </div>
                             <div style="font-size: 15px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6;">
-                                Your commitment to higher engineering standards made this review excellent.
+                                Your commitment to higher engineering standards made this review possible.
                             </div>
                             <div style="margin-bottom: 6px;">
                                 <span style="font-size: 30px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">${formatActualElapsed(sessionStartRef.current)}</span>

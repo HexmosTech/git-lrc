@@ -282,7 +282,11 @@ export async function createSummary() {
                     </div>
                 `}
 
-                <div ref=${contentRef} style=${hasSummaryMarkdown && summaryViewMode === 'text' ? '' : 'display: none;'}></div>
+                <div
+                    ref=${contentRef}
+                    class="summary-text-content"
+                    style=${hasSummaryMarkdown && summaryViewMode === 'text' ? '' : 'display: none;'}
+                ></div>
             </div>
         `;
     };
