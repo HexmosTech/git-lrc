@@ -9,6 +9,7 @@
 # - No shell restart required: PATH and PATHEXT adjusted in-session; shims + PATH prep give immediate git subcommand resolution.
 # - PATH persistence: user PATH is updated to include %LOCALAPPDATA%\Programs\lrc; current session PATH is also prepended so it works right away.
 # - Logging: migration cleanup logs to %TEMP%\lrc-cleanup.log when elevation is used.
+# - Internal release: set LRC_RELEASE_CHANNEL=internal to install the team build.
 
 $ErrorActionPreference = "Stop"
 
@@ -245,8 +246,15 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 $GIT_BIN = (Get-Command git).Source
 $GIT_DIR = Split-Path -Parent $GIT_BIN
 
-# Public release manifest URL
+# Release manifest URL (public by default, internal when explicitly requested)
+$RELEASE_CHANNEL = $env:LRC_RELEASE_CHANNEL
+if ([string]::IsNullOrWhiteSpace($RELEASE_CHANNEL)) {
+    $RELEASE_CHANNEL = "public"
+}
 $MANIFEST_URL = "https://f005.backblazeb2.com/file/hexmos/lrc/latest.json"
+if ($RELEASE_CHANNEL -eq "internal") {
+    $MANIFEST_URL = "https://f005.backblazeb2.com/file/hexmos/lrc/internal.json"
+}
 
 Write-Host "lrc Installer" -ForegroundColor Cyan
 Write-Host "================" -ForegroundColor Cyan

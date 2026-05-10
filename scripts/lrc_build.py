@@ -39,7 +39,11 @@ PLATFORMS = [
 # B2 configuration
 B2_API_BASE = "https://api.backblazeb2.com"
 B2_UPLOAD_PATH_PREFIX = "lrc"  # Files go to hexmos/lrc/<version>/
-RELEASE_MANIFEST_NAME = "latest.json"  # Published at hexmos/lrc/latest.json
+PUBLIC_RELEASE_MANIFEST_NAME = "latest.json"  # Published at hexmos/lrc/latest.json
+INTERNAL_RELEASE_MANIFEST_NAME = "internal.json"  # Published at hexmos/lrc/internal.json
+DEFAULT_RELEASE_CHANNEL = "public"
+INTERNAL_RELEASE_CHANNEL = "internal"
+INTERNAL_RELEASE_VERSION = "v0.0.0-internal"
 
 # These are loaded from .env file (see .env.example)
 B2_ENV_VARS = ["B2_KEY_ID", "B2_APP_KEY", "B2_BUCKET_NAME", "B2_BUCKET_ID"]
@@ -442,12 +446,13 @@ class LRCBuilder:
         self.log(f"  ✓ Uploaded {file_path.name}", force=True)
         return response.json()
 
-    def upload_to_b2(self, files: List[Tuple[Path, str]], version: str):
+    def upload_to_b2(self, files: List[Tuple[Path, str]], version: str, manifest_name: str):
         """Upload all built files to B2 using credentials from .env
         
         Args:
             files: List of (binary_path, platform_dir) tuples
             version: Semantic version string (e.g., "v1.0.0")
+            manifest_name: Manifest file name to publish in the release prefix
         """
         self._validate_b2_config()
         self.log("Starting B2 upload...", force=True)
@@ -477,13 +482,13 @@ class LRCBuilder:
                 self.upload_file_to_b2(upload_data, sums_file, b2_sums_name)
 
         manifest = self.build_release_manifest(files, version)
-        manifest_path = self.dist_dir / RELEASE_MANIFEST_NAME
+        manifest_path = self.dist_dir / manifest_name
         with open(manifest_path, "w") as mf:
             json.dump(manifest, mf, indent=2)
             mf.write("\n")
 
         upload_data = self.get_upload_url(auth_data, bucket_id)
-        manifest_b2_name = f"{B2_UPLOAD_PATH_PREFIX}/{RELEASE_MANIFEST_NAME}"
+        manifest_b2_name = f"{B2_UPLOAD_PATH_PREFIX}/{manifest_name}"
         self.upload_file_to_b2(upload_data, manifest_path, manifest_b2_name)
         
         # Construct public download URLs
@@ -491,7 +496,7 @@ class LRCBuilder:
         
         self.log(f"\n✓ Upload complete! Files available at:", force=True)
         self.log(f"  {download_base}/", force=True)
-        self.log(f"  {download_base}/{RELEASE_MANIFEST_NAME}", force=True)
+        self.log(f"  {download_base}/{manifest_name}", force=True)
         self.log(f"\nPlatform directories:", force=True)
         for _, platform_dir in files:
             self.log(f"  {download_base}/{platform_dir}/", force=True)
@@ -528,7 +533,7 @@ class LRCBuilder:
             },
         }
 
-    def cmd_build(self, args):
+    def cmd_build(self, args, version_override: Optional[str] = None):
         """Build lrc binaries"""
         # Check for clean working directory
         if not self.check_lrc_clean():
@@ -537,7 +542,7 @@ class LRCBuilder:
             sys.exit(1)
         
         # Get version from source code
-        version = self.get_version_from_source()
+        version = version_override or self.get_version_from_source()
         commit = self.get_commit_id()
         self.log(f"Building version {version} (commit: {commit})", force=True)
         
@@ -622,11 +627,23 @@ class LRCBuilder:
 
     def cmd_release(self, args):
         """Build and upload to B2 (using hardcoded credentials)"""
+        release_channel = getattr(args, "channel", DEFAULT_RELEASE_CHANNEL)
+        if release_channel not in (DEFAULT_RELEASE_CHANNEL, INTERNAL_RELEASE_CHANNEL):
+            print(f"Error: Unsupported release channel: {release_channel}")
+            sys.exit(1)
+
+        if release_channel == INTERNAL_RELEASE_CHANNEL:
+            version = INTERNAL_RELEASE_VERSION
+            manifest_name = INTERNAL_RELEASE_MANIFEST_NAME
+        else:
+            version = self.get_version_from_source()
+            manifest_name = PUBLIC_RELEASE_MANIFEST_NAME
+
         # Build
-        version, built_files = self.cmd_build(args)
+        _, built_files = self.cmd_build(args, version_override=version)
         
         # Upload using hardcoded credentials
-        self.upload_to_b2(built_files, version)
+        self.upload_to_b2(built_files, version, manifest_name)
         
         self.log("\n🎉 Release complete!", force=True)
 
@@ -655,6 +672,12 @@ def main():
     release_parser = subparsers.add_parser(
         "release",
         help="Build and upload to Backblaze B2"
+    )
+    release_parser.add_argument(
+        "--channel",
+        choices=[DEFAULT_RELEASE_CHANNEL, INTERNAL_RELEASE_CHANNEL],
+        default=DEFAULT_RELEASE_CHANNEL,
+        help="Release channel to publish (public or internal)",
     )
     
     args = parser.parse_args()

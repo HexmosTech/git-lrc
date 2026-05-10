@@ -43,6 +43,8 @@ var (
 
 var autoUpdateStartOnce sync.Once
 
+const internalBuildVersionSuffix = "-internal"
+
 // semverParse extracts major, minor, patch from a version string like "v0.1.14"
 func semverParse(v string) (int, int, int, bool) {
 	match := semverRe.FindStringSubmatch(strings.TrimSpace(v))
@@ -85,6 +87,10 @@ func semverCompare(a, b string) (int, error) {
 		return -1, nil
 	}
 	return 0, nil
+}
+
+func internalSelfUpdateDisabled() bool {
+	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(version)), internalBuildVersionSuffix)
 }
 
 func fetchReleaseManifest(client *network.Client) (*network.ReleaseManifest, error) {
@@ -572,6 +578,10 @@ func downloadVersionBinaryFromManifest(versionTag string) (string, error) {
 }
 
 func stageUpdateVersion(versionTag string, force bool, verbose bool) (*storage.PendingUpdateState, error) {
+	if internalSelfUpdateDisabled() {
+		return nil, fmt.Errorf("self-update is disabled in internal builds")
+	}
+
 	release, acquired, err := acquireUpdateLock(force, "self-update-stage", verbose)
 	if err != nil {
 		return nil, err
@@ -801,6 +811,10 @@ func applyPendingUpdateState(state *storage.PendingUpdateState, verbose bool) er
 }
 
 func applyPendingUpdateIfAny(verbose bool) error {
+	if internalSelfUpdateDisabled() {
+		return nil
+	}
+
 	release, acquired, err := acquireUpdateLock(false, "self-update-apply", verbose)
 	if err != nil {
 		return err
@@ -825,6 +839,13 @@ func applyPendingUpdateIfAny(verbose bool) error {
 }
 
 func startAutoUpdateCheck(verbose bool) {
+	if internalSelfUpdateDisabled() {
+		if verbose {
+			log.Printf("auto-update disabled for internal build %s", version)
+		}
+		return
+	}
+
 	autoUpdateStartOnce.Do(func() {
 		go func() {
 			defer func() {
@@ -889,6 +910,10 @@ const (
 
 // runSelfUpdate handles the self-update command
 func runSelfUpdate(c *cli.Context) error {
+	if internalSelfUpdateDisabled() {
+		return fmt.Errorf("self-update is disabled in internal builds")
+	}
+
 	checkOnly := c.Bool("check")
 	force := c.Bool("force")
 
