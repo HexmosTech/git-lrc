@@ -44,6 +44,30 @@ const SLIDE_COLORS = [
   }
 ];
 
+const RISK_SLIDE_COLORS = [
+  {
+    surface: '#331b24',
+    accent: '#ff5d86',
+    title: '#ffe9f0',
+    text: '#ffd0df',
+    name: 'risk-rose'
+  },
+  {
+    surface: '#3a1d1d',
+    accent: '#ff6b6b',
+    title: '#ffeaea',
+    text: '#ffd3d3',
+    name: 'risk-red'
+  },
+  {
+    surface: '#3b271c',
+    accent: '#ff8f5a',
+    title: '#fff0e7',
+    text: '#ffd9c7',
+    name: 'risk-amber-red'
+  }
+];
+
 const SENTENCE_PROTECTIONS = [
   /\b(?:e\.g|i\.e|etc|vs|Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|Inc|Ltd|No)\./g,
   /\b(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\./g,
@@ -386,7 +410,27 @@ function splitParagraphNode(paragraphNode) {
   return fragments.length ? fragments : [serializeNode(paragraphNode)];
 }
 
+function stripLeadingBulletFromListItem(itemNode) {
+  if (!itemNode || typeof document === 'undefined') {
+    return;
+  }
+
+  const walker = document.createTreeWalker(itemNode, NodeFilter.SHOW_TEXT);
+  const firstTextNode = walker.nextNode();
+  if (!firstTextNode || !firstTextNode.nodeValue) {
+    return;
+  }
+
+  firstTextNode.nodeValue = firstTextNode.nodeValue.replace(/^\s*[•*-]\s+/, '');
+}
+
 function cloneListChunk(listNode, items) {
+  if (items.length === 1) {
+    const single = items[0].cloneNode(true);
+    stripLeadingBulletFromListItem(single);
+    return single.innerHTML.trim();
+  }
+
   const clone = listNode.cloneNode(false);
   items.forEach(item => clone.appendChild(item.cloneNode(true)));
   return serializeNode(clone);
@@ -422,7 +466,9 @@ function parseStructuredListItem(itemNode) {
     return null;
   }
 
-  const fileMatch = text.match(/^([A-Za-z0-9._\/-]+(?:\.[A-Za-z0-9]+)?(?::\d+)?)\s*[:\-–]\s*(.+)$/);
+  const normalizedText = text.replace(/^\s*[•*-]\s+/, '');
+
+  const fileMatch = normalizedText.match(/^([A-Za-z0-9._\/-]+(?:\.[A-Za-z0-9]+)?(?::\d+)?)\s*[:\-–]\s*(.+)$/);
   if (fileMatch) {
     const parsedPath = parsePathToken(fileMatch[1]);
     if (parsedPath) {
@@ -434,7 +480,7 @@ function parseStructuredListItem(itemNode) {
     }
   }
 
-  const labelMatch = text.match(/^(Functionality|Risk|Impact|Recommendation|Action)\s*:\s*(.+)$/i);
+  const labelMatch = normalizedText.match(/^(Functionality|Risk|Impact|Recommendation|Action)\s*:\s*(.+)$/i);
   if (labelMatch) {
     return {
       kind: 'label-point',
@@ -486,11 +532,18 @@ export function parseMarkdownToSlides(markdown) {
 
   const slides = [];
   let colorIndex = 0;
+  let riskColorIndex = 0;
   let sectionTitle = '';
 
   const nextColor = () => {
     const color = SLIDE_COLORS[colorIndex % SLIDE_COLORS.length];
     colorIndex += 1;
+    return color;
+  };
+
+  const nextRiskColor = () => {
+    const color = RISK_SLIDE_COLORS[riskColorIndex % RISK_SLIDE_COLORS.length];
+    riskColorIndex += 1;
     return color;
   };
 
@@ -560,6 +613,9 @@ export function parseMarkdownToSlides(markdown) {
           kind: 'label-point',
           meta: structured
         }));
+        if ((structured.label || '').toLowerCase() === 'risk') {
+          slides[slides.length - 1].color = nextRiskColor();
+        }
       });
       return;
     }

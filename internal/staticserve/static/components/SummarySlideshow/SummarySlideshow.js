@@ -119,34 +119,43 @@ function formatActualElapsed(startTime) {
     return secs ? `${minutes}m ${secs}s` : `${minutes}m`;
 }
 
-function stripHtmlTags(input) {
-    return (input || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+function truncatePathDisplay(filePath, maxDisplayChars = 52) {
+    const path = filePath || '';
+    if (path.length <= maxDisplayChars) {
+        return path;
+    }
+    // Take the last (maxDisplayChars-1) chars, then snap forward to the next slash
+    // so we never show a partial directory segment.
+    const suffix = path.slice(-(maxDisplayChars - 1));
+    const slashPos = suffix.indexOf('/');
+    const clean = slashPos >= 0 ? suffix.slice(slashPos) : `/${suffix}`;
+    return `\u2026${clean}`;
 }
 
 function resolveSlideTypography(slide) {
     const kind = slide?.kind || 'detail';
-    const length = stripHtmlTags(slide?.content || '').length;
+
+    if (kind === 'intro') {
+        return { fontSize: 'clamp(38px, 4.6vw, 54px)', lineHeight: '1.18', maxWidth: 'min(100%, 640px)' };
+    }
 
     if (kind === 'sentence') {
-        if (length < 120) {
-            return { fontSize: 'clamp(34px, 4.1vw, 52px)', lineHeight: '1.3', maxWidth: '28ch' };
-        }
-        return { fontSize: 'clamp(30px, 3.6vw, 44px)', lineHeight: '1.34', maxWidth: '34ch' };
+        return { fontSize: 'clamp(31px, 3.5vw, 46px)', lineHeight: '1.28', maxWidth: 'min(100%, 800px)' };
     }
 
     if (kind === 'list') {
-        return { fontSize: 'clamp(23px, 2.75vw, 32px)', lineHeight: '1.54', maxWidth: '56ch' };
+        return { fontSize: 'clamp(28px, 3.1vw, 40px)', lineHeight: '1.34', maxWidth: '100%' };
     }
 
     if (kind === 'file-point' || kind === 'label-point') {
-        return { fontSize: 'clamp(19px, 1.95vw, 25px)', lineHeight: '1.68', maxWidth: '70ch' };
+        return { fontSize: 'clamp(24px, 2.6vw, 34px)', lineHeight: '1.42', maxWidth: '100%' };
     }
 
-    if (kind === 'intro') {
-        return { fontSize: 'clamp(36px, 4.5vw, 56px)', lineHeight: '1.14', maxWidth: '20ch' };
+    if (kind === 'code') {
+        return { fontSize: 'clamp(18px, 1.9vw, 24px)', lineHeight: '1.52', maxWidth: '100%' };
     }
 
-    return { fontSize: 'clamp(18px, 1.8vw, 24px)', lineHeight: '1.72', maxWidth: '72ch' };
+    return { fontSize: 'clamp(22px, 2.3vw, 30px)', lineHeight: '1.46', maxWidth: '100%' };
 }
 
 export async function createSummarySlideshow() {
@@ -440,6 +449,7 @@ export async function createSummarySlideshow() {
         const isIntro = !isAppreciation && slide?.kind === 'intro';
         const panelBg = isAppreciation ? '#1f2430' : (slide ? slide.color.surface : '#1f2430');
         const typography = slide ? resolveSlideTypography(slide) : null;
+        const panelHeight = isModal ? 'clamp(540px, 78vh, 760px)' : 'clamp(440px, 62vh, 620px)';
 
         const panel = html`
             ${isHelpShown && html`
@@ -477,9 +487,11 @@ export async function createSummarySlideshow() {
             <div
                 class="summary-slideshow-surface ${isModal ? '' : 'summary-slideshow-embedded-panel'}"
                 style="
-                    width: ${isModal ? 'min(960px, calc(100vw - 56px))' : '100%'};
-                    min-height: ${isModal ? 'min(640px, calc(100vh - 56px))' : '380px'};
-                    max-height: ${isModal ? 'calc(100vh - 56px)' : '700px'};
+                    width: ${isModal ? 'min(1040px, calc(100vw - 48px))' : '100%'};
+                    max-width: ${isModal ? 'calc(100vw - 48px)' : '100%'};
+                    height: ${panelHeight};
+                    max-height: ${isModal ? 'calc(100vh - 48px)' : '620px'};
+                    aspect-ratio: ${isModal ? '16 / 10' : 'auto'};
                     display: flex; flex-direction: column;
                     border-radius: 14px; overflow: hidden;
                     background: ${panelBg};
@@ -502,9 +514,9 @@ export async function createSummarySlideshow() {
                     </div>
                 `}
 
-                <div class="summary-slideshow-body" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; ${isIntro || isAppreciation ? 'align-items: center; justify-content: center;' : 'padding: 28px 32px;'}">
+                <div class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; ${isIntro || isAppreciation ? 'align-items: center;' : ''} padding: 28px 32px;">
                     ${isAppreciation ? html`
-                        <div class="summary-slideshow-complete" style="text-align: center; padding: 40px 32px; max-width: 520px;">
+                        <div class="summary-slideshow-complete" style="text-align: center; padding: 32px; max-width: 520px; width: 100%;">
                             <div class="summary-slideshow-celebration" aria-hidden="true">
                                 <svg viewBox="0 0 240 84" width="220" height="76">
                                     <circle cx="32" cy="24" r="5" fill="#4f8cff"/>
@@ -545,8 +557,8 @@ export async function createSummarySlideshow() {
                     ` : html`
                         ${isIntro
                             ? html`
-                                <div class="summary-slideshow-intro" style="text-align: center; padding: 42px 28px; max-width: min(760px, 100%);">
-                                    <h1 style="margin: 0; font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; color: ${slide.color.title}; font-weight: 760; letter-spacing: -0.034em; max-width: ${typography.maxWidth}; margin-inline: auto; text-wrap: balance;">
+                                <div class="summary-slideshow-intro" style="text-align: center; max-width: min(820px, 100%); width: 100%;">
+                                    <h1 style="margin: 0; font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; color: ${slide.color.title}; font-weight: 760; letter-spacing: -0.034em; text-wrap: balance;">
                                         ${slide.title}
                                     </h1>
                                 </div>
@@ -567,14 +579,14 @@ export async function createSummarySlideshow() {
                                                     title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
                                                     onClick=${() => handleOpenFile(slide.meta)}
                                                 >
-                                                    ${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}
+                                                    ${truncatePathDisplay(slide.meta.filePath)}${slide.meta.line ? `:${slide.meta.line}` : ''}
                                                 </button>
                                             `
                                             : html`
-                                                <code class="summary-file-inline-code">${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}</code>
+                                                <code class="summary-file-inline-code" title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}">${truncatePathDisplay(slide.meta.filePath)}${slide.meta.line ? `:${slide.meta.line}` : ''}</code>
                                             `
                                         }
-                                        <div class="summary-file-description">${slide.content}</div>
+                                        <div class="summary-file-description" style="font-size: ${typography.fontSize}; line-height: ${typography.lineHeight};">${slide.content}</div>
                                     </div>
                                 `
                                 : slide.kind === 'label-point' && slide.meta
@@ -586,7 +598,7 @@ export async function createSummarySlideshow() {
                                                 </div>
                                             `}
                                             <div class="summary-label-chip">${slide.meta.label}</div>
-                                            <div class="summary-label-body">${slide.content}</div>
+                                            <div class="summary-label-body" style="font-size: ${typography.fontSize}; line-height: ${typography.lineHeight};">${slide.content}</div>
                                         </div>
                                     `
                             : html`

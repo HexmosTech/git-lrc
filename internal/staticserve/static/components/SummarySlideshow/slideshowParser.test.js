@@ -103,6 +103,34 @@ function testMixedListStaysSinglePointPerSlide() {
   console.log('✓ Mixed list one-item-per-slide test passed');
 }
 
+function testSingleListSlideDoesNotKeepWrapperBullet() {
+  const markdown = `## Technical Highlights
+
+- One bullet point only.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides.length === 1, `Expected one slide, got ${slides.length}`);
+  console.assert(slides[0].kind === 'list', 'Single bullet should still be treated as list content');
+  console.assert(!slides[0].content.includes('<ul'), 'Single-point slide should not preserve the UL wrapper');
+  console.assert(!slides[0].content.includes('<li'), 'Single-point slide should not preserve the LI wrapper');
+  console.log('✓ Single list point de-bullet test passed');
+}
+
+function testRiskLabelUsesRiskPalette() {
+  const markdown = `## Impact
+
+- Risk: Deployment can fail if stale hooks are still installed.
+- Risk: Mismatched path aliases can hide relevant review points.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides.length === 2, `Expected 2 risk label-point slides, got ${slides.length}`);
+  console.assert(slides.every(slide => slide.kind === 'label-point'), 'Risk entries should be label-point slides');
+  console.assert(slides[0].color.name.startsWith('risk-'), 'First risk slide should use risk color palette');
+  console.assert(slides[1].color.name.startsWith('risk-'), 'Second risk slide should use risk color palette');
+  console.assert(slides[0].color.name !== slides[1].color.name, 'Risk slides should rotate within risk palette');
+  console.log('✓ Risk semantic palette test passed');
+}
+
 function testCodeBlocksStayWhole() {
   const markdown = `## Example
 
@@ -293,6 +321,8 @@ export function runAllTests() {
     testBareFilenameStaysListItem();
     testStructuredLabelPoints();
     testMixedListStaysSinglePointPerSlide();
+    testSingleListSlideDoesNotKeepWrapperBullet();
+    testRiskLabelUsesRiskPalette();
     testCodeBlocksStayWhole();
     testAbbreviationsAndDecimals();
     testUrlsAndInlineCode();

@@ -917,6 +917,11 @@ body {
     width: 100%;
 }
 
+.summary-slideshow-embedded-panel,
+.summary-slideshow-surface {
+    min-height: 0;
+}
+
 .summary-slideshow-surface {
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 14px;
@@ -993,18 +998,21 @@ body {
 .summary-file-chip {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     width: fit-content;
     max-width: 100%;
-    padding: 5px 10px;
+    padding: 5px 12px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.16);
     background: rgba(255, 255, 255, 0.035);
     color: #d8e6ff;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     letter-spacing: 0;
     position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .summary-file-chip-interactive {
@@ -1096,6 +1104,8 @@ body {
 
 .summary-slideshow-body {
     scrollbar-gutter: stable both-edges;
+    min-height: 0;
+    max-height: 100%;
 }
 
 .summary-slideshow-content {
@@ -1162,6 +1172,43 @@ body {
 .summary-slideshow-embedded .summary-slideshow-content pre {
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.summary .summary-slideshow-content p,
+.summary .summary-slideshow-content ul,
+.summary .summary-slideshow-content ol,
+.summary .summary-slideshow-content li,
+.summary .summary-slideshow-content blockquote {
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.summary .summary-slideshow-content ul,
+.summary .summary-slideshow-content ol {
+    margin-left: 0;
+    margin-bottom: 0.62em;
+    padding-left: 1.18em;
+}
+
+.summary .summary-slideshow-content li + li {
+    margin-top: 0.22em;
+}
+
+.summary .summary-slideshow-content code {
+    font-size: 0.82em;
+    line-height: 1.25;
+    color: inherit;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 0.12em 0.34em;
+}
+
+.summary .summary-slideshow-content pre code {
+    font-size: 0.9em;
+    background: transparent;
+    border: 0;
+    padding: 0;
 }
 
 @media (max-width: 920px) {
