@@ -8,6 +8,7 @@ import {
 } from './slideshowParser.js';
 import {
   buildChapterNavigation,
+  buildChapterExplorerCards,
   buildProgressTrackItems,
   getActiveProgressTrackItemKey,
   getActiveProgressTrackMarkerKey
@@ -271,6 +272,59 @@ Risk outcome.`;
   console.assert(getActiveProgressTrackMarkerKey(trackItems, slides.length) === 'complete::marker', 'Complete screen should activate the Complete marker');
   console.assert(getActiveProgressTrackItemKey(trackItems, slides.length - 1) !== 'complete', 'Last real slide should not activate the Complete track item');
   console.log('✓ Complete screen track activation test passed');
+}
+
+function testChapterExplorerCardsIncludeAllSections() {
+  const markdown = `# Review Summary
+
+## Overview
+
+Lead sentence.
+
+## Impact
+
+### Functionality
+
+Functional outcome.
+
+### Risk
+
+Risk outcome.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  const chapters = buildChapterNavigation(slides);
+  const trackItems = buildProgressTrackItems(chapters, slides.length);
+  const cards = buildChapterExplorerCards(trackItems, 2, 'impact', 'impact::functionality');
+
+  console.assert(cards.length === 3, `Expected 3 explorer cards including Complete, got ${cards.length}`);
+  console.assert(cards[0].title === 'Overview', 'First explorer card should be Overview');
+  console.assert(cards[1].title === 'Impact', 'Second explorer card should be Impact');
+  console.assert(cards[2].title === 'Complete', 'Final explorer card should be Complete');
+  console.assert(cards[1].isActive === true, 'Active progress item should map to the active explorer card');
+  console.assert(cards[1].subchapters.length === 2, 'Impact explorer card should expose nested subchapter actions');
+  console.assert(cards[1].subchapters[0].isActive === true, 'Active progress marker should map to the active explorer subchapter');
+  console.assert(cards[2].subchapters.length === 0, 'Complete explorer card should not expose redundant nested subchapter actions');
+  console.log('✓ Chapter explorer card list test passed');
+}
+
+function testChapterExplorerCardsTrackProgressFill() {
+  const markdown = `# Review Summary
+
+## Overview
+
+First overview sentence.
+
+Second overview sentence.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  const chapters = buildChapterNavigation(slides);
+  const trackItems = buildProgressTrackItems(chapters, slides.length);
+  const cards = buildChapterExplorerCards(trackItems, 1, 'overview', 'overview::slide-2');
+
+  console.assert(cards[0].progressPercent > 0, 'Current explorer card should carry a positive progress fill');
+  console.assert(cards[0].progressPercent < 100, 'Explorer card progress should reflect in-progress chapters');
+  console.assert(cards[1].progressPercent === 0, 'Complete explorer card should remain unfilled before the completion slide');
+  console.log('✓ Chapter explorer card progress test passed');
 }
 
 function testSingleListSlideDoesNotKeepWrapperBullet() {
@@ -592,6 +646,8 @@ export function runAllTests() {
     testChaptersWithoutNamedSubsectionsGetSlideMarkers();
     testProgressTrackIncludesCompleteItem();
     testCompleteScreenActivatesCompleteTrackItem();
+    testChapterExplorerCardsIncludeAllSections();
+    testChapterExplorerCardsTrackProgressFill();
     testSingleListSlideDoesNotKeepWrapperBullet();
     testRiskLabelUsesRiskPalette();
     testCodeBlocksStayWhole();

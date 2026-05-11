@@ -332,16 +332,6 @@ export function buildProgressTrackItems(chapterNavigation, slideCount) {
     return trackItems;
 }
 
-function getTooltipAlignmentClass(positionPct) {
-    if (positionPct <= 10) {
-        return 'summary-chapter-popover-align-left';
-    }
-    if (positionPct >= 90) {
-        return 'summary-chapter-popover-align-right';
-    }
-    return '';
-}
-
 export function getActiveProgressTrackItemKey(trackItems, currentSlide) {
     if (!Array.isArray(trackItems) || trackItems.length === 0) {
         return '';
@@ -383,12 +373,31 @@ function getProgressTrackFillPercent(trackItem, currentSlide) {
     return Math.max(0, Math.min(100, (playedUnits / trackItem.unitCount) * 100));
 }
 
-function buildNavTooltip(key, label, count) {
-    return {
-        key,
-        label,
-        count
-    };
+export function buildChapterExplorerCards(trackItems, currentSlide, activeTrackItemKey = '', activeTrackMarkerKey = '') {
+    if (!Array.isArray(trackItems)) {
+        return [];
+    }
+
+    return trackItems.map((trackItem) => ({
+        key: trackItem.key,
+        kind: trackItem.kind,
+        title: trackItem.title,
+        slideCount: trackItem.slideCount,
+        startIndex: trackItem.startIndex,
+        progressPercent: getProgressTrackFillPercent(trackItem, currentSlide),
+        isActive: trackItem.key === activeTrackItemKey,
+        subchapters: trackItem.kind === 'complete'
+            ? []
+            : trackItem.subchapters.map((subchapter) => ({
+                key: subchapter.key,
+                title: subchapter.title,
+                tooltipLabel: subchapter.tooltipLabel,
+                startIndex: subchapter.startIndex,
+                slideCount: subchapter.slideCount,
+                isSynthetic: subchapter.isSynthetic,
+                isActive: subchapter.key === activeTrackMarkerKey
+            }))
+    }));
 }
 
 export async function createSummarySlideshow() {
@@ -403,8 +412,8 @@ export async function createSummarySlideshow() {
         const [isHelpShown, setIsHelpShown] = useState(false);
         const [copied, setCopied] = useState(false);
         const [liveMessage, setLiveMessage] = useState('');
-        const [activeNavTooltip, setActiveNavTooltip] = useState(null);
-        const [isNavTooltipVisible, setIsNavTooltipVisible] = useState(false);
+        const [isChapterExplorerOpen, setIsChapterExplorerOpen] = useState(false);
+        const [highlightedTrackItemKey, setHighlightedTrackItemKey] = useState('');
         const [autoPlayRemainingMs, setAutoPlayRemainingMs] = useState(0);
         const bodyRef = useRef(null);
         const dialogRef = useRef(null);
@@ -412,9 +421,9 @@ export async function createSummarySlideshow() {
         const autoPlayTimerRef = useRef(null);
         const autoPlayTickRef = useRef(null);
         const copyTimerRef = useRef(null);
-        const chapterOpenTimerRef = useRef(null);
-        const chapterCloseTimerRef = useRef(null);
-        const chapterUnmountTimerRef = useRef(null);
+        const chapterExplorerOpenTimerRef = useRef(null);
+        const chapterExplorerCloseTimerRef = useRef(null);
+        const chapterExplorerResetTimerRef = useRef(null);
         const sessionStartRef = useRef(null);
 
         const clampSlideIndex = (value, length) => {
@@ -437,51 +446,57 @@ export async function createSummarySlideshow() {
             setAutoPlayRemainingMs(0);
         };
 
-        const clearNavTooltipTimers = () => {
-            if (chapterOpenTimerRef.current) {
-                clearTimeout(chapterOpenTimerRef.current);
-                chapterOpenTimerRef.current = null;
+        const clearChapterExplorerTimers = () => {
+            if (chapterExplorerOpenTimerRef.current) {
+                clearTimeout(chapterExplorerOpenTimerRef.current);
+                chapterExplorerOpenTimerRef.current = null;
             }
-            if (chapterCloseTimerRef.current) {
-                clearTimeout(chapterCloseTimerRef.current);
-                chapterCloseTimerRef.current = null;
+            if (chapterExplorerCloseTimerRef.current) {
+                clearTimeout(chapterExplorerCloseTimerRef.current);
+                chapterExplorerCloseTimerRef.current = null;
             }
-            if (chapterUnmountTimerRef.current) {
-                clearTimeout(chapterUnmountTimerRef.current);
-                chapterUnmountTimerRef.current = null;
+            if (chapterExplorerResetTimerRef.current) {
+                clearTimeout(chapterExplorerResetTimerRef.current);
+                chapterExplorerResetTimerRef.current = null;
             }
         };
 
-        const openNavTooltip = (tooltip, immediate = false) => {
-            clearNavTooltipTimers();
-            setActiveNavTooltip(tooltip);
+        const openChapterExplorer = (trackItemKey = '', immediate = false) => {
+            clearChapterExplorerTimers();
+            if (trackItemKey) {
+                setHighlightedTrackItemKey(trackItemKey);
+            }
 
-            if (!tooltip) {
+            if (immediate || isChapterExplorerOpen) {
+                setIsChapterExplorerOpen(true);
                 return;
             }
 
-            if (immediate || isNavTooltipVisible || activeNavTooltip?.key === tooltip.key) {
-                setIsNavTooltipVisible(true);
-                return;
-            }
-
-            chapterOpenTimerRef.current = setTimeout(() => {
-                setActiveNavTooltip(tooltip);
-                setIsNavTooltipVisible(true);
-                chapterOpenTimerRef.current = null;
-            }, 110);
+            chapterExplorerOpenTimerRef.current = setTimeout(() => {
+                if (trackItemKey) {
+                    setHighlightedTrackItemKey(trackItemKey);
+                }
+                setIsChapterExplorerOpen(true);
+                chapterExplorerOpenTimerRef.current = null;
+            }, 90);
         };
 
-        const closeNavTooltipSoon = () => {
-            clearNavTooltipTimers();
-            chapterCloseTimerRef.current = setTimeout(() => {
-                setIsNavTooltipVisible(false);
-                chapterUnmountTimerRef.current = setTimeout(() => {
-                    setActiveNavTooltip(null);
-                    chapterUnmountTimerRef.current = null;
-                }, 180);
-                chapterCloseTimerRef.current = null;
-            }, 320);
+        const closeChapterExplorer = () => {
+            clearChapterExplorerTimers();
+            setIsChapterExplorerOpen(false);
+            setHighlightedTrackItemKey('');
+        };
+
+        const closeChapterExplorerSoon = () => {
+            clearChapterExplorerTimers();
+            chapterExplorerCloseTimerRef.current = setTimeout(() => {
+                setIsChapterExplorerOpen(false);
+                chapterExplorerResetTimerRef.current = setTimeout(() => {
+                    setHighlightedTrackItemKey('');
+                    chapterExplorerResetTimerRef.current = null;
+                }, 160);
+                chapterExplorerCloseTimerRef.current = null;
+            }, 200);
         };
 
         useEffect(() => {
@@ -500,8 +515,8 @@ export async function createSummarySlideshow() {
             setIsHelpShown(false);
             setCopied(false);
             setLiveMessage('');
-            setActiveNavTooltip(null);
-            setIsNavTooltipVisible(false);
+            setIsChapterExplorerOpen(false);
+            setHighlightedTrackItemKey('');
             sessionStartRef.current = Date.now();
         }, [markdown, isVisible]);
 
@@ -566,6 +581,11 @@ export async function createSummarySlideshow() {
                     return;
                 }
 
+                if (isChapterExplorerOpen && key === 'escape') {
+                    closeChapterExplorer();
+                    return;
+                }
+
                 switch (key) {
                     case 'arrowleft':
                     case 'h':
@@ -604,7 +624,7 @@ export async function createSummarySlideshow() {
 
             document.addEventListener('keydown', handler, true);
             return () => document.removeEventListener('keydown', handler, true);
-        }, [isVisible, isModal, isShortcutActive, slides.length, currentSlide, isHelpShown, isAutoPlay]);
+        }, [isVisible, isModal, isShortcutActive, slides.length, currentSlide, isHelpShown, isAutoPlay, isChapterExplorerOpen]);
 
         useEffect(() => {
             if (!isVisible || !bodyRef.current) {
@@ -619,7 +639,7 @@ export async function createSummarySlideshow() {
             if (copyTimerRef.current) {
                 clearTimeout(copyTimerRef.current);
             }
-            clearNavTooltipTimers();
+            clearChapterExplorerTimers();
         }, []);
 
         useEffect(() => {
@@ -658,6 +678,7 @@ export async function createSummarySlideshow() {
         const progressTrackItems = buildProgressTrackItems(chapterNavigation, slides.length);
         const activeProgressTrackItemKey = getActiveProgressTrackItemKey(progressTrackItems, currentSlide);
         const activeProgressTrackMarkerKey = getActiveProgressTrackMarkerKey(progressTrackItems, currentSlide);
+        const chapterExplorerCards = buildChapterExplorerCards(progressTrackItems, currentSlide, activeProgressTrackItemKey, activeProgressTrackMarkerKey);
 
         const handleClose = () => {
             clearAutoPlayTimers();
@@ -673,9 +694,6 @@ export async function createSummarySlideshow() {
 
         const moveToSlide = (nextIndex) => {
             clearAutoPlayTimers();
-            clearNavTooltipTimers();
-            setActiveNavTooltip(null);
-            setIsNavTooltipVisible(false);
             setCurrentSlide(nextIndex);
         };
 
@@ -758,6 +776,7 @@ export async function createSummarySlideshow() {
         const typography = slide ? resolveSlideTypography(slide) : null;
         const panelHeight = isModal ? 'clamp(540px, 78vh, 760px)' : 'clamp(440px, 62vh, 620px)';
         const progressAccent = slide ? slide.color.accent : (slides[slides.length - 1]?.color?.accent || '#3b82f6');
+        const explorerFocusTrackItemKey = highlightedTrackItemKey || activeProgressTrackItemKey;
 
         const panel = html`
             ${isHelpShown && html`
@@ -988,6 +1007,14 @@ export async function createSummarySlideshow() {
                     </div>
 
                     <div class="summary-chapter-progress-wrap">
+                        <div
+                            class="summary-chapter-progress-shell"
+                            style=${`--summary-chapter-accent: ${progressAccent};`}
+                            onMouseEnter=${() => openChapterExplorer(explorerFocusTrackItemKey)}
+                            onMouseLeave=${closeChapterExplorerSoon}
+                            onFocusCapture=${() => openChapterExplorer(explorerFocusTrackItemKey, true)}
+                            onBlurCapture=${closeChapterExplorerSoon}
+                        >
                         <div class="summary-chapter-progress" role="group" aria-label="Slideshow chapter navigation">
                             ${progressTrackItems.map((trackItem) => {
                                 const trackItemFillPercent = getProgressTrackFillPercent(trackItem, currentSlide);
@@ -1006,10 +1033,8 @@ export async function createSummarySlideshow() {
                                             aria-label=${`Jump to ${trackItemLabel}`}
                                             aria-current=${isActiveTrackItem ? 'step' : null}
                                             onClick=${() => jumpToSlide(trackItem.startIndex, trackItem.title)}
-                                            onMouseEnter=${() => openNavTooltip(buildNavTooltip(trackItem.key, trackItem.title, trackItem.slideCount))}
-                                            onMouseLeave=${closeNavTooltipSoon}
-                                            onFocus=${() => openNavTooltip(buildNavTooltip(trackItem.key, trackItem.title, trackItem.slideCount), true)}
-                                            onBlur=${closeNavTooltipSoon}
+                                            onMouseEnter=${() => openChapterExplorer(trackItem.key, true)}
+                                            onFocus=${() => openChapterExplorer(trackItem.key, true)}
                                         >
                                             <span class="summary-chapter-segment-fill" style=${`width: ${trackItemFillPercent}%; background: ${progressAccent};`}></span>
                                         </button>
@@ -1025,45 +1050,73 @@ export async function createSummarySlideshow() {
                                                     title=${`${trackMarker.tooltipLabel} · ${trackMarker.slideCount} ${trackMarker.slideCount === 1 ? 'slide' : 'slides'}`}
                                                     aria-label=${`Jump to ${trackMarker.tooltipLabel}`}
                                                     onClick=${() => jumpToSlide(trackMarker.startIndex, trackMarker.tooltipLabel)}
-                                                    onMouseEnter=${() => openNavTooltip(buildNavTooltip(trackMarker.key, trackMarker.tooltipLabel, trackMarker.slideCount))}
-                                                    onMouseLeave=${closeNavTooltipSoon}
-                                                    onFocus=${() => openNavTooltip(buildNavTooltip(trackMarker.key, trackMarker.tooltipLabel, trackMarker.slideCount), true)}
-                                                    onBlur=${closeNavTooltipSoon}
+                                                    onMouseEnter=${() => openChapterExplorer(trackItem.key, true)}
+                                                    onFocus=${() => openChapterExplorer(trackItem.key, true)}
                                                 >
                                                     <span class=${`summary-chapter-subsection-marker ${trackMarker.markerVariant === 'complete' ? 'is-complete-marker' : ''}`}></span>
                                                 </button>
                                             `;
                                         })}
-
-                                        ${activeNavTooltip?.key === trackItem.key && html`
-                                            <div
-                                                class=${`summary-chapter-popover ${getTooltipAlignmentClass(trackItem.centerPct)} ${isNavTooltipVisible ? 'is-visible' : ''}`}
-                                                onMouseEnter=${() => openNavTooltip(buildNavTooltip(trackItem.key, trackItem.title, trackItem.slideCount), true)}
-                                                onMouseLeave=${closeNavTooltipSoon}
-                                            >
-                                                <div class="summary-chapter-popover-title-row">
-                                                    <div class="summary-chapter-popover-title">${activeNavTooltip.label}</div>
-                                                    <div class="summary-chapter-popover-count">${activeNavTooltip.count} ${activeNavTooltip.count === 1 ? 'slide' : 'slides'}</div>
-                                                </div>
-                                            </div>
-                                        `}
-
-                                        ${trackItem.subchapters.map((trackMarker) => activeNavTooltip?.key === trackMarker.key && html`
-                                            <div
-                                                class=${`summary-chapter-popover summary-chapter-subsection-tooltip ${getTooltipAlignmentClass(trackMarker.globalOffsetPct)} ${isNavTooltipVisible ? 'is-visible' : ''}`}
-                                                style=${`left: clamp(16px, ${trackMarker.offsetPct}%, calc(100% - 16px));`}
-                                                onMouseEnter=${() => openNavTooltip(buildNavTooltip(trackMarker.key, trackMarker.tooltipLabel, trackMarker.slideCount), true)}
-                                                onMouseLeave=${closeNavTooltipSoon}
-                                            >
-                                                <div class="summary-chapter-popover-title-row">
-                                                    <div class="summary-chapter-popover-title">${activeNavTooltip.label}</div>
-                                                    <div class="summary-chapter-popover-count">${activeNavTooltip.count} ${activeNavTooltip.count === 1 ? 'slide' : 'slides'}</div>
-                                                </div>
-                                            </div>
-                                        `)}
                                     </div>
                                 `;
                             })}
+                        </div>
+                        <div class=${`summary-chapter-explorer ${isChapterExplorerOpen ? 'is-open' : ''}`} aria-hidden=${isChapterExplorerOpen ? 'false' : 'true'}>
+                            <div class="summary-chapter-explorer-grid">
+                                ${chapterExplorerCards.map((card) => {
+                                    const isEmphasizedCard = card.key === explorerFocusTrackItemKey;
+                                    const shouldShowSubchapters = card.subchapters.length > 0 && (isEmphasizedCard || card.isActive);
+                                    const cardCaption = card.kind === 'complete'
+                                        ? 'Final slide'
+                                        : `Starts at slide ${card.startIndex + 1}`;
+
+                                    return html`
+                                        <div
+                                            class=${`summary-chapter-explorer-card ${card.isActive ? 'is-active' : ''} ${isEmphasizedCard ? 'is-emphasized' : ''}`}
+                                            onMouseEnter=${() => openChapterExplorer(card.key, true)}
+                                        >
+                                            <button
+                                                type="button"
+                                                class="summary-chapter-explorer-card-main"
+                                                onClick=${() => jumpToSlide(card.startIndex, card.title)}
+                                                onFocus=${() => openChapterExplorer(card.key, true)}
+                                                title=${`Jump to ${card.title}`}
+                                                aria-label=${`Jump to ${card.title}`}
+                                                tabIndex=${isChapterExplorerOpen ? 0 : -1}
+                                            >
+                                                <div class="summary-chapter-explorer-card-top">
+                                                    <div class="summary-chapter-explorer-card-title">${card.title}</div>
+                                                    <div class="summary-chapter-explorer-card-count">${card.slideCount} ${card.slideCount === 1 ? 'slide' : 'slides'}</div>
+                                                </div>
+                                                <div class="summary-chapter-explorer-card-progress">
+                                                    <span class="summary-chapter-explorer-card-progress-fill" style=${`width: ${card.progressPercent}%; background: ${progressAccent};`}></span>
+                                                </div>
+                                                <div class="summary-chapter-explorer-card-caption">${cardCaption}</div>
+                                            </button>
+
+                                            ${shouldShowSubchapters && html`
+                                                <div class="summary-chapter-explorer-subchapters">
+                                                    ${card.subchapters.map((subchapter) => html`
+                                                        <button
+                                                            type="button"
+                                                            class=${`summary-chapter-explorer-subchapter ${subchapter.isActive ? 'is-active' : ''}`}
+                                                            onClick=${() => jumpToSlide(subchapter.startIndex, subchapter.tooltipLabel)}
+                                                            onFocus=${() => openChapterExplorer(card.key, true)}
+                                                            title=${`Jump to ${subchapter.tooltipLabel}`}
+                                                            aria-label=${`Jump to ${subchapter.tooltipLabel}`}
+                                                            tabIndex=${isChapterExplorerOpen ? 0 : -1}
+                                                        >
+                                                            <span class="summary-chapter-explorer-subchapter-title">${subchapter.title}</span>
+                                                            <span class="summary-chapter-explorer-subchapter-count">${subchapter.slideCount}</span>
+                                                        </button>
+                                                    `)}
+                                                </div>
+                                            `}
+                                        </div>
+                                    `;
+                                })}
+                            </div>
+                        </div>
                         </div>
                         <div class="summary-chapter-progress-readout" aria-hidden="true">${Math.round(progressValue)}%</div>
                     </div>
