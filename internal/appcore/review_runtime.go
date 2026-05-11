@@ -170,7 +170,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			return fmt.Errorf("failed to collect diff for vouch: %w", diffErr)
 		}
 		if len(diffContent) == 0 {
-			return fmt.Errorf("no diff content to vouch for")
+			return fmt.Errorf("%s", noDiffMessage(opts.DiffSource))
 		}
 		parsedFiles, parseErr := parseDiffToFiles(diffContent)
 		if parseErr != nil {
@@ -271,7 +271,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	}
 
 	if len(diffContent) == 0 {
-		return fmt.Errorf("no diff content collected")
+		return fmt.Errorf("%s", noDiffMessage(opts.DiffSource))
 	}
 
 	var fakeBaseFiles []reviewmodel.DiffReviewFileResult
@@ -1405,6 +1405,25 @@ func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 
 	default:
 		return nil, fmt.Errorf("invalid diff-source: %s (must be staged, working, commit, range, or file)", diffSource)
+	}
+}
+
+// noDiffMessage returns a beginner-friendly error string tailored to the
+// diff source that produced no content.
+func noDiffMessage(diffSource string) string {
+	switch diffSource {
+	case "staged":
+		return "No staged changes found. Please stage your files using `git add <file>` before running a review."
+	case "working":
+		return "No working-tree changes found. Make some edits before running a review."
+	case "commit":
+		return "The specified commit(s) produced an empty diff. Verify the commit reference and try again."
+	case "range":
+		return "The specified range produced an empty diff. Verify the range and try again."
+	case "file":
+		return "The provided diff file is empty. Provide a non-empty diff file."
+	default:
+		return "No diff content collected."
 	}
 }
 
