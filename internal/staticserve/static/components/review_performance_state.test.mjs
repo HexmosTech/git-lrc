@@ -54,6 +54,23 @@ test('buildPerformanceSnapshot freezes final elapsed time when completed', () =>
     assert.equal(snapshot.summaryItems[1].label, 'Final time');
 });
 
+test('buildPerformanceSnapshot shows no comments after completed review with zero comments', () => {
+    const snapshot = buildPerformanceSnapshot({
+        baselineMs: 1000,
+        nowMs: 30000,
+        firstCommentMs: null,
+        totalComments: 0,
+        completedMs: 18000,
+    });
+
+    assert.equal(snapshot.firstCommentLabel, 'No comments');
+    assert.deepEqual(snapshot.summaryItems, [
+        { key: 'first-comment', label: 'First comment', value: 'No comments' },
+        { key: 'elapsed', label: 'Final time', value: '17s' },
+        { key: 'comments', label: 'Comments', value: '0' },
+    ]);
+});
+
 test('getCommentRenderLabel returns a subtle relative timing label', () => {
     assert.equal(getCommentRenderLabel(1000, 19000), 'Appeared in 18s');
     assert.equal(getCommentRenderLabel(1000, null), '');

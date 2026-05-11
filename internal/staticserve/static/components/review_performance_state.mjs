@@ -62,18 +62,21 @@ export function buildPerformanceSnapshot({ baselineMs, nowMs, firstCommentMs, to
         ? Math.max(0, firstCommentMs - baselineMs)
         : null;
     const normalizedComments = Number.isFinite(totalComments) ? Math.max(0, totalComments) : 0;
+    const firstCommentValue = firstCommentElapsedMs === null
+        ? (Number.isFinite(completedMs) && normalizedComments === 0 ? 'No comments' : 'Waiting')
+        : formatDurationShort(firstCommentElapsedMs);
 
     return {
         elapsedMs,
         elapsedLabel: formatDurationShort(elapsedMs),
         firstCommentElapsedMs,
-        firstCommentLabel: firstCommentElapsedMs === null ? 'Waiting' : formatDurationShort(firstCommentElapsedMs),
+        firstCommentLabel: firstCommentValue,
         totalComments: normalizedComments,
         summaryItems: [
             {
                 key: 'first-comment',
                 label: 'First comment',
-                value: firstCommentElapsedMs === null ? 'Waiting' : formatDurationShort(firstCommentElapsedMs),
+                value: firstCommentValue,
             },
             {
                 key: 'elapsed',

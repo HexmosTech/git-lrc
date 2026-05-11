@@ -8,6 +8,7 @@ test('shouldShowAllClear returns true for completed reviews with zero comments a
         status: 'completed',
         totalComments: 0,
         errorSummary: '',
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
     }), true);
 });
 
@@ -16,6 +17,7 @@ test('shouldShowAllClear returns false when comments exist', () => {
         status: 'completed',
         totalComments: 1,
         errorSummary: '',
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
     }), false);
 });
 
@@ -24,6 +26,7 @@ test('shouldShowAllClear returns false when an error summary is present', () => 
         status: 'completed',
         totalComments: 0,
         errorSummary: 'Review failed',
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
     }), false);
 });
 
@@ -32,6 +35,7 @@ test('shouldShowAllClear returns false while review is still running', () => {
         status: 'in_progress',
         totalComments: 0,
         errorSummary: '',
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
     }), false);
 });
 
@@ -40,6 +44,7 @@ test('shouldShowAllClear normalizes string inputs and whitespace-only error summ
         status: ' Completed ',
         totalComments: '0',
         errorSummary: '   ',
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
     }), true);
 });
 
@@ -48,12 +53,14 @@ test('shouldShowAllClear treats missing or non-numeric comment counts as zero', 
         status: 'completed',
         totalComments: undefined,
         errorSummary: undefined,
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
     }), true);
 
     assert.equal(shouldShowAllClear({
         status: 'completed',
         totalComments: 'not-a-number',
         errorSummary: '',
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
     }), true);
 });
 
@@ -62,12 +69,31 @@ test('shouldShowAllClear rejects non-string error payloads', () => {
         status: 'completed',
         totalComments: 0,
         errorSummary: { message: 'boom' },
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
     }), false);
 });
 
 test('shouldShowAllClear rejects missing status even when counts are zero', () => {
     assert.equal(shouldShowAllClear({
         status: null,
+        totalComments: 0,
+        errorSummary: '',
+        summarySlidesEligibility: { eligible: true, reason: 'ok' },
+    }), false);
+});
+
+test('shouldShowAllClear returns false when summary structure is invalid', () => {
+    assert.equal(shouldShowAllClear({
+        status: 'completed',
+        totalComments: 0,
+        errorSummary: '',
+        summarySlidesEligibility: { eligible: false, reason: 'missing-required-sections' },
+    }), false);
+});
+
+test('shouldShowAllClear returns false when summary validator result is missing', () => {
+    assert.equal(shouldShowAllClear({
+        status: 'completed',
         totalComments: 0,
         errorSummary: '',
     }), false);

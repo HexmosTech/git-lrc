@@ -62,11 +62,7 @@ function sanitizeNode(node) {
     return target;
 }
 
-function renderSafeMarkdown(container, markdown) {
-    if (!container) {
-        return;
-    }
-
+function getSafeRenderedHtml(markdown) {
     const rawContent = markdown || '';
     const looksLikeHtml = /^\s*<(?:[a-z][\w:-]*|!doctype)\b/i.test(rawContent);
     const renderedHTML = looksLikeHtml || typeof marked === 'undefined'
@@ -75,16 +71,20 @@ function renderSafeMarkdown(container, markdown) {
 
     const parsed = new DOMParser().parseFromString(`<div id="summary-render-root">${renderedHTML}</div>`, 'text/html');
     const root = parsed.getElementById('summary-render-root');
-    const fragment = document.createDocumentFragment();
+    if (!root) {
+        return '';
+    }
+
+    const container = document.createElement('div');
 
     for (const child of root.childNodes) {
         const sanitizedChild = sanitizeNode(child);
         if (sanitizedChild) {
-            fragment.appendChild(sanitizedChild);
+            container.appendChild(sanitizedChild);
         }
     }
 
-    container.replaceChildren(fragment);
+    return container.innerHTML;
 }
 
 function buildAutoplayLabel(isAutoPlay, remainingMs) {
@@ -148,7 +148,7 @@ function resolveSlideTypography(slide) {
     }
 
     if (kind === 'file-point' || kind === 'label-point') {
-        return { fontSize: 'clamp(24px, 2.6vw, 34px)', lineHeight: '1.42', maxWidth: '100%' };
+        return { fontSize: 'clamp(31px, 3.5vw, 46px)', lineHeight: '1.28', maxWidth: 'min(100%, 800px)' };
     }
 
     if (kind === 'code') {
@@ -171,7 +171,7 @@ export async function createSummarySlideshow() {
         const [copied, setCopied] = useState(false);
         const [liveMessage, setLiveMessage] = useState('');
         const [autoPlayRemainingMs, setAutoPlayRemainingMs] = useState(0);
-        const contentRef = useRef(null);
+        const bodyRef = useRef(null);
         const dialogRef = useRef(null);
         const lastFocusedElementRef = useRef(null);
         const autoPlayTimerRef = useRef(null);
@@ -204,7 +204,10 @@ export async function createSummarySlideshow() {
                 return;
             }
 
-            const parsedSlides = parseMarkdownToSlides(markdown);
+            const parsedSlides = parseMarkdownToSlides(markdown).map(slide => ({
+                ...slide,
+                renderedContent: getSafeRenderedHtml(slide.content)
+            }));
             const startingIndex = clampSlideIndex(initialSlideIndex, parsedSlides.length);
             setSlides(parsedSlides);
             setCurrentSlide(startingIndex);
@@ -317,13 +320,12 @@ export async function createSummarySlideshow() {
         }, [isVisible, isModal, isShortcutActive, slides.length, currentSlide, isHelpShown, isAutoPlay]);
 
         useEffect(() => {
-            if (!slides.length || currentSlide >= slides.length) {
+            if (!isVisible || !bodyRef.current) {
                 return;
             }
 
-            const slide = slides[currentSlide];
-            renderSafeMarkdown(contentRef.current, slide.content);
-        }, [slides, currentSlide]);
+            bodyRef.current.scrollTop = 0;
+        }, [currentSlide, isVisible, slides.length]);
 
         useEffect(() => () => {
             clearAutoPlayTimers();
@@ -514,7 +516,7 @@ export async function createSummarySlideshow() {
                     </div>
                 `}
 
-                <div class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; ${isIntro || isAppreciation ? 'align-items: center;' : ''} padding: 28px 32px;">
+                <div ref=${bodyRef} class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; ${isIntro || isAppreciation ? 'align-items: center;' : ''} padding: 28px 32px;">
                     ${isAppreciation ? html`
                         <div class="summary-slideshow-complete" style="text-align: center; padding: 32px; max-width: 520px; width: 100%;">
                             <div class="summary-slideshow-celebration" aria-hidden="true">
@@ -554,74 +556,80 @@ export async function createSummarySlideshow() {
                                 </button>
                             `}
                         </div>
-                    ` : html`
-                        ${isIntro
+                    ` : isIntro
+                        ? html`
+                            <div class="summary-slideshow-intro" style="text-align: center; max-width: min(820px, 100%); width: 100%;">
+                                <h1 style="margin: 0; font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; color: ${slide.color.title}; font-weight: 760; letter-spacing: -0.034em; text-wrap: balance;">
+                                    ${slide.title}
+                                </h1>
+                            </div>
+                        `
+                        : slide.kind === 'file-point' && slide.meta
                             ? html`
-                                <div class="summary-slideshow-intro" style="text-align: center; max-width: min(820px, 100%); width: 100%;">
-                                    <h1 style="margin: 0; font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; color: ${slide.color.title}; font-weight: 760; letter-spacing: -0.034em; text-wrap: balance;">
-                                        ${slide.title}
-                                    </h1>
+                                <div class="summary-file-point" style="max-width: ${typography.maxWidth}; width: 100%;">
+                                    ${slide.title && html`
+                                        <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
+                                            ${slide.title}
+                                        </div>
+                                    `}
+                                    ${canOpenFileFromSlide(slide.meta.filePath)
+                                        ? html`
+                                            <button
+                                                class="summary-file-chip summary-file-chip-interactive summary-path-chip"
+                                                data-tooltip="Open in diff: ${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
+                                                title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
+                                                onClick=${() => handleOpenFile(slide.meta)}
+                                            >
+                                                ${truncatePathDisplay(slide.meta.filePath)}${slide.meta.line ? `:${slide.meta.line}` : ''}
+                                            </button>
+                                        `
+                                        : html`
+                                            <code class="summary-file-inline-code" title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}">${truncatePathDisplay(slide.meta.filePath)}${slide.meta.line ? `:${slide.meta.line}` : ''}</code>
+                                        `
+                                    }
+                                    <div
+                                        class="summary-file-description summary-slideshow-content"
+                                        style="font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; max-width: ${typography.maxWidth};"
+                                        dangerouslySetInnerHTML=${{ __html: slide.renderedContent || '' }}
+                                    ></div>
                                 </div>
                             `
-                            : slide.kind === 'file-point' && slide.meta
+                            : slide.kind === 'label-point' && slide.meta
                                 ? html`
-                                    <div class="summary-file-point" style="max-width: ${typography.maxWidth}; width: 100%;">
+                                    <div class="summary-label-point" style="max-width: ${typography.maxWidth}; width: 100%;">
                                         ${slide.title && html`
                                             <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
                                                 ${slide.title}
                                             </div>
                                         `}
-                                        ${canOpenFileFromSlide(slide.meta.filePath)
-                                            ? html`
-                                                <button
-                                                    class="summary-file-chip summary-file-chip-interactive summary-path-chip"
-                                                    data-tooltip="Open in diff: ${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
-                                                    title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}"
-                                                    onClick=${() => handleOpenFile(slide.meta)}
-                                                >
-                                                    ${truncatePathDisplay(slide.meta.filePath)}${slide.meta.line ? `:${slide.meta.line}` : ''}
-                                                </button>
-                                            `
-                                            : html`
-                                                <code class="summary-file-inline-code" title="${slide.meta.filePath}${slide.meta.line ? `:${slide.meta.line}` : ''}">${truncatePathDisplay(slide.meta.filePath)}${slide.meta.line ? `:${slide.meta.line}` : ''}</code>
-                                            `
-                                        }
-                                        <div class="summary-file-description" style="font-size: ${typography.fontSize}; line-height: ${typography.lineHeight};">${slide.content}</div>
+                                        <div class="summary-label-chip">${slide.meta.label}</div>
+                                        <div
+                                            class="summary-label-body summary-slideshow-content"
+                                            style="font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; max-width: ${typography.maxWidth};"
+                                            dangerouslySetInnerHTML=${{ __html: slide.renderedContent || '' }}
+                                        ></div>
                                     </div>
                                 `
-                                : slide.kind === 'label-point' && slide.meta
-                                    ? html`
-                                        <div class="summary-label-point" style="max-width: ${typography.maxWidth}; width: 100%;">
-                                            ${slide.title && html`
-                                                <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
-                                                    ${slide.title}
-                                                </div>
-                                            `}
-                                            <div class="summary-label-chip">${slide.meta.label}</div>
-                                            <div class="summary-label-body" style="font-size: ${typography.fontSize}; line-height: ${typography.lineHeight};">${slide.content}</div>
+                                : html`
+                                    ${slide.title && html`
+                                        <div style="margin-bottom: 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
+                                            ${slide.title}
                                         </div>
-                                    `
-                            : html`
-                                ${slide.title && html`
-                                    <div style="margin-bottom: 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
-                                        ${slide.title}
-                                    </div>
+                                    `}
+                                    <div
+                                        class="summary-slideshow-content"
+                                        style="
+                                            color: ${slide.color.text};
+                                            font-size: ${typography.fontSize};
+                                            line-height: ${typography.lineHeight};
+                                            letter-spacing: -0.01em;
+                                            overflow-wrap: break-word;
+                                            word-break: break-word;
+                                            max-width: ${typography.maxWidth};
+                                        "
+                                        dangerouslySetInnerHTML=${{ __html: slide.renderedContent || '' }}
+                                    ></div>
                                 `}
-                                <div
-                                    ref=${contentRef}
-                                    class="summary-slideshow-content"
-                                    style="
-                                        color: ${slide.color.text};
-                                        font-size: ${typography.fontSize};
-                                        line-height: ${typography.lineHeight};
-                                        letter-spacing: -0.01em;
-                                        overflow-wrap: break-word;
-                                        word-break: break-word;
-                                        max-width: ${typography.maxWidth};
-                                    "
-                                ></div>
-                            `}
-                    `}
                 </div>
 
                 <div class="summary-slideshow-controls" style="padding: 10px 16px 12px 16px; flex-shrink: 0;">

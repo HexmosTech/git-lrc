@@ -58,18 +58,18 @@ function testStructuredFilePoints() {
   console.log('✓ Structured file-point test passed');
 }
 
-function testBareFilenameStaysListItem() {
+function testBareFilenameBecomesFilePoint() {
   const markdown = `## Technical Highlights
 
 - slideshowParser.js: Adds one-point-per-slide list behavior.
 - SummarySlideshow.js: Improves interactive file-path rendering.`;
 
   const slides = parseMarkdownToSlides(markdown);
-  console.assert(slides.length === 2, `Expected 2 list slides for bare filenames, got ${slides.length}`);
-  console.assert(slides.every(slide => slide.kind === 'list'), 'Bare filename bullets should stay regular list slides');
-  console.assert(slides[0].content.includes('slideshowParser.js'), 'First bare filename should remain in content');
-  console.assert(slides[1].content.includes('SummarySlideshow.js'), 'Second bare filename should remain in content');
-  console.log('✓ Bare filename list fallback test passed');
+  console.assert(slides.length === 2, `Expected 2 file-point slides for bare filenames, got ${slides.length}`);
+  console.assert(slides.every(slide => slide.kind === 'file-point'), 'Bare filename bullets should become file-point slides when uniquely resolvable later');
+  console.assert(slides[0].meta?.filePath === 'slideshowParser.js', 'First bare filename should be stored as file metadata');
+  console.assert(slides[1].meta?.filePath === 'SummarySlideshow.js', 'Second bare filename should be stored as file metadata');
+  console.log('✓ Bare filename file-point test passed');
 }
 
 function testStructuredLabelPoints() {
@@ -170,6 +170,100 @@ Check https://example.com/docs. Then run \`make build-local\`.`;
   console.assert(slides[0].content.includes('https://example.com/docs'), 'URL should stay intact');
   console.assert(slides[1].content.includes('<code>make build-local</code>'), 'Inline code should stay intact');
   console.log('✓ URL and inline code test passed');
+}
+
+function testStructuredPointsPreserveInlineCode() {
+  const markdown = `## Technical Highlights
+
+- **internal/staticserve/static/components/review_outcome_state.mjs**: The \`shouldShowAllClear\` utility function now accepts and uses \`summarySlidesEligibility\`.
+- **Functionality**: The \`SummarySlideshow\` renderer now preserves \`code\` formatting inside structured points.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides[0].kind === 'file-point', 'Structured file point should remain a file-point slide');
+  console.assert(slides[0].content.includes('<code>shouldShowAllClear</code>'), 'File-point description should preserve inline code');
+  console.assert(slides[0].content.includes('<code>summarySlidesEligibility</code>'), 'File-point description should preserve all inline code tokens');
+  console.assert(slides[1].kind === 'label-point', 'Structured label point should remain a label-point slide');
+  console.assert(slides[1].content.includes('<code>SummarySlideshow</code>'), 'Label-point body should preserve inline code');
+  console.assert(slides[1].content.includes('<code>code</code>'), 'Label-point body should preserve repeated inline code');
+  console.log('✓ Structured point inline code preservation test passed');
+}
+
+function testFullSummaryKeepsRiskSlidesAndAvoidsDuplication() {
+  const markdown = `# Review Summary
+
+## Overview
+
+The UI state logic now depends on this new eligibility status.
+
+## Technical Highlights
+
+- **internal/staticserve/static/app.js**: Passes \`summarySlidesEligibility\` status to the \`shouldShowAllClear\` helper function.
+- **internal/staticserve/static/components/review_outcome_state.mjs**: Uses the existing validator result instead of duplicating section checks.
+
+## Impact
+
+- **Impact**: The 'all clear' UI state now accurately reflects the readiness and quality of structured summaries.
+
+## Risks
+
+- **Risk**: Reviews with malformed structured summaries should not show the success banner.
+- **Risk**: Inline code formatting must remain visible without shrinking the surrounding slide body text.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides.length === 7, `Expected 7 slides before appreciation, got ${slides.length}`);
+  console.assert(slides[0].kind === 'intro', 'First slide should remain the intro slide');
+  console.assert(slides[1].kind === 'sentence', 'Overview should remain a sentence slide');
+  console.assert(slides[2].kind === 'file-point', 'First technical highlight should be a file-point slide');
+  console.assert(slides[3].kind === 'file-point', 'Second technical highlight should be a file-point slide');
+  console.assert(slides[4].kind === 'label-point', 'Impact should remain a dedicated label-point slide');
+  console.assert(slides[5].kind === 'label-point', 'First risk should remain a dedicated label-point slide');
+  console.assert(slides[6].kind === 'label-point', 'Second risk should remain a dedicated label-point slide');
+  console.assert(slides[5].meta?.label.toLowerCase() === 'risk', 'First risk label should be preserved');
+  console.assert(slides[6].meta?.label.toLowerCase() === 'risk', 'Second risk label should be preserved');
+  console.assert(slides[4].content.match(/readiness and quality of structured summaries/g)?.length === 1, 'Impact body should not duplicate sentence content');
+  console.assert(slides[2].content.includes('<code>summarySlidesEligibility</code>'), 'Technical highlight should preserve inline code');
+  console.assert(slides[2].content.match(/summarySlidesEligibility/g)?.length === 1, 'Structured file-point body should not duplicate inline code text');
+  console.log('✓ Full summary ordering and duplication regression test passed');
+}
+
+function testBoldStructuredPrefixesSplitSentencesWithoutCarryover() {
+  const markdown = `# Review Summary
+
+## Overview
+
+The review summary should preserve structure and sentence boundaries.
+
+## Technical Highlights
+
+- **internal/staticserve/static/components/review_performance_state.mjs**: Refined the \`First comment\` metric for zero-comment reviews. It now renders \`No comments\` after completion.
+
+## Impact
+
+- **Functionality**: Successful zero-comment reviews no longer say Waiting. Reviewers can distinguish in-progress work from completed zero-comment reviews. The metric language now matches the actual outcome.
+
+## Risks
+
+- **Risk**: Bolded structured prefixes must still parse correctly. Inline \`code\` must stay formatted.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+
+  console.assert(slides.length === 9, `Expected 9 slides before appreciation, got ${slides.length}`);
+  console.assert(slides[2].kind === 'file-point', 'First technical sentence should be a file-point slide');
+  console.assert(slides[3].kind === 'file-point', 'Second technical sentence should be a file-point slide');
+  console.assert(slides[2].content.includes('<code>First comment</code>'), 'Technical highlight should preserve inline code in the first sentence');
+  console.assert(slides[3].content.includes('<code>No comments</code>'), 'Technical highlight should preserve inline code in the second sentence');
+  console.assert(slides[4].kind === 'label-point', 'First impact sentence should be its own label-point slide');
+  console.assert(slides[5].kind === 'label-point', 'Second impact sentence should be its own label-point slide');
+  console.assert(slides[6].kind === 'label-point', 'Third impact sentence should be its own label-point slide');
+  console.assert(slides[4].content.includes('no longer say Waiting'), 'First impact slide should keep only the first sentence');
+  console.assert(slides[5].content.includes('distinguish in-progress work'), 'Second impact slide should keep only the second sentence');
+  console.assert(slides[6].content.includes('metric language now matches'), 'Third impact slide should keep only the third sentence');
+  console.assert(!slides[4].content.includes('First comment'), 'Impact slides should not inherit technical highlight content');
+  console.assert(slides[7].kind === 'label-point', 'First risk sentence should be its own label-point slide');
+  console.assert(slides[8].kind === 'label-point', 'Second risk sentence should be its own label-point slide');
+  console.assert(slides[8].content.includes('<code>code</code>'), 'Risk slides should preserve inline code after sentence splitting');
+  console.assert(!slides[7].content.includes('metric language now matches'), 'Risk slides should not inherit impact content');
+  console.log('✓ Bold structured-prefix sentence split regression test passed');
 }
 
 function testInlineFormattingAndSentenceSplit() {
@@ -318,7 +412,7 @@ export function runAllTests() {
     testIntroAndSectionSlides();
     testListChunking();
     testStructuredFilePoints();
-    testBareFilenameStaysListItem();
+    testBareFilenameBecomesFilePoint();
     testStructuredLabelPoints();
     testMixedListStaysSinglePointPerSlide();
     testSingleListSlideDoesNotKeepWrapperBullet();
@@ -326,6 +420,9 @@ export function runAllTests() {
     testCodeBlocksStayWhole();
     testAbbreviationsAndDecimals();
     testUrlsAndInlineCode();
+    testStructuredPointsPreserveInlineCode();
+    testFullSummaryKeepsRiskSlidesAndAvoidsDuplication();
+    testBoldStructuredPrefixesSplitSentencesWithoutCarryover();
     testInlineFormattingAndSentenceSplit();
     testBlockquoteAndTableStayStructured();
     testEmptyMarkdown();

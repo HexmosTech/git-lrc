@@ -436,6 +436,48 @@ function cloneListChunk(listNode, items) {
   return serializeNode(clone);
 }
 
+function extractStructuredListBodyHtml(node, prefixPattern) {
+  if (!node || !(prefixPattern instanceof RegExp) || typeof document === 'undefined') {
+    return '';
+  }
+
+  const clone = node.cloneNode(true);
+  const { text, textNodes } = collectTextNodeRanges(clone);
+  if (!textNodes.length) {
+    return '';
+  }
+
+  const match = text.match(prefixPattern);
+  if (!match || match.index !== 0 || !match[0]) {
+    return '';
+  }
+
+  const startPosition = findTextPosition(textNodes, 0);
+  const endPosition = findTextPosition(textNodes, match[0].length);
+  if (!startPosition || !endPosition) {
+    return '';
+  }
+
+  const range = document.createRange();
+  range.setStart(startPosition.node, startPosition.offset);
+  range.setEnd(endPosition.node, endPosition.offset);
+  range.deleteContents();
+
+  return clone.innerHTML.trim();
+}
+
+function splitStructuredBodyHtml(bodyHtml) {
+  const content = cleanContent(bodyHtml);
+  if (!content || typeof document === 'undefined') {
+    return [];
+  }
+
+  const wrapper = document.createElement('p');
+  wrapper.innerHTML = content;
+
+  return splitParagraphNode(wrapper).filter(fragment => cleanContent(fragment));
+}
+
 function parsePathToken(pathToken) {
   const trimmed = (pathToken || '').trim();
   const match = trimmed.match(/^(.*?)(?::(\d+))?$/);
@@ -444,7 +486,7 @@ function parsePathToken(pathToken) {
   }
 
   const filePath = (match[1] || '').trim();
-  if (!filePath || !filePath.includes('/') || !/\.[A-Za-z0-9]+$/.test(filePath)) {
+  if (!filePath || !/\.[A-Za-z0-9]+$/.test(filePath)) {
     return null;
   }
 
@@ -472,9 +514,11 @@ function parseStructuredListItem(itemNode) {
   if (fileMatch) {
     const parsedPath = parsePathToken(fileMatch[1]);
     if (parsedPath) {
+      const escapedPath = fileMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const descriptionHtml = extractStructuredListBodyHtml(itemNode, new RegExp(`^\\s*${escapedPath}\\s*[:\\-–]\\s*`)) || fileMatch[2].trim();
       return {
         kind: 'file-point',
-        description: fileMatch[2].trim(),
+        description: descriptionHtml,
         ...parsedPath
       };
     }
@@ -482,10 +526,11 @@ function parseStructuredListItem(itemNode) {
 
   const labelMatch = normalizedText.match(/^(Functionality|Risk|Impact|Recommendation|Action)\s*:\s*(.+)$/i);
   if (labelMatch) {
+    const bodyHtml = extractStructuredListBodyHtml(itemNode, new RegExp(`^\\s*${labelMatch[1]}\\s*:\\s*`, 'i')) || labelMatch[2].trim();
     return {
       kind: 'label-point',
       label: labelMatch[1],
-      body: labelMatch[2].trim()
+      body: bodyHtml
     };
   }
 
@@ -600,22 +645,28 @@ export function parseMarkdownToSlides(markdown) {
         }
 
         if (structured.kind === 'file-point') {
-          slides.push(createSlide(structured.description, nextColor(), {
-            title: sectionTitle,
-            kind: 'file-point',
-            meta: structured
-          }));
+          const slideColor = nextColor();
+          const fragments = splitStructuredBodyHtml(structured.description);
+          (fragments.length ? fragments : [structured.description]).forEach(fragment => {
+            slides.push(createSlide(fragment, slideColor, {
+              title: sectionTitle,
+              kind: 'file-point',
+              meta: structured
+            }));
+          });
           return;
         }
 
-        slides.push(createSlide(structured.body, nextColor(), {
-          title: sectionTitle,
-          kind: 'label-point',
-          meta: structured
-        }));
-        if ((structured.label || '').toLowerCase() === 'risk') {
-          slides[slides.length - 1].color = nextRiskColor();
-        }
+        const isRisk = (structured.label || '').toLowerCase() === 'risk';
+        const slideColor = isRisk ? nextRiskColor() : nextColor();
+        const fragments = splitStructuredBodyHtml(structured.body);
+        (fragments.length ? fragments : [structured.body]).forEach(fragment => {
+          slides.push(createSlide(fragment, slideColor, {
+            title: sectionTitle,
+            kind: 'label-point',
+            meta: structured
+          }));
+        });
       });
       return;
     }

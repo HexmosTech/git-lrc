@@ -717,9 +717,9 @@ async function initApp() {
         const files = reviewData?.Files || [];
         const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
         const errorSummary = reviewData?.errorSummary || '';
-        const showAllClear = shouldShowAllClear({ status, totalComments, errorSummary });
         const hasSummary = Boolean(summary && summary.trim());
         const summarySlidesEligibility = hasSummary ? evaluateSummarySlidesEligibility(summary) : { eligible: false, reason: 'empty-summary' };
+        const showAllClear = shouldShowAllClear({ status, totalComments, errorSummary, summarySlidesEligibility });
         const slidesEnabled = Boolean(summarySlidesEligibility.eligible && hasSummary);
         const firstCommentRenderMs = getFirstRenderTime(commentRenderTimes);
         const performanceSnapshot = buildPerformanceSnapshot({

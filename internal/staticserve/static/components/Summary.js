@@ -74,7 +74,7 @@ function parseFullPathToken(pathToken) {
     }
 
     const filePath = (match[1] || '').trim();
-    if (!filePath || !filePath.includes('/') || !/\.[A-Za-z0-9]+$/.test(filePath)) {
+    if (!filePath || !/\.[A-Za-z0-9]+$/.test(filePath)) {
         return null;
     }
 
@@ -94,9 +94,9 @@ function enhanceTextWithFileChips(container, handlers = {}) {
     const onOpenFileFromSlide = handlers.onOpenFileFromSlide;
     const canOpenFileFromSlide = handlers.canOpenFileFromSlide;
 
-    const codeNodes = Array.from(container.querySelectorAll('code'));
-    codeNodes.forEach((node) => {
-        if (node.closest('pre')) {
+    const candidateNodes = Array.from(container.querySelectorAll('code, strong'));
+    candidateNodes.forEach((node) => {
+        if (node.tagName === 'CODE' && node.closest('pre')) {
             return;
         }
 

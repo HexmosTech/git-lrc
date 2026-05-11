@@ -1114,6 +1114,27 @@ body {
     font-weight: 500;
 }
 
+.summary-slideshow-content code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.82em;
+    line-height: 1;
+    color: inherit;
+    background: rgba(10, 15, 28, 0.42);
+    border: 1px solid rgba(207, 228, 255, 0.18);
+    border-radius: 0.36em;
+    padding: 0.08em 0.32em;
+    vertical-align: baseline;
+    white-space: nowrap;
+}
+
+.summary-slideshow-content pre code {
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    background: transparent;
+    border: 0;
+    padding: 0;
+}
+
 .summary-slideshow-content > :first-child {
     margin-top: 0;
 }
