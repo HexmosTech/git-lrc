@@ -799,38 +799,6 @@ export async function createSummarySlideshow() {
         const explorerFocusTrackItemKey = highlightedTrackItemKey || activeProgressTrackItemKey;
 
         const panel = html`
-            ${isHelpShown && html`
-                <div
-                    class="summary-slideshow-help"
-                    style="
-                        position: absolute; inset: auto auto 32px 32px;
-                        max-width: 360px; padding: 14px 16px;
-                        border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.18);
-                        background: rgba(14, 23, 42, 0.96); color: var(--text-secondary);
-                        box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
-                        z-index: 2;
-                    "
-                    onClick=${(event) => event.stopPropagation()}
-                >
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary); font-size: 13px;">Keyboard shortcuts</strong>
-                        <button class="action-btn summary-slide-btn" onClick=${() => setIsHelpShown(false)} title="Close keyboard help" aria-label="Close keyboard help">
-                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <div>Previous: \u2190 / H / K</div>
-                        <div>Next: \u2192 / L / J / Space</div>
-                        <div>Jump: 1-9</div>
-                        <div>Auto-play: A</div>
-                        <div>Copy: C</div>
-                        <div>${isModal ? 'Close: Q / Esc' : 'Hide help: Esc'}</div>
-                    </div>
-                </div>
-            `}
-
             <div
                 class="summary-slideshow-surface ${isModal ? '' : 'summary-slideshow-embedded-panel'}"
                 style="
@@ -848,6 +816,38 @@ export async function createSummarySlideshow() {
                 "
                 onClick=${(event) => event.stopPropagation()}
             >
+                ${isHelpShown && html`
+                    <div
+                        class="summary-slideshow-help"
+                        style="
+                            position: absolute; inset: auto 16px 84px auto;
+                            max-width: 360px; padding: 14px 16px;
+                            border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.18);
+                            background: rgba(14, 23, 42, 0.96); color: var(--text-secondary);
+                            box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
+                            z-index: 5;
+                        "
+                        onClick=${(event) => event.stopPropagation()}
+                    >
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px;">
+                            <strong style="color: var(--text-primary); font-size: 13px;">Keyboard shortcuts</strong>
+                            <button class="action-btn summary-slide-btn" onClick=${() => setIsHelpShown(false)} title="Close keyboard help" aria-label="Close keyboard help">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                            <div>Previous: \u2190 / H / K</div>
+                            <div>Next: \u2192 / L / J / Space</div>
+                            <div>Jump: 1-9</div>
+                            <div>Auto-play: A</div>
+                            <div>Copy: C</div>
+                            <div>${isModal ? 'Close: Q / Esc' : 'Hide help: Esc'}</div>
+                        </div>
+                    </div>
+                `}
+
                 ${isModal && html`
                     <div class="summary-slideshow-chrome" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; flex-shrink: 0;">
                         <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.01em;">
