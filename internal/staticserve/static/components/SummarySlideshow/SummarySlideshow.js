@@ -499,6 +499,26 @@ export async function createSummarySlideshow() {
             }, 200);
         };
 
+        const isMovingWithinContainer = (event) => {
+            const nextTarget = event?.relatedTarget;
+            const currentTarget = event?.currentTarget;
+            return Boolean(nextTarget && currentTarget && typeof currentTarget.contains === 'function' && currentTarget.contains(nextTarget));
+        };
+
+        const handleChapterExplorerRegionMouseLeave = (event) => {
+            if (isMovingWithinContainer(event)) {
+                return;
+            }
+            closeChapterExplorerSoon();
+        };
+
+        const handleChapterExplorerRegionBlur = (event) => {
+            if (isMovingWithinContainer(event)) {
+                return;
+            }
+            closeChapterExplorerSoon();
+        };
+
         useEffect(() => {
             if (!isVisible || !markdown) {
                 return;
@@ -841,6 +861,20 @@ export async function createSummarySlideshow() {
                     </div>
                 `}
 
+                <div class="summary-slideshow-stage">
+                    <button
+                        class="summary-slideshow-nav-overlay summary-slideshow-nav-overlay-prev"
+                        onClick=${prevSlide}
+                        title="Previous slide (H / K / Left Arrow)"
+                        aria-label="Previous slide"
+                        disabled=${currentSlide === 0 && !isCompleteSlide}
+                        tabIndex="-1"
+                    >
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+
                 <div ref=${bodyRef} class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; ${isIntro || isCompleteSlide ? 'align-items: center;' : ''} padding: 28px 32px;">
                     ${isCompleteSlide ? html`
                         <div class="summary-slideshow-complete" style="text-align: center; padding: 32px; max-width: 520px; width: 100%;">
@@ -956,6 +990,19 @@ export async function createSummarySlideshow() {
                                     ></div>
                                 `}
                 </div>
+                    <button
+                        class="summary-slideshow-nav-overlay summary-slideshow-nav-overlay-next"
+                        onClick=${nextSlide}
+                        title="Next slide (J / L / Right Arrow / Space)"
+                        aria-label="Next slide"
+                        disabled=${isCompleteSlide}
+                        tabIndex="-1"
+                    >
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
 
                 <div class="summary-slideshow-controls" style="padding: 10px 16px 12px 16px; flex-shrink: 0;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
@@ -1008,13 +1055,14 @@ export async function createSummarySlideshow() {
 
                     <div class="summary-chapter-progress-wrap">
                         <div
-                            class="summary-chapter-progress-shell"
-                            style=${`--summary-chapter-accent: ${progressAccent};`}
+                            class="summary-chapter-progress-zone"
                             onMouseEnter=${() => openChapterExplorer(explorerFocusTrackItemKey)}
-                            onMouseLeave=${closeChapterExplorerSoon}
+                            onMouseLeave=${handleChapterExplorerRegionMouseLeave}
                             onFocusCapture=${() => openChapterExplorer(explorerFocusTrackItemKey, true)}
-                            onBlurCapture=${closeChapterExplorerSoon}
+                            onBlurCapture=${handleChapterExplorerRegionBlur}
+                            style=${`--summary-chapter-accent: ${progressAccent};`}
                         >
+                            <div class="summary-chapter-progress-shell">
                         <div class="summary-chapter-progress" role="group" aria-label="Slideshow chapter navigation">
                             ${progressTrackItems.map((trackItem) => {
                                 const trackItemFillPercent = getProgressTrackFillPercent(trackItem, currentSlide);
@@ -1061,6 +1109,8 @@ export async function createSummarySlideshow() {
                                 `;
                             })}
                         </div>
+                            </div>
+                            <div class="summary-chapter-progress-readout" aria-hidden="true">${Math.round(progressValue)}%</div>
                         <div class=${`summary-chapter-explorer ${isChapterExplorerOpen ? 'is-open' : ''}`} aria-hidden=${isChapterExplorerOpen ? 'false' : 'true'}>
                             <div class="summary-chapter-explorer-grid">
                                 ${chapterExplorerCards.map((card) => {
@@ -1117,12 +1167,10 @@ export async function createSummarySlideshow() {
                                 })}
                             </div>
                         </div>
+                        <div role="status" aria-live="polite" class="summary-slideshow-status">
+                            ${liveMessage || (isAutoPlay && !isCompleteSlide ? `Auto-play \u00b7 next in ${Math.max(1, Math.ceil(autoPlayRemainingMs / 1000))}s` : '')}
                         </div>
-                        <div class="summary-chapter-progress-readout" aria-hidden="true">${Math.round(progressValue)}%</div>
-                    </div>
-
-                    <div role="status" aria-live="polite" class="summary-slideshow-status" style="min-height: 16px; margin-top: 6px; font-size: 12px;">
-                        ${liveMessage || (isAutoPlay && !isCompleteSlide ? `Auto-play \u00b7 next in ${Math.max(1, Math.ceil(autoPlayRemainingMs / 1000))}s` : '')}
+                        </div>
                     </div>
                 </div>
             </div>

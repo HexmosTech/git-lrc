@@ -497,6 +497,26 @@ function cloneListChunk(listNode, items) {
   return serializeNode(clone);
 }
 
+const EMPTY_INLINE_ARTIFACT_TAGS = new Set(['A', 'B', 'CODE', 'DEL', 'EM', 'I', 'SPAN', 'STRONG']);
+
+function pruneEmptyInlineArtifacts(root) {
+  if (!root || typeof root.querySelectorAll !== 'function') {
+    return;
+  }
+
+  Array.from(root.querySelectorAll('*')).reverse().forEach((element) => {
+    if (!EMPTY_INLINE_ARTIFACT_TAGS.has(element.tagName)) {
+      return;
+    }
+
+    const hasElementChildren = element.children.length > 0;
+    const textContent = (element.textContent || '').replace(/\u00a0/g, ' ').trim();
+    if (!hasElementChildren && !textContent) {
+      element.remove();
+    }
+  });
+}
+
 function extractStructuredListBodyHtml(node, prefixPattern) {
   if (!node || !(prefixPattern instanceof RegExp) || typeof document === 'undefined') {
     return '';
@@ -523,6 +543,7 @@ function extractStructuredListBodyHtml(node, prefixPattern) {
   range.setStart(startPosition.node, startPosition.offset);
   range.setEnd(endPosition.node, endPosition.offset);
   range.deleteContents();
+  pruneEmptyInlineArtifacts(clone);
 
   return clone.innerHTML.trim();
 }

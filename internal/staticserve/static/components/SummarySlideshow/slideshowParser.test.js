@@ -412,6 +412,20 @@ function testStructuredPointsPreserveInlineCode() {
   console.log('✓ Structured point inline code preservation test passed');
 }
 
+function testStructuredFilePointsDoNotLeaveEmptyInlineArtifacts() {
+  const markdown = `## Technical Highlights
+
+- \`SummarySlideshow.js\`: Introduces explicit Previous/Next slide navigation buttons with keyboard support.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides.length === 1, `Expected 1 file-point slide, got ${slides.length}`);
+  console.assert(slides[0].kind === 'file-point', 'Backticked file prefix should still parse as a file-point slide');
+  console.assert(!slides[0].content.includes('<code></code>'), 'Structured file-point body should not keep empty code wrappers after prefix removal');
+  console.assert(!/^<code>\s*<\/code>/.test(slides[0].content), 'Structured file-point body should not start with an empty code artifact');
+  console.assert(slides[0].content.includes('Introduces explicit Previous/Next slide navigation buttons with keyboard support.'), 'Structured file-point body should retain the description after prefix removal');
+  console.log('✓ Structured file-point empty inline artifact test passed');
+}
+
 function testFullSummaryKeepsRiskSlidesAndAvoidsDuplication() {
   const markdown = `# Review Summary
 
@@ -654,6 +668,7 @@ export function runAllTests() {
     testAbbreviationsAndDecimals();
     testUrlsAndInlineCode();
     testStructuredPointsPreserveInlineCode();
+    testStructuredFilePointsDoNotLeaveEmptyInlineArtifacts();
     testFullSummaryKeepsRiskSlidesAndAvoidsDuplication();
     testBoldStructuredPrefixesSplitSentencesWithoutCarryover();
     testInlineFormattingAndSentenceSplit();
