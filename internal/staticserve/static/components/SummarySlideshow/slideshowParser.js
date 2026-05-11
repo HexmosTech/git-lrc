@@ -122,6 +122,67 @@ function cleanContent(text) {
   return (text || '').trim();
 }
 
+function buildChapterKey(text) {
+  return normalizeHeading(text);
+}
+
+function createChapterMeta(context = {}, overrides = {}) {
+  const topLevelTitle = cleanContent(overrides.topLevelTitle ?? context.topLevelTitle ?? context.activeTitle ?? '');
+  const nestedTitle = cleanContent(overrides.nestedTitle ?? context.nestedTitle ?? '');
+  const activeTitle = cleanContent(overrides.activeTitle ?? context.activeTitle ?? topLevelTitle ?? nestedTitle ?? '');
+
+  if (!topLevelTitle && !nestedTitle && !activeTitle) {
+    return null;
+  }
+
+  const topLevelKey = cleanContent(overrides.topLevelKey || buildChapterKey(topLevelTitle || activeTitle));
+  const nestedKey = cleanContent(
+    overrides.nestedKey || (nestedTitle
+      ? `${topLevelKey || 'chapter'}::${buildChapterKey(nestedTitle) || 'section'}`
+      : '')
+  );
+
+  return {
+    topLevelTitle: topLevelTitle || activeTitle,
+    topLevelKey,
+    nestedTitle,
+    nestedKey,
+    activeTitle,
+    pathKey: nestedKey || topLevelKey
+  };
+}
+
+function createStructuredLabelChapterMeta(context, label) {
+  const normalizedLabel = normalizeHeading(label);
+  const normalizedTopLevel = normalizeHeading(context.topLevelTitle || context.activeTitle || '');
+  const shouldPromoteLabel = normalizedLabel && normalizedLabel !== normalizedTopLevel;
+
+  if (!shouldPromoteLabel) {
+    return createChapterMeta(context);
+  }
+
+  return createChapterMeta(context, {
+    nestedTitle: label,
+    activeTitle: label
+  });
+}
+
+function createStructuredFileChapterMeta(context, structured) {
+  const filePath = cleanContent(structured?.filePath || '');
+  const pathShort = cleanContent(structured?.pathShort || filePath.split('/').pop() || filePath);
+  const topLevelKey = buildChapterKey(context?.topLevelTitle || context?.activeTitle || '');
+
+  if (!filePath || !pathShort) {
+    return createChapterMeta(context);
+  }
+
+  return createChapterMeta(context, {
+    nestedTitle: pathShort,
+    activeTitle: pathShort,
+    nestedKey: `${topLevelKey || 'chapter'}::file::${buildChapterKey(filePath) || buildChapterKey(pathShort) || 'entry'}`
+  });
+}
+
 function protectSentenceTokens(text) {
   const replacements = [];
   let protectedText = text;
@@ -549,7 +610,8 @@ function createSlide(content, color, options = {}) {
     readTimeFormatted: formatTime(readTime),
     color,
     isMarkdown: false,
-    meta: options.meta || null
+    meta: options.meta || null,
+    chapter: options.chapter || null
   };
 }
 
@@ -579,6 +641,11 @@ export function parseMarkdownToSlides(markdown) {
   let colorIndex = 0;
   let riskColorIndex = 0;
   let sectionTitle = '';
+  let chapterContext = {
+    topLevelTitle: '',
+    nestedTitle: '',
+    activeTitle: ''
+  };
 
   const nextColor = () => {
     const color = SLIDE_COLORS[colorIndex % SLIDE_COLORS.length];
@@ -600,7 +667,11 @@ export function parseMarkdownToSlides(markdown) {
         return;
       }
       splitParagraphNode(block).forEach(sentenceHtml => {
-        slides.push(createSlide(sentenceHtml, nextColor(), { title: sectionTitle, kind: 'sentence' }));
+        slides.push(createSlide(sentenceHtml, nextColor(), {
+          title: sectionTitle,
+          kind: 'sentence',
+          chapter: createChapterMeta(chapterContext)
+        }));
       });
       return;
     }
@@ -617,7 +688,26 @@ export function parseMarkdownToSlides(markdown) {
       if (tagName === 'H1' && slides.length === 0 && blockIndex === 0) {
         slides.push(createSlide('', nextColor(), { title: headingText, kind: 'intro' }));
         sectionTitle = '';
+        chapterContext = {
+          topLevelTitle: '',
+          nestedTitle: '',
+          activeTitle: ''
+        };
         return;
+      }
+
+      if (tagName === 'H2') {
+        chapterContext = {
+          topLevelTitle: headingText,
+          nestedTitle: '',
+          activeTitle: headingText
+        };
+      } else {
+        chapterContext = {
+          topLevelTitle: chapterContext.topLevelTitle || headingText,
+          nestedTitle: headingText,
+          activeTitle: headingText
+        };
       }
 
       sectionTitle = headingText;
@@ -626,7 +716,11 @@ export function parseMarkdownToSlides(markdown) {
 
     if (tagName === 'P') {
       splitParagraphNode(element).forEach(sentenceHtml => {
-        slides.push(createSlide(sentenceHtml, nextColor(), { title: sectionTitle, kind: 'sentence' }));
+        slides.push(createSlide(sentenceHtml, nextColor(), {
+          title: sectionTitle,
+          kind: 'sentence',
+          chapter: createChapterMeta(chapterContext)
+        }));
       });
       return;
     }
@@ -639,7 +733,8 @@ export function parseMarkdownToSlides(markdown) {
         if (!structured) {
           slides.push(createSlide(cloneListChunk(element, [item]), nextColor(), {
             title: sectionTitle,
-            kind: 'list'
+            kind: 'list',
+            chapter: createChapterMeta(chapterContext)
           }));
           return;
         }
@@ -651,7 +746,8 @@ export function parseMarkdownToSlides(markdown) {
             slides.push(createSlide(fragment, slideColor, {
               title: sectionTitle,
               kind: 'file-point',
-              meta: structured
+              meta: structured,
+              chapter: createStructuredFileChapterMeta(chapterContext, structured)
             }));
           });
           return;
@@ -664,7 +760,8 @@ export function parseMarkdownToSlides(markdown) {
           slides.push(createSlide(fragment, slideColor, {
             title: sectionTitle,
             kind: 'label-point',
-            meta: structured
+            meta: structured,
+            chapter: createStructuredLabelChapterMeta(chapterContext, structured.label)
           }));
         });
       });
@@ -672,14 +769,22 @@ export function parseMarkdownToSlides(markdown) {
     }
 
     if (tagName === 'PRE' || tagName === 'BLOCKQUOTE' || tagName === 'TABLE' || tagName === 'HR') {
-      slides.push(createSlide(serializeNode(element), nextColor(), { title: sectionTitle, kind: tagName === 'PRE' ? 'code' : 'block' }));
+      slides.push(createSlide(serializeNode(element), nextColor(), {
+        title: sectionTitle,
+        kind: tagName === 'PRE' ? 'code' : 'block',
+        chapter: createChapterMeta(chapterContext)
+      }));
       return;
     }
 
     if (tagName === 'DIV') {
       const childElements = Array.from(element.children);
       if (childElements.length === 1 && childElements[0].tagName === 'PRE') {
-        slides.push(createSlide(serializeNode(childElements[0]), nextColor(), { title: sectionTitle, kind: 'code' }));
+        slides.push(createSlide(serializeNode(childElements[0]), nextColor(), {
+          title: sectionTitle,
+          kind: 'code',
+          chapter: createChapterMeta(chapterContext)
+        }));
         return;
       }
     }
@@ -687,7 +792,11 @@ export function parseMarkdownToSlides(markdown) {
     const textContent = getDirectTextContent(element);
     if (textContent) {
       splitParagraphNode(element).forEach(sentenceHtml => {
-        slides.push(createSlide(sentenceHtml, nextColor(), { title: sectionTitle, kind: 'sentence' }));
+        slides.push(createSlide(sentenceHtml, nextColor(), {
+          title: sectionTitle,
+          kind: 'sentence',
+          chapter: createChapterMeta(chapterContext)
+        }));
       });
     }
     });

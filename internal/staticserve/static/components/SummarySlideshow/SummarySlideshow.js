@@ -158,6 +158,239 @@ function resolveSlideTypography(slide) {
     return { fontSize: 'clamp(22px, 2.3vw, 30px)', lineHeight: '1.46', maxWidth: '100%' };
 }
 
+const COMPLETE_TRACK_ITEM_KEY = 'complete';
+const COMPLETE_TRACK_MARKER_KEY = 'complete::marker';
+const COMPLETE_TRACK_TITLE = 'Complete';
+
+function normalizeChapterLabel(text) {
+    return String(text || '').trim();
+}
+
+function buildFallbackChapterKey(text, index) {
+    const normalized = normalizeChapterLabel(text)
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return normalized || `chapter-${index + 1}`;
+}
+
+export function buildChapterNavigation(slides) {
+    if (!Array.isArray(slides) || slides.length === 0) {
+        return [];
+    }
+
+    const chapters = [];
+    const firstExplicitChapter = slides.find((slide) => normalizeChapterLabel(slide?.chapter?.topLevelTitle));
+    let currentTopTitle = normalizeChapterLabel(firstExplicitChapter?.chapter?.topLevelTitle);
+    let currentTopKey = normalizeChapterLabel(firstExplicitChapter?.chapter?.topLevelKey);
+    let currentChapter = null;
+    let currentSubchapter = null;
+
+    slides.forEach((slide, index) => {
+        const explicitTopTitle = normalizeChapterLabel(slide?.chapter?.topLevelTitle);
+        const explicitTopKey = normalizeChapterLabel(slide?.chapter?.topLevelKey);
+
+        if (explicitTopTitle) {
+            currentTopTitle = explicitTopTitle;
+            currentTopKey = explicitTopKey || buildFallbackChapterKey(explicitTopTitle, index);
+        }
+
+        if (!currentTopTitle) {
+            currentTopTitle = normalizeChapterLabel(slide?.title) || `Chapter ${chapters.length + 1}`;
+            currentTopKey = buildFallbackChapterKey(currentTopTitle, index);
+        }
+
+        if (!currentChapter || currentChapter.key !== currentTopKey) {
+            currentChapter = {
+                key: currentTopKey,
+                title: currentTopTitle,
+                startIndex: index,
+                endIndex: index,
+                slideCount: 0,
+                widthPct: 0,
+                subchapters: []
+            };
+            chapters.push(currentChapter);
+            currentSubchapter = null;
+        }
+
+        currentChapter.endIndex = index;
+        currentChapter.slideCount += 1;
+
+        const nestedTitle = normalizeChapterLabel(slide?.chapter?.nestedTitle);
+        const nestedKey = normalizeChapterLabel(slide?.chapter?.nestedKey);
+        const chapterSlideOrdinal = index - currentChapter.startIndex + 1;
+
+        if (!nestedTitle) {
+            currentChapter.subchapters.push({
+                key: `${currentTopKey}::slide-${chapterSlideOrdinal}`,
+                title: `${currentChapter.title} ${chapterSlideOrdinal}`,
+                shortTitle: `${chapterSlideOrdinal}`,
+                startIndex: index,
+                endIndex: index,
+                slideCount: 1,
+                offsetPct: 0,
+                widthPct: 0,
+                isSynthetic: true
+            });
+            currentSubchapter = null;
+            return;
+        }
+
+        if (!currentSubchapter || currentSubchapter.key !== nestedKey) {
+            currentSubchapter = {
+                key: nestedKey || `${currentTopKey}::section-${currentChapter.subchapters.length + 1}`,
+                title: nestedTitle,
+                shortTitle: nestedTitle,
+                startIndex: index,
+                endIndex: index,
+                slideCount: 0,
+                offsetPct: 0,
+                widthPct: 0,
+                isSynthetic: false
+            };
+            currentChapter.subchapters.push(currentSubchapter);
+        }
+
+        currentSubchapter.endIndex = index;
+        currentSubchapter.slideCount += 1;
+    });
+
+    chapters.forEach((chapter) => {
+        chapter.widthPct = (chapter.slideCount / slides.length) * 100;
+        chapter.subchapters.forEach((subchapter) => {
+            subchapter.offsetPct = chapter.slideCount > 0
+                ? ((subchapter.startIndex - chapter.startIndex) / chapter.slideCount) * 100
+                : 0;
+            subchapter.widthPct = chapter.slideCount > 0
+                ? (subchapter.slideCount / chapter.slideCount) * 100
+                : 0;
+        });
+    });
+
+    return chapters;
+}
+
+export function buildProgressTrackItems(chapterNavigation, slideCount) {
+    const safeSlideCount = Number.isFinite(slideCount) ? Math.max(0, slideCount) : 0;
+    const totalUnitCount = safeSlideCount + 1;
+    const trackItems = Array.isArray(chapterNavigation)
+        ? chapterNavigation.map((chapter) => ({
+            key: chapter.key,
+            kind: 'chapter',
+            title: chapter.title,
+            startIndex: chapter.startIndex,
+            endIndex: chapter.endIndex,
+            slideCount: chapter.slideCount,
+            unitCount: chapter.slideCount,
+            centerPct: totalUnitCount > 0
+                ? ((chapter.startIndex + (chapter.slideCount / 2)) / totalUnitCount) * 100
+                : 0,
+            subchapters: chapter.subchapters.map((subchapter) => ({
+                ...subchapter,
+                tooltipLabel: subchapter.isSynthetic
+                    ? subchapter.title
+                    : `${chapter.title} -> ${subchapter.title}`,
+                globalOffsetPct: totalUnitCount > 0
+                    ? ((subchapter.startIndex + 0.5) / totalUnitCount) * 100
+                    : 0,
+                markerVariant: 'default'
+            }))
+        }))
+        : [];
+
+    trackItems.push({
+        key: COMPLETE_TRACK_ITEM_KEY,
+        kind: 'complete',
+        title: COMPLETE_TRACK_TITLE,
+        startIndex: safeSlideCount,
+        endIndex: safeSlideCount,
+        slideCount: 1,
+        unitCount: 1,
+        centerPct: totalUnitCount > 0
+            ? ((safeSlideCount + 0.5) / totalUnitCount) * 100
+            : 100,
+        subchapters: [{
+            key: COMPLETE_TRACK_MARKER_KEY,
+            title: COMPLETE_TRACK_TITLE,
+            shortTitle: COMPLETE_TRACK_TITLE,
+            startIndex: safeSlideCount,
+            endIndex: safeSlideCount,
+            slideCount: 1,
+            offsetPct: 0,
+            widthPct: 100,
+            isSynthetic: false,
+            tooltipLabel: COMPLETE_TRACK_TITLE,
+            globalOffsetPct: totalUnitCount > 0
+                ? (safeSlideCount / totalUnitCount) * 100
+                : 100,
+            markerVariant: 'complete'
+        }]
+    });
+
+    return trackItems;
+}
+
+function getTooltipAlignmentClass(positionPct) {
+    if (positionPct <= 10) {
+        return 'summary-chapter-popover-align-left';
+    }
+    if (positionPct >= 90) {
+        return 'summary-chapter-popover-align-right';
+    }
+    return '';
+}
+
+export function getActiveProgressTrackItemKey(trackItems, currentSlide) {
+    if (!Array.isArray(trackItems) || trackItems.length === 0) {
+        return '';
+    }
+
+    const activeTrackItem = trackItems.find((trackItem) => currentSlide >= trackItem.startIndex && currentSlide <= trackItem.endIndex);
+    return activeTrackItem ? activeTrackItem.key : trackItems[0].key;
+}
+
+export function getActiveProgressTrackMarkerKey(trackItems, currentSlide) {
+    if (!Array.isArray(trackItems)) {
+        return '';
+    }
+
+    for (const trackItem of trackItems) {
+        const activeTrackMarker = trackItem.subchapters.find((subchapter) => currentSlide >= subchapter.startIndex && currentSlide <= subchapter.endIndex);
+        if (activeTrackMarker) {
+            return activeTrackMarker.key;
+        }
+    }
+
+    return '';
+}
+
+function getProgressTrackFillPercent(trackItem, currentSlide) {
+    if (!trackItem || trackItem.unitCount <= 0) {
+        return 0;
+    }
+
+    if (currentSlide > trackItem.endIndex) {
+        return 100;
+    }
+
+    if (currentSlide < trackItem.startIndex) {
+        return 0;
+    }
+
+    const playedUnits = Math.max(0, Math.min(trackItem.unitCount, currentSlide - trackItem.startIndex + 1));
+    return Math.max(0, Math.min(100, (playedUnits / trackItem.unitCount) * 100));
+}
+
+function buildNavTooltip(key, label, count) {
+    return {
+        key,
+        label,
+        count
+    };
+}
+
 export async function createSummarySlideshow() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
 
@@ -170,6 +403,8 @@ export async function createSummarySlideshow() {
         const [isHelpShown, setIsHelpShown] = useState(false);
         const [copied, setCopied] = useState(false);
         const [liveMessage, setLiveMessage] = useState('');
+        const [activeNavTooltip, setActiveNavTooltip] = useState(null);
+        const [isNavTooltipVisible, setIsNavTooltipVisible] = useState(false);
         const [autoPlayRemainingMs, setAutoPlayRemainingMs] = useState(0);
         const bodyRef = useRef(null);
         const dialogRef = useRef(null);
@@ -177,6 +412,9 @@ export async function createSummarySlideshow() {
         const autoPlayTimerRef = useRef(null);
         const autoPlayTickRef = useRef(null);
         const copyTimerRef = useRef(null);
+        const chapterOpenTimerRef = useRef(null);
+        const chapterCloseTimerRef = useRef(null);
+        const chapterUnmountTimerRef = useRef(null);
         const sessionStartRef = useRef(null);
 
         const clampSlideIndex = (value, length) => {
@@ -199,6 +437,53 @@ export async function createSummarySlideshow() {
             setAutoPlayRemainingMs(0);
         };
 
+        const clearNavTooltipTimers = () => {
+            if (chapterOpenTimerRef.current) {
+                clearTimeout(chapterOpenTimerRef.current);
+                chapterOpenTimerRef.current = null;
+            }
+            if (chapterCloseTimerRef.current) {
+                clearTimeout(chapterCloseTimerRef.current);
+                chapterCloseTimerRef.current = null;
+            }
+            if (chapterUnmountTimerRef.current) {
+                clearTimeout(chapterUnmountTimerRef.current);
+                chapterUnmountTimerRef.current = null;
+            }
+        };
+
+        const openNavTooltip = (tooltip, immediate = false) => {
+            clearNavTooltipTimers();
+            setActiveNavTooltip(tooltip);
+
+            if (!tooltip) {
+                return;
+            }
+
+            if (immediate || isNavTooltipVisible || activeNavTooltip?.key === tooltip.key) {
+                setIsNavTooltipVisible(true);
+                return;
+            }
+
+            chapterOpenTimerRef.current = setTimeout(() => {
+                setActiveNavTooltip(tooltip);
+                setIsNavTooltipVisible(true);
+                chapterOpenTimerRef.current = null;
+            }, 110);
+        };
+
+        const closeNavTooltipSoon = () => {
+            clearNavTooltipTimers();
+            chapterCloseTimerRef.current = setTimeout(() => {
+                setIsNavTooltipVisible(false);
+                chapterUnmountTimerRef.current = setTimeout(() => {
+                    setActiveNavTooltip(null);
+                    chapterUnmountTimerRef.current = null;
+                }, 180);
+                chapterCloseTimerRef.current = null;
+            }, 320);
+        };
+
         useEffect(() => {
             if (!isVisible || !markdown) {
                 return;
@@ -215,6 +500,8 @@ export async function createSummarySlideshow() {
             setIsHelpShown(false);
             setCopied(false);
             setLiveMessage('');
+            setActiveNavTooltip(null);
+            setIsNavTooltipVisible(false);
             sessionStartRef.current = Date.now();
         }, [markdown, isVisible]);
 
@@ -332,6 +619,7 @@ export async function createSummarySlideshow() {
             if (copyTimerRef.current) {
                 clearTimeout(copyTimerRef.current);
             }
+            clearNavTooltipTimers();
         }, []);
 
         useEffect(() => {
@@ -360,9 +648,16 @@ export async function createSummarySlideshow() {
             return () => clearAutoPlayTimers();
         }, [isAutoPlay, isVisible, slides, currentSlide]);
 
-        const isAppreciation = currentSlide >= slides.length;
-        const slide = !isAppreciation ? slides[currentSlide] : null;
-        const progressValue = slides.length ? (isAppreciation ? 100 : ((currentSlide + 1) / slides.length) * 100) : 0;
+        const totalSlidesWithComplete = slides.length + 1;
+        const isCompleteSlide = currentSlide >= slides.length;
+        const slide = !isCompleteSlide ? slides[currentSlide] : null;
+        const progressValue = totalSlidesWithComplete
+            ? ((Math.min(currentSlide, totalSlidesWithComplete - 1) + 1) / totalSlidesWithComplete) * 100
+            : 0;
+        const chapterNavigation = buildChapterNavigation(slides);
+        const progressTrackItems = buildProgressTrackItems(chapterNavigation, slides.length);
+        const activeProgressTrackItemKey = getActiveProgressTrackItemKey(progressTrackItems, currentSlide);
+        const activeProgressTrackMarkerKey = getActiveProgressTrackMarkerKey(progressTrackItems, currentSlide);
 
         const handleClose = () => {
             clearAutoPlayTimers();
@@ -378,7 +673,17 @@ export async function createSummarySlideshow() {
 
         const moveToSlide = (nextIndex) => {
             clearAutoPlayTimers();
+            clearNavTooltipTimers();
+            setActiveNavTooltip(null);
+            setIsNavTooltipVisible(false);
             setCurrentSlide(nextIndex);
+        };
+
+        const jumpToSlide = (nextIndex, label = '') => {
+            moveToSlide(nextIndex);
+            if (label) {
+                setLiveMessage(`Jumped to ${label}.`);
+            }
         };
 
         const nextSlide = () => {
@@ -390,7 +695,7 @@ export async function createSummarySlideshow() {
         };
 
         const prevSlide = () => {
-            if (isAppreciation) {
+            if (isCompleteSlide) {
                 moveToSlide(slides.length - 1);
                 return;
             }
@@ -448,10 +753,11 @@ export async function createSummarySlideshow() {
             return null;
         }
 
-        const isIntro = !isAppreciation && slide?.kind === 'intro';
-        const panelBg = isAppreciation ? '#1f2430' : (slide ? slide.color.surface : '#1f2430');
+        const isIntro = !isCompleteSlide && slide?.kind === 'intro';
+        const panelBg = isCompleteSlide ? '#1f2430' : (slide ? slide.color.surface : '#1f2430');
         const typography = slide ? resolveSlideTypography(slide) : null;
         const panelHeight = isModal ? 'clamp(540px, 78vh, 760px)' : 'clamp(440px, 62vh, 620px)';
+        const progressAccent = slide ? slide.color.accent : (slides[slides.length - 1]?.color?.accent || '#3b82f6');
 
         const panel = html`
             ${isHelpShown && html`
@@ -516,8 +822,8 @@ export async function createSummarySlideshow() {
                     </div>
                 `}
 
-                <div ref=${bodyRef} class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; ${isIntro || isAppreciation ? 'align-items: center;' : ''} padding: 28px 32px;">
-                    ${isAppreciation ? html`
+                <div ref=${bodyRef} class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; ${isIntro || isCompleteSlide ? 'align-items: center;' : ''} padding: 28px 32px;">
+                    ${isCompleteSlide ? html`
                         <div class="summary-slideshow-complete" style="text-align: center; padding: 32px; max-width: 520px; width: 100%;">
                             <div class="summary-slideshow-celebration" aria-hidden="true">
                                 <svg viewBox="0 0 240 84" width="220" height="76">
@@ -635,13 +941,13 @@ export async function createSummarySlideshow() {
                 <div class="summary-slideshow-controls" style="padding: 10px 16px 12px 16px; flex-shrink: 0;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <button class="action-btn summary-slide-btn" onClick=${prevSlide} title="Previous slide (H / K / Left Arrow)" aria-label="Previous slide" disabled=${currentSlide === 0 && !isAppreciation}>
+                            <button class="action-btn summary-slide-btn" onClick=${prevSlide} title="Previous slide (H / K / Left Arrow)" aria-label="Previous slide" disabled=${currentSlide === 0 && !isCompleteSlide}>
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                                 </svg>
                                 Prev
                             </button>
-                            <button class="action-btn summary-slide-btn" onClick=${nextSlide} title="Next slide (J / L / Right Arrow / Space)" aria-label="Next slide" disabled=${isAppreciation}>
+                            <button class="action-btn summary-slide-btn" onClick=${nextSlide} title="Next slide (J / L / Right Arrow / Space)" aria-label="Next slide" disabled=${isCompleteSlide}>
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                                 </svg>
@@ -658,7 +964,7 @@ export async function createSummarySlideshow() {
                         </div>
 
                         <div class="summary-slideshow-counter" style="font-size: 13px; min-width: 0; text-align: center;">
-                            ${isAppreciation ? `${slides.length}/${slides.length} \u00b7 complete` : `${currentSlide + 1}/${slides.length} \u00b7 ${formatRemainingTime(slides, currentSlide)} left`}
+                            ${isCompleteSlide ? `${totalSlidesWithComplete}/${totalSlidesWithComplete} \u00b7 complete` : `${currentSlide + 1}/${totalSlidesWithComplete} \u00b7 ${formatRemainingTime(slides, currentSlide)} left`}
                         </div>
 
                         <div style="display: flex; align-items: center; gap: 6px;">
@@ -681,12 +987,89 @@ export async function createSummarySlideshow() {
                         </div>
                     </div>
 
-                    <div style="height: 4px; border-radius: 999px; overflow: hidden; background: rgba(148, 163, 184, 0.2);">
-                        <div style="height: 100%; width: ${progressValue}%; background: ${slide ? slide.color.accent : '#3b82f6'}; transition: width 180ms ease; border-radius: 999px;"></div>
+                    <div class="summary-chapter-progress-wrap">
+                        <div class="summary-chapter-progress" role="group" aria-label="Slideshow chapter navigation">
+                            ${progressTrackItems.map((trackItem) => {
+                                const trackItemFillPercent = getProgressTrackFillPercent(trackItem, currentSlide);
+                                const isActiveTrackItem = trackItem.key === activeProgressTrackItemKey;
+                                const trackItemLabel = `${trackItem.title} · ${trackItem.slideCount} ${trackItem.slideCount === 1 ? 'slide' : 'slides'}`;
+
+                                return html`
+                                    <div
+                                        class=${`summary-chapter-segment-wrap ${trackItem.kind === 'complete' ? 'is-complete-item' : ''}`}
+                                        style=${`flex: ${trackItem.unitCount} 1 0;`}
+                                    >
+                                        <button
+                                            type="button"
+                                            class=${`summary-chapter-segment ${trackItem.kind === 'complete' ? 'is-complete-item' : ''} ${isActiveTrackItem ? 'is-active' : ''}`}
+                                            title=${trackItemLabel}
+                                            aria-label=${`Jump to ${trackItemLabel}`}
+                                            aria-current=${isActiveTrackItem ? 'step' : null}
+                                            onClick=${() => jumpToSlide(trackItem.startIndex, trackItem.title)}
+                                            onMouseEnter=${() => openNavTooltip(buildNavTooltip(trackItem.key, trackItem.title, trackItem.slideCount))}
+                                            onMouseLeave=${closeNavTooltipSoon}
+                                            onFocus=${() => openNavTooltip(buildNavTooltip(trackItem.key, trackItem.title, trackItem.slideCount), true)}
+                                            onBlur=${closeNavTooltipSoon}
+                                        >
+                                            <span class="summary-chapter-segment-fill" style=${`width: ${trackItemFillPercent}%; background: ${progressAccent};`}></span>
+                                        </button>
+
+                                        ${trackItem.subchapters.map((trackMarker) => {
+                                            const isActiveTrackMarker = activeProgressTrackMarkerKey === trackMarker.key;
+                                            const markerStyle = `left: ${trackMarker.offsetPct}%; width: max(14px, ${trackMarker.widthPct}%);`;
+                                            return html`
+                                                <button
+                                                    type="button"
+                                                    class=${`summary-chapter-subsection-hit ${isActiveTrackMarker ? 'is-active' : ''} ${trackMarker.isSynthetic ? 'is-synthetic' : ''} ${trackMarker.markerVariant === 'complete' ? 'is-complete-marker' : ''}`}
+                                                    style=${markerStyle}
+                                                    title=${`${trackMarker.tooltipLabel} · ${trackMarker.slideCount} ${trackMarker.slideCount === 1 ? 'slide' : 'slides'}`}
+                                                    aria-label=${`Jump to ${trackMarker.tooltipLabel}`}
+                                                    onClick=${() => jumpToSlide(trackMarker.startIndex, trackMarker.tooltipLabel)}
+                                                    onMouseEnter=${() => openNavTooltip(buildNavTooltip(trackMarker.key, trackMarker.tooltipLabel, trackMarker.slideCount))}
+                                                    onMouseLeave=${closeNavTooltipSoon}
+                                                    onFocus=${() => openNavTooltip(buildNavTooltip(trackMarker.key, trackMarker.tooltipLabel, trackMarker.slideCount), true)}
+                                                    onBlur=${closeNavTooltipSoon}
+                                                >
+                                                    <span class=${`summary-chapter-subsection-marker ${trackMarker.markerVariant === 'complete' ? 'is-complete-marker' : ''}`}></span>
+                                                </button>
+                                            `;
+                                        })}
+
+                                        ${activeNavTooltip?.key === trackItem.key && html`
+                                            <div
+                                                class=${`summary-chapter-popover ${getTooltipAlignmentClass(trackItem.centerPct)} ${isNavTooltipVisible ? 'is-visible' : ''}`}
+                                                onMouseEnter=${() => openNavTooltip(buildNavTooltip(trackItem.key, trackItem.title, trackItem.slideCount), true)}
+                                                onMouseLeave=${closeNavTooltipSoon}
+                                            >
+                                                <div class="summary-chapter-popover-title-row">
+                                                    <div class="summary-chapter-popover-title">${activeNavTooltip.label}</div>
+                                                    <div class="summary-chapter-popover-count">${activeNavTooltip.count} ${activeNavTooltip.count === 1 ? 'slide' : 'slides'}</div>
+                                                </div>
+                                            </div>
+                                        `}
+
+                                        ${trackItem.subchapters.map((trackMarker) => activeNavTooltip?.key === trackMarker.key && html`
+                                            <div
+                                                class=${`summary-chapter-popover summary-chapter-subsection-tooltip ${getTooltipAlignmentClass(trackMarker.globalOffsetPct)} ${isNavTooltipVisible ? 'is-visible' : ''}`}
+                                                style=${`left: clamp(16px, ${trackMarker.offsetPct}%, calc(100% - 16px));`}
+                                                onMouseEnter=${() => openNavTooltip(buildNavTooltip(trackMarker.key, trackMarker.tooltipLabel, trackMarker.slideCount), true)}
+                                                onMouseLeave=${closeNavTooltipSoon}
+                                            >
+                                                <div class="summary-chapter-popover-title-row">
+                                                    <div class="summary-chapter-popover-title">${activeNavTooltip.label}</div>
+                                                    <div class="summary-chapter-popover-count">${activeNavTooltip.count} ${activeNavTooltip.count === 1 ? 'slide' : 'slides'}</div>
+                                                </div>
+                                            </div>
+                                        `)}
+                                    </div>
+                                `;
+                            })}
+                        </div>
+                        <div class="summary-chapter-progress-readout" aria-hidden="true">${Math.round(progressValue)}%</div>
                     </div>
 
                     <div role="status" aria-live="polite" class="summary-slideshow-status" style="min-height: 16px; margin-top: 6px; font-size: 12px;">
-                        ${liveMessage || (isAutoPlay && !isAppreciation ? `Auto-play \u00b7 next in ${Math.max(1, Math.ceil(autoPlayRemainingMs / 1000))}s` : '')}
+                        ${liveMessage || (isAutoPlay && !isCompleteSlide ? `Auto-play \u00b7 next in ${Math.max(1, Math.ceil(autoPlayRemainingMs / 1000))}s` : '')}
                     </div>
                 </div>
             </div>

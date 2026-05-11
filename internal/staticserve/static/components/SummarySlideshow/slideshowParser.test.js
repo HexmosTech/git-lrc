@@ -6,6 +6,12 @@ import {
   getRemainingReadTime,
   parseMarkdownToSlides
 } from './slideshowParser.js';
+import {
+  buildChapterNavigation,
+  buildProgressTrackItems,
+  getActiveProgressTrackItemKey,
+  getActiveProgressTrackMarkerKey
+} from './SummarySlideshow.js';
 
 function testIntroAndSectionSlides() {
   const markdown = `# Review Summary
@@ -72,6 +78,27 @@ function testBareFilenameBecomesFilePoint() {
   console.log('✓ Bare filename file-point test passed');
 }
 
+function testFilePointsBecomeNestedChapterMarkers() {
+  const markdown = `# Review Summary
+
+## Technical Highlights
+
+- internal/staticserve/static/components/Summary.js: Wires the slideshow entry point.
+- internal/staticserve/static/components/SummarySlideshow/SummarySlideshow.js: Adds direct subsection markers on the progress bar.
+- internal/staticserve/static/components/SummarySlideshow/SummarySlideshow.js: Keeps repeated file slides grouped together.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  const chapters = buildChapterNavigation(slides);
+
+  console.assert(chapters.length === 1, `Expected a single top-level chapter, got ${chapters.length}`);
+  console.assert(chapters[0].title === 'Technical Highlights', 'Top-level chapter should remain Technical Highlights');
+  console.assert(chapters[0].subchapters.length === 2, `Expected 2 nested file markers, got ${chapters[0].subchapters.length}`);
+  console.assert(chapters[0].subchapters[0].title === 'Summary.js', 'First file point should become a nested marker using the short path');
+  console.assert(chapters[0].subchapters[1].title === 'SummarySlideshow.js', 'Second file point should become a nested marker using the short path');
+  console.assert(chapters[0].subchapters[1].slideCount === 2, 'Repeated file slides should stay grouped into one nested marker');
+  console.log('✓ File-point nested chapter marker test passed');
+}
+
 function testStructuredLabelPoints() {
   const markdown = `## Impact
 
@@ -84,6 +111,27 @@ function testStructuredLabelPoints() {
   console.assert(slides[0].meta?.label.toLowerCase() === 'functionality', 'First label-point should preserve label');
   console.assert(slides[1].content.includes('Long paths'), 'Label-point should preserve body text');
   console.log('✓ Structured label-point test passed');
+}
+
+function testStructuredLabelPointsBecomeNestedChapterMarkers() {
+  const markdown = `# Review Summary
+
+## Impact
+
+- Functionality: Users can jump to the functional outcome directly.
+- Risk: Risk slides remain reachable from the chapter popover.
+- Risk: Multiple risk slides should stay grouped under the same nested marker.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  const chapters = buildChapterNavigation(slides);
+
+  console.assert(chapters.length === 1, `Expected a single top-level chapter, got ${chapters.length}`);
+  console.assert(chapters[0].title === 'Impact', 'Top-level chapter should remain Impact');
+  console.assert(chapters[0].subchapters.length === 2, `Expected 2 nested markers from structured labels, got ${chapters[0].subchapters.length}`);
+  console.assert(chapters[0].subchapters[0].title === 'Functionality', 'Functionality should become a nested chapter marker');
+  console.assert(chapters[0].subchapters[1].title === 'Risk', 'Risk should become a nested chapter marker');
+  console.assert(chapters[0].subchapters[1].slideCount === 2, 'Repeated Risk slides should stay grouped into one nested marker');
+  console.log('✓ Structured label nested chapter marker test passed');
 }
 
 function testMixedListStaysSinglePointPerSlide() {
@@ -101,6 +149,128 @@ function testMixedListStaysSinglePointPerSlide() {
   console.assert(slides[2].kind === 'file-point', 'Third point should be a file-point slide');
   console.assert(slides[3].kind === 'list', 'Fourth point should remain a generic list slide');
   console.log('✓ Mixed list one-item-per-slide test passed');
+}
+
+function testSlidesCaptureChapterHierarchy() {
+  const markdown = `# Review Summary
+
+## Impact
+
+### Functionality
+
+Users can jump straight to the relevant chapter.
+
+### Risk
+
+Incorrect metadata would produce broken chapter boundaries.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  console.assert(slides[1].chapter?.topLevelTitle === 'Impact', 'Top-level chapter title should be preserved on nested slides');
+  console.assert(slides[1].chapter?.nestedTitle === 'Functionality', 'Nested chapter title should be preserved');
+  console.assert(slides[2].chapter?.topLevelTitle === 'Impact', 'Later nested slides should keep the same top-level title');
+  console.assert(slides[2].chapter?.nestedTitle === 'Risk', 'Later nested slides should update the nested title');
+  console.assert(slides[1].chapter?.pathKey === 'impact::functionality', 'Nested chapter path key should be deterministic');
+  console.log('✓ Slide chapter hierarchy metadata test passed');
+}
+
+function testChapterNavigationModelGroupsIntroAndNestedSections() {
+  const markdown = `# Review Summary
+
+## Overview
+
+Lead sentence.
+
+## Impact
+
+### Functionality
+
+Functional outcome.
+
+### Risk
+
+Risk outcome.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  const chapters = buildChapterNavigation(slides);
+
+  console.assert(chapters.length === 2, `Expected 2 top-level chapters, got ${chapters.length}`);
+  console.assert(chapters[0].title === 'Overview', 'Intro slide should fold into the first explicit top-level chapter');
+  console.assert(chapters[0].startIndex === 0, 'First chapter should start at the intro slide');
+  console.assert(chapters[1].title === 'Impact', 'Second top-level chapter should be Impact');
+  console.assert(chapters[1].subchapters.length === 2, `Expected 2 nested chapter markers, got ${chapters[1].subchapters.length}`);
+  console.assert(chapters[1].subchapters[0].title === 'Functionality', 'First nested chapter should be Functionality');
+  console.assert(chapters[1].subchapters[1].title === 'Risk', 'Second nested chapter should be Risk');
+  console.log('✓ Chapter navigation grouping test passed');
+}
+
+function testChaptersWithoutNamedSubsectionsGetSlideMarkers() {
+  const markdown = `# Review Summary
+
+## Overview
+
+First overview sentence.
+
+Second overview sentence.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  const chapters = buildChapterNavigation(slides);
+
+  console.assert(chapters.length === 1, `Expected 1 top-level chapter, got ${chapters.length}`);
+  console.assert(chapters[0].subchapters.length === 3, `Expected 3 markers including the intro-folded slide, got ${chapters[0].subchapters.length}`);
+  console.assert(chapters[0].subchapters[0].title === 'Overview 1', 'First synthetic marker should be Overview 1');
+  console.assert(chapters[0].subchapters[1].title === 'Overview 2', 'Second synthetic marker should be Overview 2');
+  console.assert(chapters[0].subchapters[2].title === 'Overview 3', 'Third synthetic marker should be Overview 3');
+  console.assert(chapters[0].subchapters.every(subchapter => subchapter.isSynthetic === true), 'Overview-only markers should all be synthetic');
+  console.log('✓ Synthetic slide marker test passed');
+}
+
+function testProgressTrackIncludesCompleteItem() {
+  const markdown = `# Review Summary
+
+## Overview
+
+Lead sentence.
+
+## Impact
+
+Risk outcome.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  const chapters = buildChapterNavigation(slides);
+  const trackItems = buildProgressTrackItems(chapters, slides.length);
+  const completeTrackItem = trackItems[trackItems.length - 1];
+  const totalUnitCount = trackItems.reduce((sum, trackItem) => sum + trackItem.unitCount, 0);
+
+  console.assert(trackItems.length === 3, `Expected 3 track items including Complete, got ${trackItems.length}`);
+  console.assert(completeTrackItem.key === 'complete', 'Final track item should use the complete key');
+  console.assert(completeTrackItem.kind === 'complete', 'Final track item should be marked as complete');
+  console.assert(completeTrackItem.startIndex === slides.length, 'Complete track item should point at the final completion slide index');
+  console.assert(completeTrackItem.subchapters.length === 1, 'Complete track item should expose a single marker');
+  console.assert(completeTrackItem.subchapters[0].key === 'complete::marker', 'Complete marker should have a stable dedicated key');
+  console.assert(completeTrackItem.subchapters[0].offsetPct === 0, 'Complete marker should align to the start of its chunk like other markers');
+  console.assert(totalUnitCount === slides.length + 1, `Expected track units to equal slides plus completion, got ${totalUnitCount}`);
+  console.log('✓ Progress track includes Complete item test passed');
+}
+
+function testCompleteScreenActivatesCompleteTrackItem() {
+  const markdown = `# Review Summary
+
+## Overview
+
+Lead sentence.
+
+## Impact
+
+Risk outcome.`;
+
+  const slides = parseMarkdownToSlides(markdown);
+  const chapters = buildChapterNavigation(slides);
+  const trackItems = buildProgressTrackItems(chapters, slides.length);
+
+  console.assert(getActiveProgressTrackItemKey(trackItems, slides.length) === 'complete', 'Complete screen should activate the Complete track item');
+  console.assert(getActiveProgressTrackMarkerKey(trackItems, slides.length) === 'complete::marker', 'Complete screen should activate the Complete marker');
+  console.assert(getActiveProgressTrackItemKey(trackItems, slides.length - 1) !== 'complete', 'Last real slide should not activate the Complete track item');
+  console.log('✓ Complete screen track activation test passed');
 }
 
 function testSingleListSlideDoesNotKeepWrapperBullet() {
@@ -413,8 +583,15 @@ export function runAllTests() {
     testListChunking();
     testStructuredFilePoints();
     testBareFilenameBecomesFilePoint();
+    testFilePointsBecomeNestedChapterMarkers();
     testStructuredLabelPoints();
+    testStructuredLabelPointsBecomeNestedChapterMarkers();
     testMixedListStaysSinglePointPerSlide();
+    testSlidesCaptureChapterHierarchy();
+    testChapterNavigationModelGroupsIntroAndNestedSections();
+    testChaptersWithoutNamedSubsectionsGetSlideMarkers();
+    testProgressTrackIncludesCompleteItem();
+    testCompleteScreenActivatesCompleteTrackItem();
     testSingleListSlideDoesNotKeepWrapperBullet();
     testRiskLabelUsesRiskPalette();
     testCodeBlocksStayWhole();
