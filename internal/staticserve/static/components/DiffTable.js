@@ -16,7 +16,8 @@ export async function createDiffTable() {
         onToggleCommentVisibility,
         reviewStartMs,
         commentRenderTimes,
-        onCommentRendered
+        onCommentRendered,
+        prId
     }) {
         if (!hunks || hunks.length === 0) {
             return html`
@@ -72,6 +73,7 @@ export async function createDiffTable() {
                                         onToggleVisibility=${onToggleCommentVisibility}
                                         onFirstRender=${onCommentRendered}
                                         renderTimingLabel=${renderTimingLabel}
+                                        prId=${prId}
                                     />
                                 `;
                             })}

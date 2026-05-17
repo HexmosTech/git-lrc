@@ -1,10 +1,12 @@
 // Comment component
 import { waitForPreact, getBadgeClass, copyToClipboard } from './utils.js';
+import { getReactionFlow } from './ReactionFlow.js';
 
 export async function createComment() {
     const { html, useEffect, useState } = await waitForPreact();
-    
-    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility, onFirstRender, renderTimingLabel }) {
+    const ReactionFlow = await getReactionFlow();
+
+    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility, onFirstRender, renderTimingLabel, prId }) {
         const [copied, setCopied] = useState(false);
 
         useEffect(() => {
@@ -113,6 +115,7 @@ export async function createComment() {
                                         `}
                                     </div>
                                     <div class="comment-body">${comment.Content}</div>
+                                    <${ReactionFlow} scope="comment" filePath=${filePath} comment=${comment} catches=${[comment].map((c, idx) => ({ id: `${commentId}-${idx}`, severity: c.Severity?.toLowerCase(), title: c.Content, file: filePath, line: c.Line, snippet: codeExcerpt || '' }))} prId=${prId} />
                                 </div>
                             `
                         }

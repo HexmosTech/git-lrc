@@ -11,6 +11,7 @@ import { getPrecommitBar } from './components/PrecommitBar.js';
 import { getFileBlock } from './components/FileBlock.js';
 import { getEventLog } from './components/EventLog.js';
 import { getSeverityFilter } from './components/SeverityFilter.js';
+import { getReactionFlow } from './components/ReactionFlow.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
@@ -240,6 +241,7 @@ async function initApp() {
     const FileBlock = await getFileBlock();
     const EventLog = await getEventLog();
     const SeverityFilter = await getSeverityFilter();
+    const ReactionFlow = await getReactionFlow();
     const Toolbar = await getToolbar();
     const CommentNav = await getCommentNav();
     const SummarySlideshow = await getSummarySlideshow();
@@ -279,6 +281,8 @@ async function initApp() {
         const reviewStartMsRef = useRef(domReadyStartMs || getPerformanceNow());
         const reviewCompletedMsRef = useRef(null);
         const [logsCopied, setLogsCopied] = useState(false);
+
+        const allCatches = (reviewData?.Files || []).flatMap((f) => (f.Hunks || []).flatMap((h) => (h.Lines || []).flatMap((ln, lineIdx) => (ln.Comments || []).map((c, idx) => ({ id: `${f.FilePath}-${c.Line}-${lineIdx}-${idx}`, severity: c.Severity?.toLowerCase(), title: c.Content, file: f.FilePath, line: c.Line, snippet: ln.Content || '' })))));
 
         useEffect(() => {
             activeTabRef.current = activeTab;
@@ -1031,6 +1035,7 @@ async function initApp() {
                             onSendToAgent=${handleSendToAgent}
                             visibleCount=${totalVisibleComments}
                         />
+                        <${ReactionFlow} scope="pr" catches=${allCatches} prId=${reviewData?.reviewID || reviewData?.ReviewID} />
                     `}
                     
                     <!-- Files Tab -->
@@ -1048,6 +1053,7 @@ async function initApp() {
                                     reviewStartMs=${reviewStartMsRef.current}
                                     commentRenderTimes=${commentRenderTimes}
                                     onCommentRendered=${handleCommentRendered}
+                                    prId=${reviewData?.reviewID || reviewData?.ReviewID}
                                 />
                             `)
                             : html`
