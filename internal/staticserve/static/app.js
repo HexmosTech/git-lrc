@@ -332,7 +332,7 @@ async function initApp() {
                         return {
                             ...prev,
                             ...data,
-                            files: prev.files || data.files || []
+                            files: data.files || prev.files || []
                         };
                     });
                     return data;

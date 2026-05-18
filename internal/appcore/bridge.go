@@ -113,7 +113,7 @@ func buildFakeCompletedResultForFiles(baseFiles []reviewmodel.DiffReviewFileResu
 
 	if totalComments > 0 {
 		result.Summary = fmt.Sprintf(
-			"%s\n\n## Synthetic Coverage\n\n- Generated %d synthetic comment(s) across %d file(s)\n- Includes deterministic Copy Issue scenarios: first-line (no prev), last-line (no next), interior-line (both prev/next)",
+			"%s\n\n## Synthetic Coverage\n\n- Generated %d synthetic comment(s) across %d file(s)\n- Covers Critical, Error, Warning, and Info severities across targeted files",
 			strings.TrimSpace(result.Summary),
 			totalComments,
 			len(files),
@@ -124,88 +124,106 @@ func buildFakeCompletedResultForFiles(baseFiles []reviewmodel.DiffReviewFileResu
 	return result
 }
 
+type syntheticCommentSpec struct {
+	linePickIndex int // -1 = last available line, ≥0 = Nth available line
+	severity      string
+	category      string
+	content       string
+}
+
+// perFileCommentSpecs maps each fake review file's base name to the comments to
+// generate for it. Line numbers are resolved at runtime from actual diff hunks.
+var perFileCommentSpecs = map[string][]syntheticCommentSpec{
+	"README.md": {
+		{
+			linePickIndex: 0,
+			severity:      "Critical",
+			category:      "Documentation",
+			content:       "README is missing required Go version and platform prerequisites — document these before shipping.",
+		},
+	},
+	"edge_cases.txt": {
+		{
+			linePickIndex: 0,
+			severity:      "Error",
+			category:      "Logic",
+			content:       "`alpha-updated` is inconsistent with downstream parser expectations; update the canonical test fixture.",
+		},
+		{
+			linePickIndex: -1,
+			severity:      "Error",
+			category:      "Logic",
+			content:       "`delta-updated` does not match the expected integration test output — realign the test data.",
+		},
+	},
+	"fake_large_config.toml": {
+		{
+			linePickIndex: 0,
+			severity:      "Warning",
+			category:      "Configuration",
+			content:       "`enable_telemetry = true` in a generated config risks leaking test data to analytics endpoints — disable for local runs.",
+		},
+	},
+	"only_one_line.txt": {
+		{
+			linePickIndex: 0,
+			severity:      "Info",
+			category:      "Style",
+			content:       "Single-line file — confirm the seed suffix is stable enough for snapshot testing.",
+		},
+	},
+	"ui_connectors_handlers.go": {
+		{
+			linePickIndex: 0,
+			severity:      "Info",
+			category:      "Style",
+			content:       "`normalizeConnectorName` chains three sequential string operations; consider combining into a single `strings.Map` pass for clarity.",
+		},
+	},
+}
+
 func buildSyntheticCommentsByFile(files []reviewmodel.DiffReviewFileResult) map[string][]reviewmodel.DiffReviewComment {
 	commentsByFile := make(map[string][]reviewmodel.DiffReviewComment)
 
-	// Primary scenario: find one hunk that has enough lines to guarantee
-	// first-line, last-line, and interior-line comments.
 	for _, file := range files {
-		for _, hunk := range file.Hunks {
-			numbers := collectHunkAddedLineNumbers(hunk)
-			if len(numbers) < 3 {
-				continue
-			}
-
-			interiorIdx := 1
-			if interiorIdx >= len(numbers)-1 {
-				interiorIdx = len(numbers) / 2
-			}
-			if interiorIdx <= 0 {
-				interiorIdx = 1
-			}
-			if interiorIdx >= len(numbers)-1 {
-				interiorIdx = len(numbers) - 2
-			}
-
-			commentsByFile[file.FilePath] = []reviewmodel.DiffReviewComment{
-				{
-					Line:     numbers[0],
-					Severity: "Warning",
-					Category: "Context",
-					Content:  "Hunk-start line: verify Copy Issue handles missing previous line context correctly.",
-				},
-				{
-					Line:     numbers[len(numbers)-1],
-					Severity: "Error",
-					Category: "Context",
-					Content:  "Hunk-end line: verify Copy Issue handles missing next line context correctly.",
-				},
-				{
-					Line:     numbers[interiorIdx],
-					Severity: "Info",
-					Category: "Context",
-					Content:  "Interior line: verify Copy Issue includes both previous and next lines in the code excerpt.",
-				},
-			}
-			return commentsByFile
+		base := file.FilePath
+		if idx := strings.LastIndex(base, "/"); idx >= 0 {
+			base = base[idx+1:]
 		}
-	}
+		specs, ok := perFileCommentSpecs[base]
+		if !ok {
+			continue
+		}
 
-	// Fallback for very small diffs: emit whatever subset is possible.
-	for _, file := range files {
+		var allLines []int
 		for _, hunk := range file.Hunks {
-			numbers := collectHunkAddedLineNumbers(hunk)
-			if len(numbers) == 0 {
-				continue
-			}
+			allLines = append(allLines, collectHunkAddedLineNumbers(hunk)...)
+		}
+		if len(allLines) == 0 {
+			continue
+		}
 
-			comments := []reviewmodel.DiffReviewComment{
-				{
-					Line:     numbers[0],
-					Severity: "Warning",
-					Category: "Context",
-					Content:  "Hunk-start line: verify Copy Issue handles missing previous line context correctly.",
-				},
+		var comments []reviewmodel.DiffReviewComment
+		for _, spec := range specs {
+			idx := spec.linePickIndex
+			if idx < 0 {
+				idx = len(allLines) + idx
 			}
-			if len(numbers) > 1 {
-				comments = append(comments, reviewmodel.DiffReviewComment{
-					Line:     numbers[len(numbers)-1],
-					Severity: "Error",
-					Category: "Context",
-					Content:  "Hunk-end line: verify Copy Issue handles missing next line context correctly.",
-				})
+			if idx < 0 {
+				idx = 0
 			}
-			if len(numbers) > 2 {
-				comments = append(comments, reviewmodel.DiffReviewComment{
-					Line:     numbers[1],
-					Severity: "Info",
-					Category: "Context",
-					Content:  "Interior line: verify Copy Issue includes both previous and next lines in the code excerpt.",
-				})
+			if idx >= len(allLines) {
+				idx = len(allLines) - 1
 			}
-
+			comments = append(comments, reviewmodel.DiffReviewComment{
+				Line:     allLines[idx],
+				Severity: spec.severity,
+				Category: spec.category,
+				Content:  spec.content,
+			})
+		}
+		if len(comments) > 0 {
 			commentsByFile[file.FilePath] = comments
-			return commentsByFile
 		}
 	}
 
