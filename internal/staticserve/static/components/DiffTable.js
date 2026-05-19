@@ -38,9 +38,17 @@ export async function createDiffTable() {
                     ${hunk.Lines.map((line, idx) => {
                         // Build line-numbered code context for per-issue copy.
                         const codeExcerpt = buildIssueCodeExcerpt(hunk.Lines, idx, 1);
+                        const rowLine = Number(line.NewNum) || Number(line.OldNum) || 0;
+                        const rowId = rowLine > 0 ? `line-${resolvedFileId}-${rowLine}` : '';
                         
                         return html`
-                            <tr class="diff-line ${line.Class}">
+                            <tr
+                                class="diff-line ${line.Class}"
+                                id=${rowId || undefined}
+                                data-file-id=${resolvedFileId}
+                                data-old-line=${line.OldNum || ''}
+                                data-new-line=${line.NewNum || ''}
+                            >
                                 <td class="line-num">${line.OldNum}</td>
                                 <td class="line-num">${line.NewNum}</td>
                                 <td class="line-content">${line.Content}</td>

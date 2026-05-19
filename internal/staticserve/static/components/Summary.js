@@ -1,5 +1,6 @@
 // Summary component - renders markdown summary
 import { waitForPreact } from './utils.js';
+import { getSummarySlideshow } from './SummarySlideshow/SummarySlideshow.js';
 
 const ALLOWED_TAGS = new Set([
     'A', 'BLOCKQUOTE', 'BR', 'CODE', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
@@ -65,7 +66,68 @@ function sanitizeNode(node) {
     return target;
 }
 
-function renderSafeMarkdown(container, markdown) {
+function parseFullPathToken(pathToken) {
+    const trimmed = (pathToken || '').trim();
+    const match = trimmed.match(/^(.*?)(?::(\d+))?$/);
+    if (!match) {
+        return null;
+    }
+
+    const filePath = (match[1] || '').trim();
+    if (!filePath || !/\.[A-Za-z0-9]+$/.test(filePath)) {
+        return null;
+    }
+
+    const line = match[2] ? Number(match[2]) : null;
+    return {
+        filePath,
+        line,
+        display: line ? `${filePath}:${line}` : filePath
+    };
+}
+
+function enhanceTextWithFileChips(container, handlers = {}) {
+    if (!container) {
+        return;
+    }
+
+    const onOpenFileFromSlide = handlers.onOpenFileFromSlide;
+    const canOpenFileFromSlide = handlers.canOpenFileFromSlide;
+
+    const candidateNodes = Array.from(container.querySelectorAll('code, strong'));
+    candidateNodes.forEach((node) => {
+        if (node.tagName === 'CODE' && node.closest('pre')) {
+            return;
+        }
+
+        const parsed = parseFullPathToken(node.textContent || '');
+        if (!parsed) {
+            return;
+        }
+
+        if (typeof canOpenFileFromSlide !== 'function' || !canOpenFileFromSlide(parsed.filePath)) {
+            return;
+        }
+
+        const chip = document.createElement('button');
+        chip.setAttribute('type', 'button');
+        chip.setAttribute('class', 'summary-file-chip summary-file-chip-interactive summary-inline-file-chip summary-path-chip');
+        chip.setAttribute('data-tooltip', `Open in diff: ${parsed.display}`);
+        chip.setAttribute('title', parsed.display);
+        chip.textContent = parsed.display;
+        chip.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof onOpenFileFromSlide === 'function') {
+                onOpenFileFromSlide(parsed.filePath, parsed.line || null);
+            }
+        });
+
+        node.replaceWith(chip);
+    });
+}
+
+function renderSafeMarkdown(container, markdown, handlers = {}) {
     if (!container) {
         return;
     }
@@ -88,22 +150,122 @@ function renderSafeMarkdown(container, markdown) {
     }
 
     container.replaceChildren(fragment);
+    enhanceTextWithFileChips(container, handlers);
 }
 
 export async function createSummary() {
-    const { html, useEffect, useRef } = await waitForPreact();
+    const { html, useEffect, useRef, useState } = await waitForPreact();
+    const SummarySlideshow = await getSummarySlideshow();
     
-    return function Summary({ markdown, status, errorSummary }) {
+    return function Summary({ markdown, status, errorSummary, showAllClear, slidesEnabled = true, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false }) {
         const contentRef = useRef(null);
+        const summaryRootRef = useRef(null);
+        const [summaryViewMode, setSummaryViewMode] = useState(slidesEnabled ? 'slides' : 'text');
+        const [isSummaryInView, setIsSummaryInView] = useState(false);
+        const hasSummaryMarkdown = Boolean(markdown && markdown.trim());
         
         useEffect(() => {
-            renderSafeMarkdown(contentRef.current, markdown);
-        }, [markdown]);
+            renderSafeMarkdown(contentRef.current, markdown, { onOpenFileFromSlide, canOpenFileFromSlide });
+        }, [markdown, onOpenFileFromSlide, canOpenFileFromSlide]);
+
+        useEffect(() => {
+            if (hasSummaryMarkdown) {
+                setSummaryViewMode(slidesEnabled ? 'slides' : 'text');
+            }
+        }, [markdown, hasSummaryMarkdown, slidesEnabled]);
+
+        useEffect(() => {
+            const element = summaryRootRef.current;
+            if (!element || typeof IntersectionObserver === 'undefined') {
+                setIsSummaryInView(true);
+                return undefined;
+            }
+
+            const observer = new IntersectionObserver((entries) => {
+                const entry = entries[0];
+                setIsSummaryInView(Boolean(entry?.isIntersecting));
+            }, { threshold: 0.35 });
+
+            observer.observe(element);
+            return () => observer.disconnect();
+        }, []);
+
+        const embeddedShortcutsActive = Boolean(
+            hasSummaryMarkdown
+            && slidesEnabled
+            && summaryViewMode === 'slides'
+            && !isSlideshowModalOpen
+            && isSummaryInView
+        );
+
+        useEffect(() => {
+            if (typeof onEmbeddedShortcutActiveChange === 'function') {
+                onEmbeddedShortcutActiveChange(embeddedShortcutsActive);
+            }
+            return () => {
+                if (typeof onEmbeddedShortcutActiveChange === 'function') {
+                    onEmbeddedShortcutActiveChange(false);
+                }
+            };
+        }, [embeddedShortcutsActive, onEmbeddedShortcutActiveChange]);
         
         const isError = status === 'failed' || errorSummary;
         
         return html`
-            <div class="summary" id="summary-content">
+            <div class="summary" id="summary-content" ref=${summaryRootRef}>
+                ${hasSummaryMarkdown && html`
+                    <div class="summary-header-row">
+                        <div class="summary-header-left">
+                            ${slidesEnabled
+                                ? html`
+                                    <div class="summary-view-toggle" role="group" aria-label="Summary display mode">
+                                        <button
+                                            class="action-btn summary-view-btn ${summaryViewMode === 'slides' ? 'active' : ''}"
+                                            onClick=${() => setSummaryViewMode('slides')}
+                                            title="Show slides view"
+                                            aria-label="Show slides view"
+                                            aria-pressed=${summaryViewMode === 'slides'}
+                                        >
+                                            Slides
+                                        </button>
+                                        <button
+                                            class="action-btn summary-view-btn ${summaryViewMode === 'text' ? 'active' : ''}"
+                                            onClick=${() => setSummaryViewMode('text')}
+                                            title="Show text view"
+                                            aria-label="Show text view"
+                                            aria-pressed=${summaryViewMode === 'text'}
+                                        >
+                                            Text
+                                        </button>
+                                    </div>
+                                `
+                                : html`<span style="font-size: 12px; color: var(--text-muted);">Text view</span>`
+                            }
+                        </div>
+                        <div class="summary-header-center" aria-hidden="true">
+                            Summary
+                        </div>
+                        <div class="summary-actions">
+                            ${slidesEnabled && html`
+                                <button class="action-btn summary-play-btn" onClick=${onOpenSlideshowModal} title="Open slides in dialog" aria-label="Open slides in dialog">
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4h12v12M8 20h12M4 8v12h12" />
+                                    </svg>
+                                    Open Slides
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                `}
+                ${showAllClear && html`
+                    <div class="summary-all-clear" role="status" aria-live="polite">
+                        <div class="summary-all-clear-icon" aria-hidden="true">✓</div>
+                        <div class="summary-all-clear-copy">
+                            <strong class="summary-all-clear-title">Good to go</strong>
+                            <p class="summary-all-clear-text">This review finished without any review comments. No issues were found in the reviewed diff.</p>
+                        </div>
+                    </div>
+                `}
                 ${isError && html`
                     <div style="padding: 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #991b1b; margin-bottom: 16px;">
                         <strong style="display: block; margin-bottom: 8px; font-size: 16px;">⚠️ Error Details:</strong>
@@ -112,7 +274,27 @@ export async function createSummary() {
                         </pre>
                     </div>
                 `}
-                <div ref=${contentRef}></div>
+
+                ${hasSummaryMarkdown && slidesEnabled && summaryViewMode === 'slides' && html`
+                    <div class="summary-embedded-container">
+                        <${SummarySlideshow}
+                            markdown=${markdown}
+                            mode="embedded"
+                            isShortcutActive=${embeddedShortcutsActive}
+                            initialSlideIndex=${slideIndex}
+                            onSlideIndexChange=${onSlideIndexChange}
+                            onOpenFileFromSlide=${onOpenFileFromSlide}
+                            canOpenFileFromSlide=${canOpenFileFromSlide}
+                            className="summary-embedded-slideshow"
+                        />
+                    </div>
+                `}
+
+                <div
+                    ref=${contentRef}
+                    class="summary-text-content"
+                    style=${hasSummaryMarkdown && (!slidesEnabled || summaryViewMode === 'text') ? '' : 'display: none;'}
+                ></div>
             </div>
         `;
     };

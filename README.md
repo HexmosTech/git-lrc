@@ -10,7 +10,7 @@
 <br />
 <h1>git-lrc</h1>
 
-<h2>AI Micro Code Reviews That Run on Commit</h2>
+<h2>Free, Micro AI Code Reviews That Run on Commit</h2>
 
 <br />
 <br />

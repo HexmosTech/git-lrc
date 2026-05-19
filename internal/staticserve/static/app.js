@@ -14,7 +14,10 @@ import { getSeverityFilter } from './components/SeverityFilter.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
+import { getSummarySlideshow } from './components/SummarySlideshow/SummarySlideshow.js';
+import { evaluateSummarySlidesEligibility } from './components/SummarySlideshow/slideshowParser.js';
 import { buildPerformanceSnapshot, getFirstRenderTime, getLoadingActivityMessage, getPerformanceNow, recordFirstRenderTime } from './components/review_performance_state.mjs';
+import { shouldShowAllClear } from './components/review_outcome_state.mjs';
 
 let domReadyStartMs = null;
 
@@ -239,6 +242,7 @@ async function initApp() {
     const SeverityFilter = await getSeverityFilter();
     const Toolbar = await getToolbar();
     const CommentNav = await getCommentNav();
+    const SummarySlideshow = await getSummarySlideshow();
     
     function App() {
         // Core data state - fetched from API
@@ -258,6 +262,9 @@ async function initApp() {
         const [hiddenCommentKeys, setHiddenCommentKeys] = useState(new Set());
         const [copyFeedback, setCopyFeedback] = useState({ status: 'idle', message: '' });
         const [handoffModal, setHandoffModal] = useState({ isOpen: false, type: '', message: '' });
+        const [slideShowOpen, setSlideShowOpen] = useState(false);
+        const [embeddedSlideshowActive, setEmbeddedSlideshowActive] = useState(false);
+        const [summarySlideIndex, setSummarySlideIndex] = useState(0);
         const [performanceNowMs, setPerformanceNowMs] = useState(domReadyStartMs || getPerformanceNow());
         const [commentRenderTimes, setCommentRenderTimes] = useState({});
         
@@ -325,7 +332,7 @@ async function initApp() {
                         return {
                             ...prev,
                             ...data,
-                            files: prev.files || data.files || []
+                            files: data.files || prev.files || []
                         };
                     });
                     return data;
@@ -478,7 +485,7 @@ async function initApp() {
         }, [allExpanded, reviewData?.Files]);
         
         // Handle sidebar file click
-        const handleFileClick = useCallback((fileId) => {
+        const handleFileClick = useCallback((fileId, lineNumber = null) => {
             // Always switch to files tab when clicking a file in sidebar
             setActiveTab('files');
             setActiveFileId(fileId);
@@ -495,6 +502,24 @@ async function initApp() {
                     const mainContent = document.querySelector('.main-content');
                     const header = document.querySelector('.header');
                     const headerHeight = header ? header.offsetHeight : 60;
+
+                    const parsedLine = Number(lineNumber);
+                    const hasTargetLine = Number.isFinite(parsedLine) && parsedLine > 0;
+                    const lineSelector = hasTargetLine
+                        ? `.diff-line[data-new-line="${parsedLine}"] , .diff-line[data-old-line="${parsedLine}"]`
+                        : '';
+                    const targetLineEl = hasTargetLine ? fileEl.querySelector(lineSelector) : null;
+
+                    if (targetLineEl && mainContent) {
+                        const lineRect = targetLineEl.getBoundingClientRect();
+                        const mainContentRect = mainContent.getBoundingClientRect();
+                        const scrollTarget = mainContent.scrollTop + lineRect.top - mainContentRect.top - headerHeight - 14;
+                        mainContent.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+                        targetLineEl.classList.add('line-highlight');
+                        setTimeout(() => targetLineEl.classList.remove('line-highlight'), 1800);
+                        return;
+                    }
+
                     const fileRect = fileEl.getBoundingClientRect();
                     const mainContentRect = mainContent.getBoundingClientRect();
                     const scrollTarget = mainContent.scrollTop + fileRect.top - mainContentRect.top - headerHeight - 10;
@@ -502,6 +527,58 @@ async function initApp() {
                 }
             }, 100);
         }, []);
+
+        const resolveSlideFileId = useCallback((filePath) => {
+            const normalized = (filePath || '').trim();
+            if (!normalized) {
+                return null;
+            }
+
+            const reviewFiles = reviewData?.Files || [];
+            if (!reviewFiles.length) {
+                return null;
+            }
+
+            const exact = reviewFiles.find(file => (file?.FilePath || '') === normalized);
+            if (exact) {
+                return exact.ID || filePathToId(exact.FilePath || normalized);
+            }
+
+            const normalizedLower = normalized.toLowerCase();
+            const suffixMatches = reviewFiles.filter(file => {
+                const candidate = (file?.FilePath || '').toLowerCase();
+                if (!candidate) {
+                    return false;
+                }
+                return candidate === normalizedLower || candidate.endsWith(`/${normalizedLower}`);
+            });
+
+            if (suffixMatches.length !== 1) {
+                return null;
+            }
+
+            const matched = suffixMatches[0];
+            return matched.ID || filePathToId(matched.FilePath || normalized);
+        }, [reviewData]);
+
+        const canOpenFileFromSlide = useCallback((filePath) => {
+            return Boolean(resolveSlideFileId(filePath));
+        }, [resolveSlideFileId]);
+
+        const handleOpenFileFromSlide = useCallback((filePath, lineNumber = null) => {
+            if (!filePath) {
+                return false;
+            }
+
+            const fileId = resolveSlideFileId(filePath);
+            if (!fileId) {
+                return false;
+            }
+
+            setSlideShowOpen(false);
+            handleFileClick(fileId, lineNumber);
+            return true;
+        }, [handleFileClick, resolveSlideFileId]);
         
         // Navigate to comment
         const navigateToComment = useCallback((commentId, fileId) => {
@@ -639,6 +716,11 @@ async function initApp() {
         const summary = reviewData?.summary || '';
         const files = reviewData?.Files || [];
         const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
+        const errorSummary = reviewData?.errorSummary || '';
+        const hasSummary = Boolean(summary && summary.trim());
+        const summarySlidesEligibility = hasSummary ? evaluateSummarySlidesEligibility(summary) : { eligible: false, reason: 'empty-summary' };
+        const showAllClear = shouldShowAllClear({ status, totalComments, errorSummary, summarySlidesEligibility });
+        const slidesEnabled = Boolean(summarySlidesEligibility.eligible && hasSummary);
         const firstCommentRenderMs = getFirstRenderTime(commentRenderTimes);
         const performanceSnapshot = buildPerformanceSnapshot({
             baselineMs: reviewStartMsRef.current,
@@ -652,6 +734,12 @@ async function initApp() {
         const loaderMeta = firstCommentRenderMs === null
             ? `Elapsed ${performanceSnapshot.elapsedLabel} • first comment pending`
             : `First comment in ${performanceSnapshot.firstCommentLabel} • ${totalComments} comment${totalComments !== 1 ? 's' : ''} so far`;
+
+        useEffect(() => {
+            if (!slidesEnabled && slideShowOpen) {
+                setSlideShowOpen(false);
+            }
+        }, [slidesEnabled, slideShowOpen]);
 
         useEffect(() => {
             if (status === 'completed' || status === 'failed') {
@@ -887,11 +975,20 @@ async function initApp() {
                     
                     <${UsageBanner} endpoint="/api/runtime/usage-chip" />
                     
-                    ${summary && summary.trim() && status !== 'in_progress' && html`
+                    ${(showAllClear || (summary && summary.trim())) && status !== 'in_progress' && html`
                         <${Summary} 
                             markdown=${summary}
                             status=${status}
-                            errorSummary=${reviewData?.errorSummary || ''}
+                            errorSummary=${errorSummary}
+                            showAllClear=${showAllClear}
+                            slidesEnabled=${slidesEnabled}
+                            isSlideshowModalOpen=${slideShowOpen}
+                            onOpenSlideshowModal=${() => setSlideShowOpen(true)}
+                            onEmbeddedShortcutActiveChange=${setEmbeddedSlideshowActive}
+                            slideIndex=${summarySlideIndex}
+                            onSlideIndexChange=${setSummarySlideIndex}
+                            onOpenFileFromSlide=${handleOpenFileFromSlide}
+                            canOpenFileFromSlide=${canOpenFileFromSlide}
                         />
                     `}
                     
@@ -1018,7 +1115,22 @@ async function initApp() {
                 commentKey=${commentKey}
                 onNavigate=${navigateToComment}
                 activeTab=${activeTab}
+                slideshowOpen=${slideShowOpen}
+                embeddedSlideshowActive=${embeddedSlideshowActive}
             />
+            
+            ${slidesEnabled && html`
+                <${SummarySlideshow}
+                    markdown=${summary}
+                    isOpen=${slideShowOpen}
+                    mode="modal"
+                    initialSlideIndex=${summarySlideIndex}
+                    onSlideIndexChange=${setSummarySlideIndex}
+                    onOpenFileFromSlide=${handleOpenFileFromSlide}
+                    canOpenFileFromSlide=${canOpenFileFromSlide}
+                    onClose=${() => setSlideShowOpen(false)}
+                />
+            `}
         `;
     }
     

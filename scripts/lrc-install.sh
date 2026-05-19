@@ -10,6 +10,7 @@
 # - PATH: creates ~/.lrc/env (idempotent PATH script) and sources it from
 #   shell rc files (~/.profile, ~/.bashrc, ~/.zshenv, etc.).
 # - No shell restart required: PATH is exported in-session.
+# - Internal release: set LRC_RELEASE_CHANNEL=internal to install the team build.
 # On Windows Git Bash/MSYS/MINGW/CYGWIN, this script attempts to hand off to
 # PowerShell installer automatically.
 
@@ -143,8 +144,12 @@ fi
 GIT_BIN="$(command -v git)"
 GIT_DIR="$(dirname "$GIT_BIN")"
 
-# Public release manifest URL
+# Release manifest URL (public by default, internal when explicitly requested)
+RELEASE_CHANNEL="${LRC_RELEASE_CHANNEL:-public}"
 MANIFEST_URL="https://f005.backblazeb2.com/file/hexmos/lrc/latest.json"
+if [ "$RELEASE_CHANNEL" = "internal" ]; then
+    MANIFEST_URL="https://f005.backblazeb2.com/file/hexmos/lrc/internal.json"
+fi
 
 # Install location (user-writable, no sudo needed)
 INSTALL_DIR="$HOME/.local/bin"
