@@ -354,7 +354,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			submissionFailed = true
 			submissionBlockedReason = "Usage quota exceeded"
 			var upgradeURL string
-			
+
 			// Try to parse structured error payload for a better message
 			var payload reviewmodel.APIErrorPayload
 			if jErr := json.Unmarshal([]byte(apiErr.Body), &payload); jErr == nil && payload.Error != "" {
@@ -422,8 +422,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	}
 
 	// Generate and serve skeleton HTML immediately if --serve is enabled
-	// Auto-enable serve when no HTML path specified and not in post-commit mode
-	autoServeEnabled := !opts.Serve && opts.SaveHTML == "" && !isPostCommitReview
+	// Auto-enable serve when no HTML path specified, not in post-commit mode, and output is default
+	autoServeEnabled := !opts.Serve && opts.SaveHTML == "" && !isPostCommitReview && opts.Output == reviewopts.DefaultOutputFormat
 	if autoServeEnabled {
 		opts.Serve = true
 	}
@@ -438,7 +438,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		runningDraftHub = newDraftHub(initialMsg)
 	}
 
-	if !useInteractive && !submissionFailed {
+	if !useInteractive && !submissionFailed && opts.Output == reviewopts.DefaultOutputFormat {
 		fmt.Printf("Review submitted, ID: %s\n", reviewID)
 		if submitResp.UserEmail != "" {
 			fmt.Printf("Account: %s\n", submitResp.UserEmail)
@@ -1090,6 +1090,30 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				reviewID:           reviewID,
 				attestationWritten: &attestationWritten,
 			})
+		}
+	} else if !isPostCommitReview {
+		// Non-interactive path (e.g. JSON output mode)
+		stopPoll := make(chan struct{})
+		
+		if fakeMode {
+			result, err = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, stopPoll, fakeBaseFiles, nil)
+		} else {
+			var updatedConfig Config
+			result, updatedConfig, err = pollReviewWithRecovery(*config, reviewID, opts.PollInterval, opts.Timeout, verbose, stopPoll, nil)
+			config = &updatedConfig
+		}
+		
+		if err != nil {
+			var apiErr *reviewmodel.APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized {
+				return liveReviewAuthFailureError(config.APIURL, formatLiveReviewTechnicalDetails(apiErr.Body))
+			}
+			return fmt.Errorf("failed to poll review: %w", err)
+		}
+		
+		attestationAction = "reviewed"
+		if err := recordCoverageAndAttest("reviewed", diffContent, reviewID, verbose, &attestationWritten); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 		}
 	}
 
