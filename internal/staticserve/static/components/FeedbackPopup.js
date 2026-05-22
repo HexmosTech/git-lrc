@@ -21,7 +21,7 @@ function retractStoredFeedback(key) {
   fetch(`/api/v1/feedback/${id}/retract`, { method: "PATCH" }).catch(() => {});
 }
 
-function fetchImpactStats(reviewID, onReady) {
+export function fetchImpactStats(reviewID, onReady) {
   if (_impactStats) {
     onReady(_impactStats);
     return;
@@ -83,7 +83,7 @@ const DOWN_TAGS = [
   "Hard to act on",
 ];
 
-const LINKEDIN_TEXT = `🚀 Shipping with confidence — here's my code review impact since Jan 2025:
+export const LINKEDIN_TEXT = `🚀 Shipping with confidence — here's my code review impact since Jan 2025:
 
 ✅ 47 reviews completed
 🐛 189 bugs caught before production
@@ -113,6 +113,7 @@ export async function createFeedbackPopup() {
     sourceType,
   }) {
     const wrapperRef = useRef(null);
+    const popupRef = useRef(null);
 
     const [popupVisible, setPopupVisible] = useState(false);
     const [popupOpacity, setPopupOpacity] = useState(0);
@@ -128,6 +129,8 @@ export async function createFeedbackPopup() {
     const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
     const [tentativeDown, setTentativeDown] = useState(false); // red but not yet submitted
     const [impactStats, setImpactStats] = useState(_impactStats);
+    const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState(false);
 
     const autoTimer = useRef(null);
     const hoverTimer = useRef(null);
@@ -188,36 +191,43 @@ export async function createFeedbackPopup() {
 
     const popupWidth = () => 420;
 
-    const computePos = (mode) => {
-      if (!wrapperRef.current) return { top: 0, left: 0 };
+    const show = (mode) => {
+      if (!popupVisible) {
+        // First show: render off-screen invisible so we can measure height
+        setPopupPos({ top: -1000, left: -1000 });
+        setPopupOpacity(0);
+        setPopupShift(-6);
+      }
+      setPopupVisible(true);
+      setPopupMode(mode);
+    };
+
+    // After popup renders, measure its actual height and position it correctly
+    useEffect(() => {
+      if (!popupVisible || !popupRef.current || !wrapperRef.current) return;
       const r = wrapperRef.current.getBoundingClientRect();
+      const h = popupRef.current.offsetHeight;
+      if (h === 0) return;
       const w = popupWidth();
       const left = Math.max(
         8,
         Math.min(r.right - w, window.innerWidth - w - 8),
       );
-      const estimatedH = 280;
+      const belowTop = r.bottom + 8;
       const top =
-        r.bottom + 8 + estimatedH > window.innerHeight
-          ? Math.max(8, r.top - estimatedH - 8)
-          : r.bottom + 8;
-      return { top, left };
-    };
-
-    const show = (mode) => {
-      const pos = computePos(mode);
-      setPopupPos(pos);
-      setPopupOpacity(0);
-      setPopupShift(-6);
-      setPopupVisible(true);
-      setPopupMode(mode);
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          setPopupOpacity(1);
-          setPopupShift(0);
-        }),
-      );
-    };
+        belowTop + h > window.innerHeight
+          ? Math.max(8, r.top - h - 8)
+          : belowTop;
+      setPopupPos({ top, left });
+      if (popupOpacity === 0) {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            setPopupOpacity(1);
+            setPopupShift(0);
+          }),
+        );
+      }
+    }, [popupVisible, popupMode]);
 
     const hide = () => {
       setPopupOpacity(0);
@@ -348,25 +358,49 @@ export async function createFeedbackPopup() {
     };
 
     // ── form ──────────────────────────────────────────────────────────────
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
       e.stopPropagation();
       clearAuto();
-      setPopupMode("submitted");
+      setSubmitError(false);
+      setSubmitting(true);
+      try {
+        const { reviewID } = getReviewMeta();
+        const body = {
+          vote_type: type,
+          source_type: sourceType || "comment",
+          tags: [...selectedTags],
+          ...(reviewID && { review_id: Number(reviewID) }),
+          ...(commentContent && { comment_content: commentContent }),
+          ...(filePath && { file_path: filePath }),
+          ...(severity && { severity }),
+          ...(feedbackText && { feedback_text: feedbackText }),
+          ...(codeExcerpt && { code_excerpt: codeExcerpt }),
+        };
+        const res = await fetch("/api/v1/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          setSubmitting(false);
+          setSubmitError(true);
+          startAuto(6000);
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (data?.id) storeFeedbackId(visibilityKey, data.id);
+      } catch {
+        setSubmitting(false);
+        setSubmitError(true);
+        startAuto(6000);
+        return;
+      }
+      setSubmitting(false);
       if (type === "down") {
-        // commit downvote now that tags are submitted
         if (onVote) onVote(visibilityKey, "down");
         setTentativeDown(false);
-        postFeedback({
-          ...(feedbackText && { feedback_text: feedbackText }),
-          ...(codeExcerpt && { code_excerpt: codeExcerpt }),
-        });
-      } else {
-        // upvote: store the additional text + code block on top of the initial click store
-        postFeedback({
-          ...(feedbackText && { feedback_text: feedbackText }),
-          ...(codeExcerpt && { code_excerpt: codeExcerpt }),
-        });
       }
+      setPopupMode("submitted");
     };
 
     const toggleTag = (tag) => {
@@ -545,6 +579,7 @@ export async function createFeedbackPopup() {
         ${popupVisible &&
         html`
           <div
+            ref=${popupRef}
             style=${popupBase}
             onMouseEnter=${onPopupEnter}
             onMouseLeave=${onPopupLeave}
@@ -579,11 +614,13 @@ export async function createFeedbackPopup() {
                   This comment and the code block will be sent to Hexmos to
                   continue improving quality.
                 </div>
+                ${submitError && html`<div style="font-size:11px;color:#ef4444;margin-top:6px;">Failed to send — please try again.</div>`}
                 <button
                   onClick=${handleSubmit}
-                  style="${submitStyle}margin-top:8px;"
+                  disabled=${submitting}
+                  style="${submitStyle}margin-top:8px;opacity:${submitting ? '0.6' : '1'};"
                 >
-                  Submit More
+                  ${submitting ? "Sending…" : "Submit More"}
                 </button>
                 <div
                   style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07);"
@@ -664,11 +701,13 @@ export async function createFeedbackPopup() {
                   This comment and the code block will be sent to Hexmos. A
                   human will review it to understand and ship a fix.
                 </div>
+                ${submitError && html`<div style="font-size:11px;color:#ef4444;margin-top:6px;">Failed to send — please try again.</div>`}
                 <button
                   onClick=${handleSubmit}
-                  style="${submitStyle}margin-top:8px;"
+                  disabled=${submitting}
+                  style="${submitStyle}margin-top:8px;opacity:${submitting ? '0.6' : '1'};"
                 >
-                  Submit
+                  ${submitting ? "Sending…" : "Submit"}
                 </button>
               </div>
             `}
@@ -761,3 +800,6 @@ export async function getFeedbackPopup() {
   }
   return FeedbackPopupComponent;
 }
+// add a freaking comment here
+//
+// i will drop the prod database
