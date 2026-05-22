@@ -2541,6 +2541,9 @@ func handleFeedbackProxy(w http.ResponseWriter, r *http.Request, config Config, 
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		headers["Content-Type"] = ct
 	}
+	if version != "" && version != "unknown" {
+		headers["X-LRC-Version"] = version
+	}
 	backendURL := network.ReviewProxyRequestURL(config.APIURL, r.URL.Path, r.URL.RawQuery)
 	client := network.NewReviewProxyClient(10 * time.Second)
 	resp, err := client.Do(r.Method, backendURL, reqBody, headers)
