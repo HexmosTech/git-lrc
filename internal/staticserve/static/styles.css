@@ -1517,6 +1517,7 @@ body {
     scrollbar-color: rgba(127, 179, 255, 0.55) rgba(255, 255, 255, 0.04);
     min-height: 0;
     max-height: 100%;
+    overflow-y:hidden;
 }
 
 .summary-slideshow-body::-webkit-scrollbar {
