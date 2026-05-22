@@ -1,10 +1,12 @@
 // Comment component
 import { waitForPreact, getBadgeClass, copyToClipboard } from './utils.js';
+import { getFeedbackPopup } from './FeedbackPopup.js';
 
 export async function createComment() {
     const { html, useEffect, useState } = await waitForPreact();
-    
-    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility, onFirstRender, renderTimingLabel }) {
+    const FeedbackPopup = await getFeedbackPopup();
+
+    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility, onFirstRender, renderTimingLabel, vote, onVote }) {
         const [copied, setCopied] = useState(false);
 
         useEffect(() => {
@@ -84,8 +86,30 @@ export async function createComment() {
                                     data-line="${comment.Line}"
                                     data-comment="${comment.Content}"
                                 >
-                                    <div class="comment-actions" style="display: flex; gap: 8px; position: absolute; right: 12px; top: 12px;">
-                                        <button 
+                                    <div class="comment-actions" style="display: flex; gap: 6px; position: absolute; right: 12px; top: 12px; align-items: center;">
+                                        <${FeedbackPopup}
+                                            type="up"
+                                            vote=${vote}
+                                            onVote=${onVote}
+                                            visibilityKey=${visibilityKey}
+                                            commentContent=${comment.Content}
+                                            codeExcerpt=${codeExcerpt}
+                                            filePath=${filePath}
+                                            severity=${comment.Severity}
+                                            sourceType="comment"
+                                        />
+                                        <${FeedbackPopup}
+                                            type="down"
+                                            vote=${vote}
+                                            onVote=${onVote}
+                                            visibilityKey=${visibilityKey}
+                                            commentContent=${comment.Content}
+                                            codeExcerpt=${codeExcerpt}
+                                            filePath=${filePath}
+                                            severity=${comment.Severity}
+                                            sourceType="comment"
+                                        />
+                                        <button
                                             class="comment-visibility-btn"
                                             title="Hide this comment from the AI Agent"
                                             onClick=${handleToggleVisibility}

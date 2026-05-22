@@ -1,19 +1,23 @@
 // SeverityFilter component - always-visible severity toggle buttons with counts
 import { waitForPreact, countIssuesBySeverity } from './utils.js';
+import { getFeedbackPopup } from './FeedbackPopup.js';
 
 export async function createSeverityFilter() {
     const { html } = await waitForPreact();
+    const FeedbackPopup = await getFeedbackPopup();
 
-    return function SeverityFilter({ 
-        files, 
-        visibleSeverities, 
-        onToggleSeverity, 
-        onCopyVisibleIssues, 
+    return function SeverityFilter({
+        files,
+        visibleSeverities,
+        onToggleSeverity,
+        onCopyVisibleIssues,
         hiddenCommentKeys,
         copyFeedbackStatus,
         copyFeedbackMessage,
         onSendToAgent,
-        visibleCount
+        visibleCount,
+        prVote,
+        onVote
     }) {
         const counts = countIssuesBySeverity(files, visibleSeverities, hiddenCommentKeys);
         if (counts.total === 0) return null;
@@ -68,10 +72,26 @@ export async function createSeverityFilter() {
                     </button>
                 </div>
                 <span class="severity-filter-summary">${filterLabel}</span>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <${FeedbackPopup}
+                        type="up"
+                        vote=${prVote}
+                        onVote=${onVote}
+                        visibilityKey="__pr_level__"
+                        sourceType="pr_level"
+                    />
+                    <${FeedbackPopup}
+                        type="down"
+                        vote=${prVote}
+                        onVote=${onVote}
+                        visibilityKey="__pr_level__"
+                        sourceType="pr_level"
+                    />
+                </div>
                 <div class="copy-visible-wrapper" style="flex-direction: row; align-items: center; gap: 8px;">
-                    <button 
+                    <button
                         class="btn btn-primary copy-visible-btn ${buttonState}"
-                        onClick=${onCopyVisibleIssues} 
+                        onClick=${onCopyVisibleIssues}
                         title="Copy all visible issues to clipboard"
                     >
                         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">

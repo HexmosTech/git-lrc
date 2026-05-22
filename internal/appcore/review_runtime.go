@@ -719,7 +719,13 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 				handleReviewEventsProxy(w, r, *config, reviewID, verbose)
 			})
-
+			// Proxy feedback endpoints — adds API key so browser never holds the key
+			mux.HandleFunc("/api/v1/feedback", func(w http.ResponseWriter, r *http.Request) {
+				handleFeedbackProxy(w, r, *config, verbose)
+			})
+			mux.HandleFunc("/api/v1/feedback/", func(w http.ResponseWriter, r *http.Request) {
+				handleFeedbackProxy(w, r, *config, verbose)
+			})
 			server := &http.Server{Handler: mux}
 			if err := server.Serve(serveListener); err != nil && err != http.ErrServerClosed {
 				if verbose {
@@ -1258,7 +1264,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				})
 			} else {
 				// No progressive loading - use normal serveHTMLInteractive
-				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.Port, nonProgressiveListener, initialMsg, reviewMetadata, false)
+				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.Port, nonProgressiveListener, initialMsg, reviewMetadata, false, *config)
 				if err != nil {
 					return err
 				}
@@ -2515,6 +2521,48 @@ func handleReviewEventsProxy(w http.ResponseWriter, r *http.Request, config Conf
 	}
 }
 
+func handleFeedbackProxy(w http.ResponseWriter, r *http.Request, config Config, verbose bool) {
+	var reqBody []byte
+	if r.Body != nil {
+		const maxProxyBodyBytes = 8 << 20
+		readBody, readErr := io.ReadAll(io.LimitReader(r.Body, maxProxyBodyBytes+1))
+		if readErr != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+		if len(readBody) > maxProxyBodyBytes {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		reqBody = readBody
+	}
+
+	headers := map[string]string{"X-API-Key": config.APIKey}
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		headers["Content-Type"] = ct
+	}
+	backendURL := network.ReviewProxyRequestURL(config.APIURL, r.URL.Path, r.URL.RawQuery)
+	client := network.NewReviewProxyClient(10 * time.Second)
+	resp, err := client.Do(r.Method, backendURL, reqBody, headers)
+	if err != nil {
+		if verbose {
+			log.Printf("Feedback proxy error: %v", err)
+		}
+		http.Error(w, "Failed to proxy feedback request", http.StatusBadGateway)
+		return
+	}
+
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, bytes.NewReader(resp.Body)); err != nil && verbose {
+		log.Printf("failed to write feedback proxy response: %v", err)
+	}
+}
+
 func buildDecisionMetadata(reviewID, account, title, reviewURL string) []string {
 	metadata := make([]string, 0, 4)
 	if strings.TrimSpace(reviewID) != "" {
@@ -2535,7 +2583,7 @@ func buildDecisionMetadata(reviewID, account, title, reviewURL string) []string 
 // serveHTMLInteractive serves HTML and waits for user decision
 // Returns decision details (code: 0 commit, 1 abort, 2 skip-from-terminal, 3 skip-from-HTML)
 // skipBrowserOpen: set to true if browser is already open (e.g., from progressive loading)
-func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, metadata []string, skipBrowserOpen bool) (int, string, bool, error) {
+func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, metadata []string, skipBrowserOpen bool, cfg Config) (int, string, bool, error) {
 	absPath, err := filepath.Abs(htmlPath)
 	if err != nil {
 		return 1, "", false, fmt.Errorf("failed to get absolute path: %w", err)
@@ -2565,6 +2613,13 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 	mux.Handle("/static/", http.StripPrefix("/static/", staticserve.GetStaticHandler()))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, absPath)
+	})
+	// Proxy feedback endpoints — adds API key so browser never holds the key
+	mux.HandleFunc("/api/v1/feedback", func(w http.ResponseWriter, r *http.Request) {
+		handleFeedbackProxy(w, r, cfg, false)
+	})
+	mux.HandleFunc("/api/v1/feedback/", func(w http.ResponseWriter, r *http.Request) {
+		handleFeedbackProxy(w, r, cfg, false)
 	})
 
 	type precommitDecision struct {

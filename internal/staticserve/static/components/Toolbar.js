@@ -4,18 +4,18 @@ import { waitForPreact } from './utils.js';
 export async function createToolbar() {
     const { html } = await waitForPreact();
     
-    return function Toolbar({ 
-        activeTab, 
-        onTabChange, 
+    return function Toolbar({
+        activeTab,
+        onTabChange,
         performanceItems,
-        allExpanded, 
-        onToggleAll, 
+        allExpanded,
+        onToggleAll,
         eventCount,
         showEventBadge,
         onTailLog,
         isTailing,
         onCopyLogs,
-        logsCopied
+        logsCopied,
     }) {
         return html`
             <div class="toolbar-row">

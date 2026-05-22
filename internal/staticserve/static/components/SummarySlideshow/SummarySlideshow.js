@@ -1,5 +1,6 @@
 import { calculateTotalReadTime, formatRemainingTime, parseMarkdownToSlides } from './slideshowParser.js';
 import { copyToClipboard, waitForPreact } from '../utils.js';
+import { getFeedbackPopup } from '../FeedbackPopup.js';
 
 const ALLOWED_TAGS = new Set([
     'A', 'BLOCKQUOTE', 'BR', 'CAPTION', 'CODE', 'COL', 'COLGROUP', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
@@ -446,11 +447,14 @@ export function buildChapterExplorerCards(trackItems, currentSlide, activeTrackI
 
 export async function createSummarySlideshow() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
+    const FeedbackPopup = await getFeedbackPopup();
 
     return function SummarySlideshow({ markdown, isOpen = true, onClose = () => {}, mode = 'modal', isShortcutActive = false, className = '', initialSlideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false }) {
         const isModal = mode === 'modal';
         const isVisible = isModal ? isOpen : true;
         const [slides, setSlides] = useState([]);
+        const [slideshowVote, setSlideshowVote] = useState(null);
+        const handleSlideshowVote = (_, newVote) => setSlideshowVote(newVote);
         const [currentSlide, setCurrentSlide] = useState(0);
         const [isAutoPlay, setIsAutoPlay] = useState(false);
         const [isHelpShown, setIsHelpShown] = useState(false);
@@ -737,6 +741,23 @@ export async function createSummarySlideshow() {
         const activeProgressTrackItemKey = getActiveProgressTrackItemKey(progressTrackItems, currentSlide);
         const activeProgressTrackMarkerKey = getActiveProgressTrackMarkerKey(progressTrackItems, currentSlide);
         const chapterExplorerCards = buildChapterExplorerCards(progressTrackItems, currentSlide, activeProgressTrackItemKey, activeProgressTrackMarkerKey);
+
+        // ── slide feedback context ────────────────────────────────────────────
+        const slideCommentContent = isCompleteSlide
+            ? `[Complete] Finished all ${slides.length} slides`
+            : slide
+                ? `[${currentSlide + 1}/${slides.length}] ${slide.title ? slide.title + '\n\n' : ''}${slide.content || ''}`.trim()
+                : '';
+
+        const slideFilePath = slide?.meta?.filePath || undefined;
+
+        const slideAllSlidesData = JSON.stringify(
+            slides.map((s, i) => {
+                const entry = { n: i + 1, title: s.title || '', kind: s.kind || 'detail' };
+                if (s.meta?.filePath) entry.file = s.meta.filePath;
+                return entry;
+            })
+        );
 
         const handleClose = () => {
             clearAutoPlayTimers();
@@ -1072,6 +1093,26 @@ export async function createSummarySlideshow() {
                         </div>
 
                         <div style="display: flex; align-items: center; gap: 6px;">
+                            <${FeedbackPopup}
+                                type="up"
+                                vote=${slideshowVote}
+                                onVote=${handleSlideshowVote}
+                                visibilityKey="__slideshow__"
+                                sourceType="slideshow"
+                                commentContent=${slideCommentContent}
+                                filePath=${slideFilePath}
+                                codeExcerpt=${slideAllSlidesData}
+                            />
+                            <${FeedbackPopup}
+                                type="down"
+                                vote=${slideshowVote}
+                                onVote=${handleSlideshowVote}
+                                visibilityKey="__slideshow__"
+                                sourceType="slideshow"
+                                commentContent=${slideCommentContent}
+                                filePath=${slideFilePath}
+                                codeExcerpt=${slideAllSlidesData}
+                            />
                             <button class="action-btn summary-slide-btn ${copied ? 'copied' : ''}" onClick=${handleCopy} title="Copy current slide (C)" aria-label="Copy current slide">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     ${copied

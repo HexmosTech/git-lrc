@@ -21,6 +21,10 @@ type JSONHunkData = result.JSONHunkData
 type JSONLineData = result.JSONLineData
 type JSONCommentData = result.JSONCommentData
 
+// devStaticDir returns the filesystem path set by LRC_STATIC_DEV_DIR.
+// When non-empty, static files are served from disk instead of the embedded FS,
+// so JS edits are visible on browser refresh without rebuilding the binary.
+// Set automatically by `make dev-ui`; not intended for production use.
 func devStaticDir() string {
 	return os.Getenv("LRC_STATIC_DEV_DIR")
 }

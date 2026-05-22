@@ -6,16 +6,18 @@ export async function createFileBlock() {
     const { html } = await waitForPreact();
     const DiffTable = await getDiffTable();
     
-    return function FileBlock({ 
-        file, 
-        expanded, 
-        onToggle, 
+    return function FileBlock({
+        file,
+        expanded,
+        onToggle,
         visibleSeverities,
         hiddenCommentKeys,
         onToggleCommentVisibility,
         reviewStartMs,
         commentRenderTimes,
-        onCommentRendered
+        onCommentRendered,
+        commentVotes,
+        onVote
     }) {
         // Use file.ID if available (set by convertFilesToUIFormat), otherwise generate
         const fileId = file.ID || filePathToId(file.FilePath);
@@ -37,16 +39,18 @@ export async function createFileBlock() {
                     `}
                 </div>
                 <div class="file-content">
-                    <${DiffTable} 
-                        hunks=${file.Hunks} 
-                        filePath=${file.FilePath} 
-                        fileId=${fileId} 
+                    <${DiffTable}
+                        hunks=${file.Hunks}
+                        filePath=${file.FilePath}
+                        fileId=${fileId}
                         visibleSeverities=${visibleSeverities}
                         hiddenCommentKeys=${hiddenCommentKeys}
                         onToggleCommentVisibility=${onToggleCommentVisibility}
                         reviewStartMs=${reviewStartMs}
                         commentRenderTimes=${commentRenderTimes}
                         onCommentRendered=${onCommentRendered}
+                        commentVotes=${commentVotes}
+                        onVote=${onVote}
                     />
                 </div>
             </div>

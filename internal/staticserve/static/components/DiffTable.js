@@ -7,16 +7,18 @@ export async function createDiffTable() {
     const { html } = await waitForPreact();
     const Comment = await getComment();
     
-    return function DiffTable({ 
-        hunks, 
-        filePath, 
-        fileId, 
+    return function DiffTable({
+        hunks,
+        filePath,
+        fileId,
         visibleSeverities,
         hiddenCommentKeys,
         onToggleCommentVisibility,
         reviewStartMs,
         commentRenderTimes,
-        onCommentRendered
+        onCommentRendered,
+        commentVotes,
+        onVote
     }) {
         if (!hunks || hunks.length === 0) {
             return html`
@@ -61,9 +63,9 @@ export async function createDiffTable() {
                                 const isHidden = hiddenCommentKeys && hiddenCommentKeys.has(visibilityKey);
                                 const renderTimingLabel = getCommentRenderLabel(reviewStartMs, commentRenderTimes?.[visibilityKey]);
                                 return html`
-                                    <${Comment} 
+                                    <${Comment}
                                         key=${visibilityKey}
-                                        comment=${comment} 
+                                        comment=${comment}
                                         filePath=${filePath}
                                         codeExcerpt=${codeExcerpt}
                                         commentId=${commentId}
@@ -72,6 +74,8 @@ export async function createDiffTable() {
                                         onToggleVisibility=${onToggleCommentVisibility}
                                         onFirstRender=${onCommentRendered}
                                         renderTimingLabel=${renderTimingLabel}
+                                        vote=${commentVotes && commentVotes[visibilityKey] || null}
+                                        onVote=${onVote}
                                     />
                                 `;
                             })}

@@ -18,6 +18,7 @@ import { getSummarySlideshow } from './components/SummarySlideshow/SummarySlides
 import { evaluateSummarySlidesEligibility } from './components/SummarySlideshow/slideshowParser.js';
 import { buildPerformanceSnapshot, getFirstRenderTime, getLoadingActivityMessage, getPerformanceNow, recordFirstRenderTime } from './components/review_performance_state.mjs';
 import { shouldShowAllClear } from './components/review_outcome_state.mjs';
+import { setReviewMeta } from './components/reviewMeta.mjs';
 
 let domReadyStartMs = null;
 
@@ -267,6 +268,7 @@ async function initApp() {
         const [summarySlideIndex, setSummarySlideIndex] = useState(0);
         const [performanceNowMs, setPerformanceNowMs] = useState(domReadyStartMs || getPerformanceNow());
         const [commentRenderTimes, setCommentRenderTimes] = useState({});
+        const [commentVotes, setCommentVotes] = useState({});
         
         const eventsPollingRef = useRef(null);
         const eventsListRef = useRef(null);
@@ -300,6 +302,7 @@ async function initApp() {
                 }
                 const data = await response.json();
                 commitReviewData(data);
+                setReviewMeta({ apiURL: data.apiURL || data.APIURL || '', reviewID: data.reviewID || data.ReviewID || '' });
                 setLoading(false);
                 return data;
             } catch (err) {
@@ -615,6 +618,18 @@ async function initApp() {
             if (tab === 'events') {
                 setNewEventCount(0);
             }
+        }, []);
+
+        const handleVote = useCallback((visibilityKey, newVote) => {
+            if (!visibilityKey) return;
+            setCommentVotes(prev => {
+                if (newVote === null) {
+                    const next = { ...prev };
+                    delete next[visibilityKey];
+                    return next;
+                }
+                return { ...prev, [visibilityKey]: newVote };
+            });
         }, []);
 
         const toggleCommentVisibility = useCallback((visibilityKey) => {
@@ -1030,6 +1045,8 @@ async function initApp() {
                             copyFeedbackMessage=${copyFeedback.message}
                             onSendToAgent=${handleSendToAgent}
                             visibleCount=${totalVisibleComments}
+                            prVote=${commentVotes['__pr_level__'] || null}
+                            onVote=${handleVote}
                         />
                     `}
                     
@@ -1048,6 +1065,8 @@ async function initApp() {
                                     reviewStartMs=${reviewStartMsRef.current}
                                     commentRenderTimes=${commentRenderTimes}
                                     onCommentRendered=${handleCommentRendered}
+                                    commentVotes=${commentVotes}
+                                    onVote=${handleVote}
                                 />
                             `)
                             : html`

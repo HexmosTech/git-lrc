@@ -1,4 +1,4 @@
-.PHONY: build build-win build-all build-local build-local-test run run-fake-review dev-ui bump release release-internal release-gh clean test testall test-pkg upload-secrets download-secrets security-govulncheck security-govulncheck-json security-osv security-triage security-gitleaks security-b2-audit security-b2-cleanup-plan security-b2-cleanup-apply security-publish-release-manifest security-secret-regression security-sbom security-sbom-cyclonedx security-sbom-spdx security-sbom-validate release-notes-init release-notes-check release-preflight
+.PHONY: build build-win build-all build-local build-local-test run run-fake-review dev-ui bump release release-internal release-gh clean test testall test-pkg upload-secrets download-secrets security-govulncheck security-govulncheck-json security-osv security-triage security-gitleaks security-b2-audit security-b2-cleanup-plan security-b2-cleanup-apply security-publish-release-manifest security-secret-regression security-sbom security-sbom-cyclonedx security-sbom-spdx security-sbom-validate release-notes-init release-notes-check release-preflight use-local-backend use-livereview-backend
 
 # Go parameters
 GOENV=env -u GOROOT
@@ -77,6 +77,14 @@ dev-ui: build-local-test
 	 WAIT=$${WAIT:-5s} \
 	 TMP_REPO=$${TMP_REPO:-/tmp/lrc-fake-review-repo} \
 	 scripts/fake_review.sh $(ARGS)
+
+use-local-backend:
+	@sed -i 's|api_url = "https://livereview.hexmos.com"|api_url = "http://localhost:8888"|' $(HOME)/.lrc.toml
+	@echo "✅ Switched to local backend (http://localhost:8888)"
+
+use-livereview-backend:
+	@sed -i 's|api_url = "http://localhost:8888"|api_url = "https://livereview.hexmos.com"|' $(HOME)/.lrc.toml
+	@echo "✅ Switched to livereview.hexmos.com"
 
 # Bump lrc version by editing appVersion in main.go
 # Prompts for version bump type (patch/minor/major)
