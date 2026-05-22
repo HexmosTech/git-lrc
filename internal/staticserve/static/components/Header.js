@@ -1,7 +1,7 @@
 // Header component
 import { waitForPreact, LOGO_DATA_URI } from './utils.js';
 import { UsageChip } from '/static/components/UsageChip.js';
-import { fetchImpactStats, LINKEDIN_TEXT } from '/static/components/FeedbackPopup.js';
+import { fetchImpactStats, buildLinkedinText } from '/static/components/FeedbackPopup.js';
 import { getReviewMeta } from '/static/components/reviewMeta.mjs';
 
 const GITHUB_URL = 'https://github.com/HexmosTech/git-lrc';
@@ -211,16 +211,14 @@ export async function createHeader() {
         const [impactStats, setImpactStats] = useState(null);
         const [linkedinOpen, setLinkedinOpen] = useState(false);
         const [linkedinOpacity, setLinkedinOpacity] = useState(0);
-        const [linkedinText, setLinkedinText] = useState(LINKEDIN_TEXT);
+        const [linkedinText, setLinkedinText] = useState(() => buildLinkedinText(null));
         const [snackbar, setSnackbar] = useState(false);
-        const lockedRef = useRef(false);
         const snackTimer = useRef(null);
 
-        const guardedCloseSoon = () => { if (lockedRef.current || linkedinOpen) return; closeSoon(); };
+        const guardedCloseSoon = () => { if (linkedinOpen) return; closeSoon(); };
 
         const close = () => {
             if (linkedinOpen) return;
-            lockedRef.current = false;
             setIsOpen(false);
             setVoteType(null);
             setText('');
@@ -228,8 +226,8 @@ export async function createHeader() {
             setStatsExpanded(false);
         };
 
-        const handleVote = (v) => { lockedRef.current = true; setVoteType(prev => prev === v ? null : v); };
-        const handleTextInput = (e) => { lockedRef.current = true; setText(e.target.value); };
+        const handleVote = (v) => setVoteType(prev => prev === v ? null : v);
+        const handleTextInput = (e) => setText(e.target.value);
 
         useEffect(() => {
             if (!isOpen) return;
@@ -253,7 +251,7 @@ export async function createHeader() {
         useEffect(() => () => { if (snackTimer.current) clearTimeout(snackTimer.current); }, []);
 
         const openLinkedin = () => {
-            lockedRef.current = true;
+            setLinkedinText(buildLinkedinText(impactStats));
             setLinkedinOpen(true);
             setLinkedinOpacity(0);
             requestAnimationFrame(() => requestAnimationFrame(() => setLinkedinOpacity(1)));
@@ -367,7 +365,7 @@ export async function createHeader() {
                             <textarea
                                 placeholder="Tell us more (optional)..."
                                 onInput=${handleTextInput}
-                                onFocus=${() => { lockedRef.current = true; }}
+                                onFocus=${() => {}}
                                 style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:7px;color:#c9d5e8;font-size:12px;padding:7px 9px;resize:vertical;min-height:60px;font-family:inherit;outline:none;margin-bottom:10px;display:block;"
                                 maxlength="1000"
                             ></textarea>

@@ -83,20 +83,26 @@ const DOWN_TAGS = [
   "Hard to act on",
 ];
 
-export const LINKEDIN_TEXT = `🚀 Shipping with confidence — here's my code review impact since Jan 2025:
+export function buildLinkedinText(stats) {
+  const get = (label) => {
+    const s = (stats || []).find((x) => x.label === label);
+    return s != null ? s.value : "—";
+  };
+  return `🚀 Shipping with confidence — here's my code review impact since Jan 2025:
 
-✅ 47 reviews completed
-🐛 189 bugs caught before production
-⚡ 8s average first comment time
-🔴 23 critical issues found
-🟠 166 errors caught
-🟡 123 warnings flagged
+✅ ${get("Total Reviews")} reviews completed
+🐛 ${get("Bugs Caught Pre-Prod")} bugs caught before production
+🔍 ${get("Issues Found")} total issues found
+🔴 ${get("Critical")} critical issues found
+🟠 ${get("Errors")} errors caught
+🟡 ${get("Warnings")} warnings flagged
 
 Using git-lrc to AI-review every commit before it lands.
 
 ⭐ Star it if you find it useful: https://github.com/HexmosTech/git-lrc
 
 #CodeReview #DevOps #SoftwareEngineering #AI`;
+}
 
 export async function createFeedbackPopup() {
   const { html, useState, useRef, useEffect } = await waitForPreact();
@@ -124,10 +130,9 @@ export async function createFeedbackPopup() {
     const [statsExpanded, setStatsExpanded] = useState(false);
     const [linkedinOpen, setLinkedinOpen] = useState(false);
     const [linkedinOpacity, setLinkedinOpacity] = useState(0);
-    const [linkedinText, setLinkedinText] = useState(LINKEDIN_TEXT);
+    const [linkedinText, setLinkedinText] = useState(() => buildLinkedinText(_impactStats));
     const [snackbar, setSnackbar] = useState(false);
     const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
-    const [tentativeDown, setTentativeDown] = useState(false); // red but not yet submitted
     const [impactStats, setImpactStats] = useState(_impactStats);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(false);
@@ -137,7 +142,7 @@ export async function createFeedbackPopup() {
     const snackTimer = useRef(null);
     const closeLIRef = useRef(null);
 
-    const isActive = vote === type || (type === "down" && tentativeDown);
+    const isActive = vote === type;
 
     // ── cleanup on unmount ────────────────────────────────────────────────
     useEffect(
@@ -148,19 +153,6 @@ export async function createFeedbackPopup() {
       },
       [],
     );
-
-    // ── clear tentativeDown when sibling vote is committed ────────────────
-    useEffect(() => {
-      if (type === "down" && vote === "up" && tentativeDown) {
-        setTentativeDown(false);
-        setPopupOpacity(0);
-        setPopupShift(-4);
-        setTimeout(() => {
-          setPopupVisible(false);
-          setPopupMode(null);
-        }, 280);
-      }
-    }, [vote]);
 
     // ── ESC closes linkedin overlay ───────────────────────────────────────
     useEffect(() => {
@@ -232,7 +224,6 @@ export async function createFeedbackPopup() {
     const hide = () => {
       setPopupOpacity(0);
       setPopupShift(-4);
-      setTentativeDown(false);
       setTimeout(() => {
         setPopupVisible(false);
         setPopupMode(null);
@@ -274,6 +265,7 @@ export async function createFeedbackPopup() {
         };
         if (reviewID) body.review_id = Number(reviewID) || undefined;
         if (commentContent) body.comment_content = commentContent;
+        if (codeExcerpt) body.code_excerpt = codeExcerpt;
         if (filePath) body.file_path = filePath;
         if (severity) body.severity = severity;
         Object.assign(body, extra);
@@ -316,12 +308,10 @@ export async function createFeedbackPopup() {
           if (popupVisible) hide();
           return;
         }
-        // switching from upvote — retract it and clear parent vote
-        if (vote === "up") {
-          retractStoredFeedback(visibilityKey);
-          if (onVote) onVote(visibilityKey, null);
-        }
-        setTentativeDown(true);
+        // switching from upvote — retract it
+        if (vote === "up") retractStoredFeedback(visibilityKey);
+        if (onVote) onVote(visibilityKey, "down");
+        postFeedback();
         cancelHoverClose();
         show("click");
         startAuto();
@@ -396,10 +386,6 @@ export async function createFeedbackPopup() {
         return;
       }
       setSubmitting(false);
-      if (type === "down") {
-        if (onVote) onVote(visibilityKey, "down");
-        setTentativeDown(false);
-      }
       setPopupMode("submitted");
     };
 
@@ -413,6 +399,7 @@ export async function createFeedbackPopup() {
 
     // ── linkedin overlay ──────────────────────────────────────────────────
     const openLinkedin = () => {
+      setLinkedinText(buildLinkedinText(impactStats));
       setLinkedinOpen(true);
       setLinkedinOpacity(0);
       requestAnimationFrame(() =>
@@ -707,7 +694,7 @@ export async function createFeedbackPopup() {
                   disabled=${submitting}
                   style="${submitStyle}margin-top:8px;opacity:${submitting ? '0.6' : '1'};"
                 >
-                  ${submitting ? "Sending…" : "Submit"}
+                  ${submitting ? "Sending…" : "Submit More"}
                 </button>
               </div>
             `}
