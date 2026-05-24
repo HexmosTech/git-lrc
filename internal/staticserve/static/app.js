@@ -281,6 +281,8 @@ async function initApp() {
         const reviewStartMsRef = useRef(domReadyStartMs || getPerformanceNow());
         const reviewCompletedMsRef = useRef(null);
         const [logsCopied, setLogsCopied] = useState(false);
+        const [sessionEnded, setSessionEnded] = useState(false);
+        const sessionReviewID = new URLSearchParams(window.location.search).get('r') || '';
 
         useEffect(() => {
             activeTabRef.current = activeTab;
@@ -296,7 +298,13 @@ async function initApp() {
         // Fetch review data from API
         const fetchInitialReviewData = useCallback(async () => {
             try {
-                const response = await fetch('/api/review');
+                const url = sessionReviewID ? `/api/review?r=${sessionReviewID}` : '/api/review';
+                const response = await fetch(url);
+                if (response.status === 403) {
+                    setSessionEnded(true);
+                    setLoading(false);
+                    return null;
+                }
                 if (!response.ok) {
                     throw new Error(`Failed to fetch review data: ${response.status}`);
                 }
@@ -311,41 +319,24 @@ async function initApp() {
                 setLoading(false);
                 return null;
             }
-        }, [commitReviewData]);
+        }, [commitReviewData, sessionReviewID]);
 
         const fetchFinalReviewData = useCallback(async (reviewID) => {
             if (!reviewID) return null;
-
-            const fetchTargets = [
-                `/api/v1/diff-review/${reviewID}`,
-                '/api/review'
-            ];
-
-            for (const url of fetchTargets) {
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                        continue;
-                    }
-                    const data = await response.json();
-                    commitReviewData(prev => {
-                        if (!prev) {
-                            return data;
-                        }
-                        return {
-                            ...prev,
-                            ...data,
-                            files: data.files || prev.files || []
-                        };
-                    });
-                    return data;
-                } catch (err) {
-                    console.error(`Error fetching final review data from ${url}:`, err);
-                }
+            const rParam = sessionReviewID ? `?r=${sessionReviewID}` : '';
+            try {
+                const response = await fetch(`/api/v1/diff-review/${reviewID}${rParam}`);
+                if (!response.ok) return null;
+                const data = await response.json();
+                commitReviewData(prev =>
+                    prev ? { ...prev, ...data, files: data.files || prev.files || [] } : data
+                );
+                return data;
+            } catch (err) {
+                console.error('Error fetching final review data:', err);
+                return null;
             }
-
-            return null;
-        }, [commitReviewData]);
+        }, [commitReviewData, sessionReviewID]);
         
         // Fetch events for live logs and comments
         const fetchEvents = useCallback(async (reviewID) => {
@@ -354,7 +345,13 @@ async function initApp() {
             eventsInFlightRef.current = true;
             
             try {
-                const response = await fetch(buildEventsURL(reviewID, lastSeenEventTimeRef.current));
+                const baseEventsURL = buildEventsURL(reviewID, lastSeenEventTimeRef.current);
+                const eventsURL = sessionReviewID ? `${baseEventsURL}&r=${sessionReviewID}` : baseEventsURL;
+                const response = await fetch(eventsURL);
+                if (response.status === 403) {
+                    setSessionEnded(true);
+                    return;
+                }
                 if (!response.ok) return;
                 
                 const data = await response.json();
@@ -412,7 +409,7 @@ async function initApp() {
             } finally {
                 eventsInFlightRef.current = false;
             }
-        }, [commitReviewData, fetchFinalReviewData]);
+        }, [commitReviewData, fetchFinalReviewData, sessionReviewID]);
         
         // Initial load and polling setup
         useEffect(() => {
@@ -678,7 +675,8 @@ async function initApp() {
             };
             
             try {
-                const response = await fetch('/handoff', {
+                const handoffURL = sessionReviewID ? `/handoff?r=${sessionReviewID}` : '/handoff';
+                const response = await fetch(handoffURL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -803,6 +801,25 @@ async function initApp() {
             }
         }, [events]);
         
+        // Session mismatch — stale tab refreshed on a reused port
+        if (sessionEnded) {
+            return html`
+                <div class="loading-screen">
+                    <div class="loading-content">
+                        <div class="loading-logo error">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
+                            </svg>
+                        </div>
+                        <h1 class="loading-title">Session Ended</h1>
+                        <p class="loading-text">This review session is no longer active.</p>
+                        <p class="loading-text" style="font-size:13px;opacity:0.7">Close this tab and open the new review from your terminal.</p>
+                    </div>
+                </div>
+            `;
+        }
+
         // Loading state
         if (loading && !reviewData) {
             return html`

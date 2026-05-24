@@ -2,6 +2,8 @@
 import { waitForPreact, copyToClipboard } from "./utils.js";
 import { getReviewMeta } from "./reviewMeta.mjs";
 
+const SESSION_REVIEW_ID = new URLSearchParams(window.location.search).get('r') || '';
+
 // module-level cache — fetched once per session
 let _impactStats = null;
 let _impactStatsFetching = false;
@@ -18,7 +20,10 @@ function retractStoredFeedback(key) {
   const id = _feedbackIds[key];
   if (!id) return;
   delete _feedbackIds[key];
-  fetch(`/api/v1/feedback/${id}/retract`, { method: "PATCH" }).catch(() => {});
+  const retractURL = SESSION_REVIEW_ID
+    ? `/api/v1/feedback/${id}/retract?r=${SESSION_REVIEW_ID}`
+    : `/api/v1/feedback/${id}/retract`;
+  fetch(retractURL, { method: "PATCH" }).catch(() => {});
 }
 
 export function fetchImpactStats(reviewID, onReady) {
@@ -29,9 +34,10 @@ export function fetchImpactStats(reviewID, onReady) {
   _impactStatsCallbacks.push(onReady);
   if (_impactStatsFetching) return;
   _impactStatsFetching = true;
-  const url = reviewID
-    ? `/api/v1/feedback/impact-stats?review_id=${reviewID}`
-    : `/api/v1/feedback/impact-stats`;
+  const statsParams = new URLSearchParams();
+  if (reviewID) statsParams.set('review_id', reviewID);
+  if (SESSION_REVIEW_ID) statsParams.set('r', SESSION_REVIEW_ID);
+  const url = `/api/v1/feedback/impact-stats${statsParams.toString() ? '?' + statsParams.toString() : ''}`;
   fetch(url)
     .then((r) => r.json())
     .then((data) => {
@@ -269,7 +275,8 @@ export async function createFeedbackPopup() {
         if (filePath) body.file_path = filePath;
         if (severity) body.severity = severity;
         Object.assign(body, extra);
-        fetch("/api/v1/feedback", {
+        const feedbackURL = SESSION_REVIEW_ID ? `/api/v1/feedback?r=${SESSION_REVIEW_ID}` : '/api/v1/feedback';
+        fetch(feedbackURL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -366,7 +373,8 @@ export async function createFeedbackPopup() {
           ...(feedbackText && { feedback_text: feedbackText }),
           ...(codeExcerpt && { code_excerpt: codeExcerpt }),
         };
-        const res = await fetch("/api/v1/feedback", {
+        const feedbackPostURL = SESSION_REVIEW_ID ? `/api/v1/feedback?r=${SESSION_REVIEW_ID}` : '/api/v1/feedback';
+        const res = await fetch(feedbackPostURL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),

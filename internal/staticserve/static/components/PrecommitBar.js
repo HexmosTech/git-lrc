@@ -1,6 +1,8 @@
 // PrecommitBar component - commit/push/skip actions
 import { waitForPreact } from './utils.js';
 
+const SESSION_REVIEW_ID = new URLSearchParams(window.location.search).get('r') || '';
+
 // Extract the first markdown heading as a commit message suggestion
 function extractTitleFromSummary(markdown) {
     if (!markdown) return '';
@@ -38,7 +40,8 @@ export async function createPrecommitBar() {
 
             draftDebounceRef.current = setTimeout(async () => {
                 try {
-                    const res = await fetch('/api/draft', {
+                    const draftURL = SESSION_REVIEW_ID ? `/api/draft?r=${SESSION_REVIEW_ID}` : '/api/draft';
+                    const res = await fetch(draftURL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -48,7 +51,7 @@ export async function createPrecommitBar() {
                     });
 
                     if (res.status === 409) {
-                        const latest = await fetch('/api/draft');
+                        const latest = await fetch(draftURL);
                         if (latest.ok) {
                             const snap = await latest.json();
                             draftVersionRef.current = snap.version || 0;
@@ -76,7 +79,7 @@ export async function createPrecommitBar() {
 
             const initDraft = async () => {
                 try {
-                    const res = await fetch('/api/draft');
+                    const res = await fetch(SESSION_REVIEW_ID ? `/api/draft?r=${SESSION_REVIEW_ID}` : '/api/draft');
                     if (!res.ok || !mounted) return;
                     const snap = await res.json();
                     draftVersionRef.current = snap.version || 0;
@@ -94,7 +97,8 @@ export async function createPrecommitBar() {
             initDraft();
 
             if (window.EventSource) {
-                source = new EventSource('/api/draft/events');
+                const draftEventsURL = SESSION_REVIEW_ID ? `/api/draft/events?r=${SESSION_REVIEW_ID}` : '/api/draft/events';
+                source = new EventSource(draftEventsURL);
                 source.onmessage = (event) => {
                     if (!mounted) return;
                     try {
@@ -157,12 +161,13 @@ export async function createPrecommitBar() {
                 setStatus('Commit message is required');
                 return;
             }
-            
+
             setDisabled(true);
             setStatus('Sending decision...');
-            
+
             try {
-                const res = await fetch(path, {
+                const url = SESSION_REVIEW_ID ? `${path}?r=${SESSION_REVIEW_ID}` : path;
+                const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message })

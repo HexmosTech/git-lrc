@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -464,6 +465,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		// Initialize global review state for API-based UI
 		reviewStateMu.Lock()
 		currentReviewState = NewReviewState(reviewID, filesFromDiff, useInteractive, isPostCommitReview, initialMsg, config.APIURL)
+		if submitResp.FriendlyName != "" {
+			currentReviewState.FriendlyName = submitResp.FriendlyName
+		}
 		if submissionFailed {
 			currentReviewState.Status = "failed"
 			currentReviewState.ErrorSummary = submissionBlockedReason
@@ -481,11 +485,15 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			opts.Port = selectedPort
 		}
 
-		serveURL := fmt.Sprintf("http://localhost:%d", opts.Port)
+		serveURL := fmt.Sprintf("http://localhost:%d/?r=%s", opts.Port, url.QueryEscape(reviewID))
+		reviewMetadata = append(reviewMetadata, fmt.Sprintf("Local review: %s", serveURL))
 		if !useInteractive {
 			fmt.Printf("\n🌐 Review available at: %s\n", highlightURL(serveURL))
 			fmt.Printf("   Comments will appear progressively as review runs\n\n")
 		}
+
+		unregister := registerActiveReview(opts.Port, reviewID, submitResp.FriendlyName, repoName, time.Now())
+		defer unregister()
 
 		// Auto-open the review in the default browser
 		openURL(serveURL)
@@ -568,6 +576,10 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					http.NotFound(w, r)
 					return
 				}
+				if r.URL.Query().Get("r") == "" {
+					serveReviewListing(w, *config)
+					return
+				}
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				htmlBytes, err := staticserve.ReadFile("index.html")
 				if err != nil {
@@ -580,7 +592,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			})
 
 			// API endpoint for review state - frontend polls this
-			mux.HandleFunc("/api/review", func(w http.ResponseWriter, r *http.Request) {
+			mux.HandleFunc("/api/review", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				reviewStateMu.RLock()
 				state := currentReviewState
 				reviewStateMu.RUnlock()
@@ -590,14 +602,14 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					return
 				}
 				state.ServeHTTP(w, r)
-			})
+			}))
 
-			mux.HandleFunc("/api/runtime/usage-chip", func(w http.ResponseWriter, r *http.Request) {
+			mux.HandleFunc("/api/runtime/usage-chip", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				handleRuntimeUsageChip(w, r, config, verbose)
-			})
+			}))
 
 			if runningDraftHub != nil {
-				mux.HandleFunc("/api/draft", func(w http.ResponseWriter, r *http.Request) {
+				mux.HandleFunc("/api/draft", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet {
 						handleDraftGet(w, r, runningDraftHub)
 						return
@@ -607,14 +619,14 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 						return
 					}
 					w.WriteHeader(http.StatusMethodNotAllowed)
-				})
-				mux.HandleFunc("/api/draft/events", func(w http.ResponseWriter, r *http.Request) {
+				}))
+				mux.HandleFunc("/api/draft/events", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 					handleDraftEvents(w, r, runningDraftHub)
-				})
+				}))
 			}
 
 			// Functional commit handlers that work with the decision channel
-			mux.HandleFunc("/commit", func(w http.ResponseWriter, r *http.Request) {
+			mux.HandleFunc("/commit", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
@@ -626,8 +638,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					}
 				}
 				handleProgressiveDecision(w, decisionflow.DecisionCommit, msg, false)
-			})
-			mux.HandleFunc("/commit-push", func(w http.ResponseWriter, r *http.Request) {
+			}))
+			mux.HandleFunc("/commit-push", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
@@ -639,8 +651,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					}
 				}
 				handleProgressiveDecision(w, decisionflow.DecisionCommit, msg, true)
-			})
-			mux.HandleFunc("/skip", func(w http.ResponseWriter, r *http.Request) {
+			}))
+			mux.HandleFunc("/skip", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
@@ -652,8 +664,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					}
 				}
 				handleProgressiveDecision(w, decisionflow.DecisionSkip, msg, false)
-			})
-			mux.HandleFunc("/vouch", func(w http.ResponseWriter, r *http.Request) {
+			}))
+			mux.HandleFunc("/vouch", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
@@ -665,8 +677,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					}
 				}
 				handleProgressiveDecision(w, decisionflow.DecisionVouch, msg, false)
-			})
-			mux.HandleFunc("/abort", func(w http.ResponseWriter, r *http.Request) {
+			}))
+			mux.HandleFunc("/abort", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
@@ -675,8 +687,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					runningDraftHub.Freeze()
 				}
 				handleProgressiveDecision(w, decisionflow.DecisionAbort, "", false)
-			})
-			mux.HandleFunc("/handoff", func(w http.ResponseWriter, r *http.Request) {
+			}))
+			mux.HandleFunc("/handoff", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
@@ -687,9 +699,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					return
 				}
 				handleProgressiveDecision(w, decisionflow.DecisionHandoff, string(body), false)
-			})
+			}))
 			// Proxy endpoint for review-events API to avoid CORS
-			mux.HandleFunc("/api/v1/diff-review/", func(w http.ResponseWriter, r *http.Request) {
+			mux.HandleFunc("/api/v1/diff-review/", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				if fakeMode {
 					if r.Method != http.MethodGet {
 						w.WriteHeader(http.StatusMethodNotAllowed)
@@ -718,14 +730,14 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				}
 
 				handleReviewEventsProxy(w, r, *config, reviewID, verbose)
-			})
+			}))
 			// Proxy feedback endpoints — adds API key so browser never holds the key
-			mux.HandleFunc("/api/v1/feedback", func(w http.ResponseWriter, r *http.Request) {
-				handleFeedbackProxy(w, r, *config, verbose)
-			})
-			mux.HandleFunc("/api/v1/feedback/", func(w http.ResponseWriter, r *http.Request) {
-				handleFeedbackProxy(w, r, *config, verbose)
-			})
+			mux.HandleFunc("/api/v1/feedback", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
+				handleFeedbackProxy(w, r, *config, verbose, reviewID)
+			}))
+			mux.HandleFunc("/api/v1/feedback/", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
+				handleFeedbackProxy(w, r, *config, verbose, reviewID)
+			}))
 			server := &http.Server{Handler: mux}
 			if err := server.Serve(serveListener); err != nil && err != http.ErrServerClosed {
 				if verbose {
@@ -1264,7 +1276,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				})
 			} else {
 				// No progressive loading - use normal serveHTMLInteractive
-				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.Port, nonProgressiveListener, initialMsg, reviewMetadata, false, *config)
+				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.Port, nonProgressiveListener, initialMsg, reviewMetadata, false, *config, reviewID, submitResp.FriendlyName, repoName)
 				if err != nil {
 					return err
 				}
@@ -2328,6 +2340,21 @@ func writeDraftSnapshot(w http.ResponseWriter, snap draftSnapshot) {
 	}
 }
 
+// requireSession rejects requests whose "r" query param does not match the active reviewID.
+// This prevents a stale browser tab (reused port) from reading or acting on a different review.
+// Fails closed: if sessionID is empty, all requests are rejected.
+func requireSession(sessionID string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if sessionID == "" || req.URL.Query().Get("r") != sessionID {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":"session_mismatch"}`))
+			return
+		}
+		next(w, req)
+	}
+}
+
 func handleDraftGet(w http.ResponseWriter, r *http.Request, hub *draftHub) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -2521,7 +2548,7 @@ func handleReviewEventsProxy(w http.ResponseWriter, r *http.Request, config Conf
 	}
 }
 
-func handleFeedbackProxy(w http.ResponseWriter, r *http.Request, config Config, verbose bool) {
+func handleFeedbackProxy(w http.ResponseWriter, r *http.Request, config Config, verbose bool, reviewID string) {
 	var reqBody []byte
 	if r.Body != nil {
 		const maxProxyBodyBytes = 8 << 20
@@ -2535,6 +2562,21 @@ func handleFeedbackProxy(w http.ResponseWriter, r *http.Request, config Config, 
 			return
 		}
 		reqBody = readBody
+	}
+
+	// Inject review_id from the server-side session so the DB row is always linked
+	if reviewID != "" {
+		if rid, err := strconv.ParseInt(reviewID, 10, 64); err == nil {
+			var payload map[string]interface{}
+			if json.Unmarshal(reqBody, &payload) == nil {
+				if _, already := payload["review_id"]; !already {
+					payload["review_id"] = rid
+					if merged, mergeErr := json.Marshal(payload); mergeErr == nil {
+						reqBody = merged
+					}
+				}
+			}
+		}
 	}
 
 	headers := map[string]string{"X-API-Key": config.APIKey}
@@ -2566,6 +2608,7 @@ func handleFeedbackProxy(w http.ResponseWriter, r *http.Request, config Config, 
 	}
 }
 
+
 func buildDecisionMetadata(reviewID, account, title, reviewURL string) []string {
 	metadata := make([]string, 0, 4)
 	if strings.TrimSpace(reviewID) != "" {
@@ -2586,7 +2629,7 @@ func buildDecisionMetadata(reviewID, account, title, reviewURL string) []string 
 // serveHTMLInteractive serves HTML and waits for user decision
 // Returns decision details (code: 0 commit, 1 abort, 2 skip-from-terminal, 3 skip-from-HTML)
 // skipBrowserOpen: set to true if browser is already open (e.g., from progressive loading)
-func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, metadata []string, skipBrowserOpen bool, cfg Config) (int, string, bool, error) {
+func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, metadata []string, skipBrowserOpen bool, cfg Config, sessionID, friendlyName, repository string) (int, string, bool, error) {
 	absPath, err := filepath.Abs(htmlPath)
 	if err != nil {
 		return 1, "", false, fmt.Errorf("failed to get absolute path: %w", err)
@@ -2597,10 +2640,13 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		return 1, "", false, fmt.Errorf("HTML file not found: %w", err)
 	}
 
-	url := fmt.Sprintf("http://localhost:%d", port)
+	url := fmt.Sprintf("http://localhost:%d/?r=%s", port, url.QueryEscape(sessionID))
 	fmt.Printf("\n")
 	fmt.Printf("🌐 Review available at: %s\n", highlightURL(url))
 	fmt.Printf("\n")
+
+	unregister := registerActiveReview(port, sessionID, friendlyName, repository, time.Now())
+	defer unregister()
 
 	// Open browser only if not already open
 	if !skipBrowserOpen {
@@ -2615,15 +2661,19 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 	// Serve static assets (JS, CSS) from embedded filesystem
 	mux.Handle("/static/", http.StripPrefix("/static/", staticserve.GetStaticHandler()))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" && r.URL.Query().Get("r") == "" {
+			serveReviewListing(w, cfg)
+			return
+		}
 		http.ServeFile(w, r, absPath)
 	})
 	// Proxy feedback endpoints — adds API key so browser never holds the key
-	mux.HandleFunc("/api/v1/feedback", func(w http.ResponseWriter, r *http.Request) {
-		handleFeedbackProxy(w, r, cfg, false)
-	})
-	mux.HandleFunc("/api/v1/feedback/", func(w http.ResponseWriter, r *http.Request) {
-		handleFeedbackProxy(w, r, cfg, false)
-	})
+	mux.HandleFunc("/api/v1/feedback", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
+		handleFeedbackProxy(w, r, cfg, false, sessionID)
+	}))
+	mux.HandleFunc("/api/v1/feedback/", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
+		handleFeedbackProxy(w, r, cfg, false, sessionID)
+	}))
 
 	type precommitDecision struct {
 		code    int
@@ -2690,7 +2740,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		_, _ = w.Write([]byte("ok"))
 	}
 
-	mux.HandleFunc("/api/draft", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/draft", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			handleDraftGet(w, r, draftState)
 			return
@@ -2700,13 +2750,13 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			return
 		}
 		w.WriteHeader(http.StatusMethodNotAllowed)
-	})
-	mux.HandleFunc("/api/draft/events", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	mux.HandleFunc("/api/draft/events", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
 		handleDraftEvents(w, r, draftState)
-	})
+	}))
 
 	// Pre-commit action endpoints (HTML buttons call these)
-	mux.HandleFunc("/commit", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/commit", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -2716,9 +2766,9 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			msg = snap.Text
 		}
 		handleDecision(w, decisionflow.DecisionCommit, msg, false)
-	})
+	}))
 
-	mux.HandleFunc("/commit-push", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/commit-push", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -2728,9 +2778,9 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			msg = snap.Text
 		}
 		handleDecision(w, decisionflow.DecisionCommit, msg, true)
-	})
+	}))
 
-	mux.HandleFunc("/skip", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/skip", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -2740,9 +2790,9 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			msg = snap.Text
 		}
 		handleDecision(w, decisionflow.DecisionSkip, msg, false)
-	})
+	}))
 
-	mux.HandleFunc("/vouch", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/vouch", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -2752,18 +2802,18 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			msg = snap.Text
 		}
 		handleDecision(w, decisionflow.DecisionVouch, msg, false)
-	})
+	}))
 
-	mux.HandleFunc("/abort", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/abort", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 		draftState.Freeze()
 		handleDecision(w, decisionflow.DecisionAbort, "", false)
-	})
+	}))
 
-	mux.HandleFunc("/handoff", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/handoff", requireSession(sessionID, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -2774,7 +2824,7 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 			return
 		}
 		handleDecision(w, decisionflow.DecisionHandoff, string(body), false)
-	})
+	}))
 
 	// Start server in background using the already-open listener
 	server := &http.Server{

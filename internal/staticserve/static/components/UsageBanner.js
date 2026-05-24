@@ -2,6 +2,14 @@ import { normalizeUsagePayload } from '/static/components/usage_chip_model.mjs';
 
 const { html, useEffect, useState } = window.preact;
 
+const SESSION_REVIEW_ID = new URLSearchParams(window.location.search).get('r') || '';
+
+function withSession(endpoint) {
+    if (!SESSION_REVIEW_ID) return endpoint;
+    const sep = endpoint.includes('?') ? '&' : '?';
+    return `${endpoint}${sep}r=${SESSION_REVIEW_ID}`;
+}
+
 export function UsageBanner({ endpoint }) {
     const [chip, setChip] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -10,7 +18,7 @@ export function UsageBanner({ endpoint }) {
         let cancelled = false;
         const load = async () => {
             try {
-                const response = await fetch(endpoint);
+                const response = await fetch(withSession(endpoint));
                 if (!response.ok) return;
                 const data = await response.json();
                 if (!cancelled) {

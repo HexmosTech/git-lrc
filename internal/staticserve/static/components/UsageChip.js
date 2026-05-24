@@ -3,9 +3,16 @@ import { formatResetAt, normalizeUsagePayload, planLabel, usageTone } from '/sta
 const { html, useEffect, useMemo, useRef, useState } = window.preact;
 
 const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
+const SESSION_REVIEW_ID = new URLSearchParams(window.location.search).get('r') || '';
+
+function withSession(endpoint) {
+  if (!SESSION_REVIEW_ID) return endpoint;
+  const sep = endpoint.includes('?') ? '&' : '?';
+  return `${endpoint}${sep}r=${SESSION_REVIEW_ID}`;
+}
 
 async function fetchUsagePayload(endpoint) {
-  const response = await fetch(endpoint, {
+  const response = await fetch(withSession(endpoint), {
     headers: { 'Content-Type': 'application/json' },
   });
   if (!response.ok) {

@@ -4,6 +4,8 @@ import { UsageChip } from '/static/components/UsageChip.js';
 import { fetchImpactStats, buildLinkedinText } from '/static/components/FeedbackPopup.js';
 import { getReviewMeta } from '/static/components/reviewMeta.mjs';
 
+const SESSION_REVIEW_ID = new URLSearchParams(window.location.search).get('r') || '';
+
 const GITHUB_URL = 'https://github.com/HexmosTech/git-lrc';
 const LIVEREVIEW_URL = 'https://hexmos.com/livereview/';
 
@@ -99,7 +101,7 @@ export async function createHeader() {
 
     // ── brand text click popup ────────────────────────────────────────────────
 
-    function BrandButton() {
+    function BrandButton({ friendlyName, generatedTime }) {
         const { isOpen, open, closeSoon } = useHoverPopover();
         const [copied, setCopied] = useState(false);
         const copyTimer = useRef(null);
@@ -116,8 +118,15 @@ export async function createHeader() {
         };
 
         return html`
-            <div style="position:relative;" onMouseEnter=${open} onMouseLeave=${closeSoon}>
-                <h1 style="cursor:default;" title="Share LiveReview">LiveReview Results</h1>
+            <div style="position:relative;">
+                <h1 style="cursor:default;" title="Share LiveReview" onMouseEnter=${open} onMouseLeave=${closeSoon}>LiveReview Results</h1>
+                ${(friendlyName || generatedTime) && html`
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:1px;">
+                        ${friendlyName && html`<span style="color:#c9d5e8;font-size:11px;font-weight:600;">Run: ${friendlyName}</span>`}
+                        ${friendlyName && generatedTime && html`<span style="color:#3a4a60;font-size:10px;">·</span>`}
+                        ${generatedTime && html`<span style="color:#4a6080;font-size:11px;">${generatedTime}</span>`}
+                    </div>
+                `}
                 ${isOpen && html`
                     <div onMouseEnter=${open} onMouseLeave=${closeSoon}>
                         <${Popover}>
@@ -140,60 +149,6 @@ export async function createHeader() {
                                 >${copied ? '✓' : 'Copy'}</button>
                             </div>
                         </${Popover}>
-                    </div>
-                `}
-            </div>
-        `;
-    }
-
-    // ── info icon ─────────────────────────────────────────────────────────────
-
-    function InfoIcon({ friendlyName, generatedTime }) {
-        const { isOpen, open, closeSoon } = useHoverPopover();
-        const [copied, setCopied] = useState(false);
-        const copyTimer = useRef(null);
-
-        useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
-
-        if (!friendlyName && !generatedTime) return null;
-
-        const copy = async (e) => {
-            e.stopPropagation();
-            try {
-                await navigator.clipboard.writeText(friendlyName);
-                setCopied(true);
-                copyTimer.current = setTimeout(() => setCopied(false), 1500);
-            } catch {}
-        };
-
-        return html`
-            <div style="position:relative;" onMouseEnter=${open} onMouseLeave=${closeSoon}>
-                <button
-                    style="width:26px;height:26px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-size:11px;font-style:italic;font-weight:700;line-height:1;flex-shrink:0;"
-                    title="Review info"
-                    type="button"
-                >i</button>
-                ${isOpen && html`
-                    <div
-                        style="position:absolute;right:0;top:calc(100% + 6px);${POPUP_STYLE}padding:10px 12px;min-width:210px;"
-                        onMouseEnter=${open}
-                        onMouseLeave=${closeSoon}
-                    >
-                        ${friendlyName && html`
-                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;${generatedTime ? 'margin-bottom:7px;' : ''}">
-                                <div style="overflow:hidden;">
-                                    <span style="color:#4a6080;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:1px;">Run name</span>
-                                    <span style="color:#c9d5e8;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;">${friendlyName}</span>
-                                </div>
-                                <button
-                                    onClick=${copy}
-                                    style="flex-shrink:0;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${copied ? '#4ade80' : '#8899bb'};cursor:pointer;padding:2px 8px;font-size:10px;font-weight:500;transition:all 0.15s;white-space:nowrap;"
-                                >${copied ? '✓ Copied' : 'Copy'}</button>
-                            </div>
-                        `}
-                        ${generatedTime && html`
-                            <div style="color:#4a6080;font-size:11px;">${generatedTime}</div>
-                        `}
                     </div>
                 `}
             </div>
@@ -273,7 +228,8 @@ export async function createHeader() {
             if (!voteType || phase === 'submitting') return;
             setPhase('submitting');
             try {
-                const res = await fetch('/api/v1/feedback', {
+                const feedbackURL = SESSION_REVIEW_ID ? `/api/v1/feedback?r=${SESSION_REVIEW_ID}` : '/api/v1/feedback';
+                const res = await fetch(feedbackURL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -423,12 +379,11 @@ export async function createHeader() {
                 <div class="header-top-row">
                     <div class="brand">
                         <${LogoButton} />
-                        <${BrandButton} />
+                        <${BrandButton} friendlyName=${friendlyName} generatedTime=${generatedTime} />
                     </div>
                     <div class="header-actions">
                         <${UsageChip} endpoint="/api/runtime/usage-chip" />
                         <${AppFeedback} />
-                        <${InfoIcon} friendlyName=${friendlyName} generatedTime=${generatedTime} />
                     </div>
                 </div>
             </div>
