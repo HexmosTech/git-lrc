@@ -465,6 +465,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		// Initialize global review state for API-based UI
 		reviewStateMu.Lock()
 		currentReviewState = NewReviewState(reviewID, filesFromDiff, useInteractive, isPostCommitReview, initialMsg, config.APIURL)
+		if submitResp.FriendlyName != "" {
+			currentReviewState.FriendlyName = submitResp.FriendlyName
+		}
 		if submissionFailed {
 			currentReviewState.Status = "failed"
 			currentReviewState.ErrorSummary = submissionBlockedReason
