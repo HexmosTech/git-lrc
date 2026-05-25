@@ -1,5 +1,4 @@
 package reviewopts
-package reviewopts
 
 import (
 	"flag"
