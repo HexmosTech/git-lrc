@@ -1,5 +1,4 @@
 package reviewopts
-package reviewopts
 
 import (
 	"flag"
@@ -22,6 +21,9 @@ func TestBuildFromContextBlockingReview(t *testing.T) {
 		if !opts.Serve {
 			t.Fatalf("Serve = false, want true")
 		}
+		if opts.BlockingReviewTimeout != DefaultBlockingReviewTimeout {
+			t.Fatalf("BlockingReviewTimeout = %v, want %v", opts.BlockingReviewTimeout, DefaultBlockingReviewTimeout)
+		}
 	})
 
 	t.Run("rejects precommit", func(t *testing.T) {
@@ -41,6 +43,15 @@ func TestBuildFromContextBlockingReview(t *testing.T) {
 			t.Fatalf("BuildFromContext() error = %v, want blocking-review/commit conflict", err)
 		}
 	})
+
+	t.Run("rejects non-positive blocking timeout", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--blocking-review", "--blocking-review-timeout", "0s"})
+
+		_, err := BuildFromContext(ctx, false)
+		if err == nil || err.Error() != "--blocking-review-timeout must be greater than zero" {
+			t.Fatalf("BuildFromContext() error = %v, want blocking timeout validation", err)
+		}
+	})
 }
 
 func newOptionsTestContext(t *testing.T, args []string) *cli.Context {
@@ -53,6 +64,7 @@ func newOptionsTestContext(t *testing.T, args []string) *cli.Context {
 	for _, stringName := range []string{"repo-name", "range", "commit", "diff-file", "api-url", "api-key", "output", "save-html", "save-json", "save-text", "diff-source"} {
 		set.String(stringName, "", "")
 	}
+	set.Duration("blocking-review-timeout", DefaultBlockingReviewTimeout, "")
 	set.Int("port", 8000, "")
 
 	if err := set.Parse(args); err != nil {

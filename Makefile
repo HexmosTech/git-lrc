@@ -43,7 +43,7 @@ build-all:
 # Build lrc locally for the current platform and install
 build-local:
 	@echo "🔨 Building lrc CLI locally (dirty tree allowed)..."
-	@$(GOBUILD) -o /tmp/lrc .
+	@$(GOBUILD) -ldflags "-X main.version=$(SBOM_VERSION)-internal" -o /tmp/lrc .
 	@mkdir -p $(HOME)/.local/bin
 	@install -m 0755 /tmp/lrc $(HOME)/.local/bin/lrc
 	@cp $(HOME)/.local/bin/lrc $(HOME)/.local/bin/git-lrc

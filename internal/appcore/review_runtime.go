@@ -99,6 +99,26 @@ func formatLiveReviewTechnicalDetails(rawBody string) string {
 	return strings.Join(lines, "\n")
 }
 
+func describeDecisionCode(code int, push bool) string {
+	switch code {
+	case decisionflow.DecisionCommit:
+		if push {
+			return "commit-push"
+		}
+		return "commit"
+	case decisionflow.DecisionSkip:
+		return "skip"
+	case decisionflow.DecisionVouch:
+		return "vouch"
+	case decisionflow.DecisionAbort:
+		return "abort"
+	case decisionflow.DecisionHandoff:
+		return "handoff"
+	default:
+		return fmt.Sprintf("unknown:%d", code)
+	}
+}
+
 func runReviewWithOptions(opts reviewopts.Options) error {
 	verbose := opts.Verbose
 	defer func() {
@@ -495,7 +515,10 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		}
 
 		// Auto-open the review in the default browser
-		openURL(serveURL)
+		if err := openURL(serveURL); err != nil {
+			fmt.Fprintf(os.Stderr, "LiveReview: failed to open browser automatically (%v)\n", err)
+			fmt.Fprintf(os.Stderr, "LiveReview: open %s manually\n", serveURL)
+		}
 
 		// Mark that progressive loading is active
 		progressiveLoadingActive = true
@@ -504,6 +527,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		progressiveDecisionChan = make(chan progressiveDecision, 1)
 		progressiveDecide = func(code int, message string, push bool) {
 			progressiveDecideOnce.Do(func() {
+				if useBlockingReview {
+					fmt.Fprintf(os.Stderr, "\nLiveReview: queued browser decision (%s)\n", describeDecisionCode(code, push))
+				}
 				progressiveDecisionChan <- progressiveDecision{code: code, message: message, push: push}
 			})
 		}
@@ -557,6 +583,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 			if runningDraftHub != nil {
 				runningDraftHub.Freeze()
+			}
+			if useBlockingReview {
+				fmt.Fprintf(os.Stderr, "\nLiveReview: browser decision accepted (%s)\n", describeDecisionCode(chosen.Code, chosen.Push))
 			}
 			progressiveDecide(chosen.Code, chosen.Message, chosen.Push)
 			w.WriteHeader(http.StatusOK)
@@ -1114,6 +1143,13 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			return cli.Exit("LiveReview: blocking review could not start", 1)
 		}
 
+		blockingTimeout := opts.BlockingReviewTimeout
+		if blockingTimeout <= 0 {
+			blockingTimeout = reviewopts.DefaultBlockingReviewTimeout
+		}
+		blockingTimer := time.NewTimer(blockingTimeout)
+		defer blockingTimer.Stop()
+
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 		defer signal.Stop(sigChan)
@@ -1140,15 +1176,26 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				pollResult, pollErr = pollReviewFake(reviewID, opts.PollInterval, fakeWait, verbose, stopPoll, fakeBaseFiles, nil)
 			} else {
 				pollUsedRecovery = true
-				pollResult, pollUpdatedConfig, pollErr = pollReviewWithRecovery(*config, reviewID, opts.PollInterval, opts.Timeout, verbose, stopPoll, nil)
+				pollResult, pollUpdatedConfig, pollErr = pollReviewWithRecovery(*config, reviewID, opts.PollInterval, blockingTimeout, verbose, stopPoll, nil)
 			}
 		}()
 
 		for {
 			select {
+			case <-blockingTimer.C:
+				stopPollFn()
+				reviewStateMu.Lock()
+				if currentReviewState != nil {
+					currentReviewState.SetFailed(fmt.Sprintf("blocking review timed out after %s", blockingTimeout))
+				}
+				reviewStateMu.Unlock()
+				return cli.Exit(fmt.Sprintf("LiveReview: blocking review timed out after %s", blockingTimeout), 1)
 			case decision := <-progressiveDecisionChan:
 				stopPollFn()
-				<-pollDone
+				if pollDone != nil {
+					<-pollDone
+				}
+				fmt.Fprintf(os.Stderr, "\nLiveReview: processing browser decision (%s)\n", describeDecisionCode(decision.code, decision.push))
 				if pollUsedRecovery {
 					config = &pollUpdatedConfig
 				}
@@ -1194,17 +1241,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				if err := recordCoverageAndAttest("reviewed", diffContent, reviewID, verbose, &attestationWritten); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 				}
-				fmt.Printf("Review complete. Choose commit, commit-push, skip, vouch, or abort in the browser.\n")
-				decision := <-progressiveDecisionChan
-				return executeDecision(decision.code, decision.message, decision.push, decisionExecutionContext{
-					deferCommit:        true,
-					verbose:            verbose,
-					initialMsg:         initialMsg,
-					commitMsgPath:      commitMsgPath,
-					diffContent:        diffContent,
-					reviewID:           reviewID,
-					attestationWritten: &attestationWritten,
-				})
+				fmt.Printf("Review complete. Choose commit, commit-push, skip, vouch, or abort in the browser before %s elapses.\n", blockingTimeout)
+				pollDone = nil
 			}
 		}
 	}
@@ -2218,7 +2256,10 @@ func serveHTML(htmlPath string, port int, ln net.Listener) error {
 	// Try to open browser
 	go func() {
 		time.Sleep(500 * time.Millisecond)
-		openURL(url)
+		if err := openURL(url); err != nil {
+			fmt.Fprintf(os.Stderr, "LiveReview: failed to open browser automatically (%v)\n", err)
+			fmt.Fprintf(os.Stderr, "LiveReview: open %s manually\n", url)
+		}
 	}()
 
 	// Setup HTTP handler
@@ -2241,29 +2282,56 @@ func serveHTML(htmlPath string, port int, ln net.Listener) error {
 // https://stackoverflow.com/questions/39320371/how-start-web-server-to-open-page-in-browser-in-golang
 // openURL opens the specified URL in the default browser of the user.
 func openURL(url string) error {
-	var cmd string
-	var args []string
+	type browserCommand struct {
+		name string
+		args []string
+	}
+
+	commands := make([]browserCommand, 0, 4)
+	addIfPresent := func(name string, args ...string) {
+		if _, err := exec.LookPath(name); err == nil {
+			commands = append(commands, browserCommand{name: name, args: args})
+		}
+	}
 
 	switch runtime.GOOS {
 	case "windows":
-		cmd = "rundll32"
-		args = []string{"url.dll,FileProtocolHandler", url}
+		addIfPresent("rundll32", "url.dll,FileProtocolHandler", url)
 	case "darwin":
-		cmd = "open"
-		args = []string{url}
-	default: // "linux", "freebsd", "openbsd", "netbsd"
-		// Check if running under WSL
-		if isWSL() {
-			// Use 'cmd.exe /c start' to open the URL in the default Windows browser
-			cmd = "cmd.exe"
-			args = []string{"/c", "start", url}
-		} else {
-			// Use xdg-open on native Linux environments
-			cmd = "xdg-open"
-			args = []string{url}
+		addIfPresent("open", url)
+	default:
+		if browser := strings.TrimSpace(os.Getenv("BROWSER")); browser != "" {
+			addIfPresent(browser, url)
 		}
+		if isWSL() {
+			addIfPresent("wslview", url)
+			addIfPresent("cmd.exe", "/c", "start", "", url)
+			addIfPresent("powershell.exe", "-NoProfile", "-Command", "Start-Process", url)
+		}
+		addIfPresent("xdg-open", url)
 	}
-	return exec.Command(cmd, args...).Start()
+
+	if len(commands) == 0 {
+		return fmt.Errorf("no supported browser opener found")
+	}
+
+	var launchErrs []string
+	for _, candidate := range commands {
+		cmd := exec.Command(candidate.name, candidate.args...)
+		if err := cmd.Start(); err != nil {
+			launchErrs = append(launchErrs, fmt.Sprintf("%s: %v", candidate.name, err))
+			continue
+		}
+
+		go func(name string, waitCmd *exec.Cmd) {
+			if err := waitCmd.Wait(); err != nil {
+				fmt.Fprintf(os.Stderr, "LiveReview: browser opener %s exited with error: %v\n", name, err)
+			}
+		}(candidate.name, cmd)
+		return nil
+	}
+
+	return errors.New(strings.Join(launchErrs, "; "))
 }
 
 // isWSL checks if the Go program is running inside Windows Subsystem for Linux
@@ -2716,7 +2784,10 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 	if !skipBrowserOpen {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
-			openURL(url)
+			if err := openURL(url); err != nil {
+				fmt.Fprintf(os.Stderr, "LiveReview: failed to open browser automatically (%v)\n", err)
+				fmt.Fprintf(os.Stderr, "LiveReview: open %s manually\n", url)
+			}
 		}()
 	}
 

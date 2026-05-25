@@ -25,7 +25,7 @@ type Handlers struct {
 }
 
 // BuildApp constructs the full CLI app with all command wiring.
-func BuildApp(version, buildTime, gitCommit string, baseFlags, debugFlags []cli.Flag, h Handlers) *cli.App {
+func BuildApp(version, buildTime, gitCommit, reviewMode string, baseFlags, debugFlags []cli.Flag, h Handlers) *cli.App {
 	return &cli.App{
 		Name:    "lrc",
 		Usage:   "LiveReview CLI - submit local diffs for AI review",
@@ -159,6 +159,7 @@ func BuildApp(version, buildTime, gitCommit string, baseFlags, debugFlags []cli.
 					fmt.Printf("lrc version %s\n", version)
 					fmt.Printf("  Build time: %s\n", buildTime)
 					fmt.Printf("  Git commit: %s\n", gitCommit)
+					fmt.Printf("  Review mode: %s\n", reviewMode)
 					return nil
 				},
 			},

@@ -3,7 +3,7 @@ package cmd
 import "testing"
 
 func TestSetupCommandIncludesAPIURLChoiceFlags(t *testing.T) {
-	app := BuildApp("dev", "now", "none", nil, nil, Handlers{})
+	app := BuildApp("dev", "now", "none", "prod", nil, nil, Handlers{})
 
 	var setupCommandFound bool
 	var setupCommandFlags map[string]bool

@@ -25,6 +25,12 @@ if [ "$LRC_SKIP_REVIEW" = "1" ]; then
 	exit 0
 fi
 
+# Claude Code local hook already ran the blocking review gate; avoid re-running it here.
+if [ "${LRC_CLAUDE_REVIEW_HANDLED:-}" = "1" ]; then
+	echo "LiveReview: Claude-managed review already handled; prepare-commit-msg no-op" >&2
+	exit 0
+fi
+
 # Detect if running in TTY (check stdout, not stdin - Git redirects stdin)
 if [ -t 1 ]; then
 	LRC_INTERACTIVE=1

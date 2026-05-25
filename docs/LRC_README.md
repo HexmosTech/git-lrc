@@ -151,6 +151,8 @@ All other flags can be set via environment variables or command-line flags.
 | `--api-key` | `LRC_API_KEY` | (from config) | API key for authentication |
 | `--poll-interval` | `LRC_POLL_INTERVAL` | `2s` | Interval between status polls |
 | `--timeout` | `LRC_TIMEOUT` | `5m` | Maximum wait time for review |
+| `--blocking-review` | `LRC_BLOCKING_REVIEW` | `false` | Launch the decision-capable web review UI and block until a proceed or abort decision is made |
+| `--blocking-review-timeout` | `LRC_BLOCKING_REVIEW_TIMEOUT` | `20m` | Maximum total time blocking review mode may hold the caller before aborting |
 | `--output` | `LRC_OUTPUT` | `pretty` | Output format: `pretty` or `json` |
 | `--save-bundle` | `LRC_SAVE_BUNDLE` | | Save bundle to file for inspection before sending |
 | `--save-json` | `LRC_SAVE_JSON` | | Save JSON response to file after completion |
