@@ -11,8 +11,8 @@ export const providers = [
   {
     id: 'deepseek',
     name: 'DeepSeek',
-    defaultModel: 'deepseek-chat',
-    models: ['deepseek-chat', 'deepseek-r1'],
+    defaultModel: 'deepseek-v4-flash',
+    models: ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-chat', 'deepseek-r1'],
     apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     baseURLPlaceholder: 'https://api.deepseek.com/v1',
   },
