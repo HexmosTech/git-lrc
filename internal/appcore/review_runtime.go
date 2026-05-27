@@ -130,6 +130,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 	var tempHTMLPath string
 	var commitMsgPath string
+	var liveCommitMsgPath string
 	attestationAction := ""
 	attestationWritten := false
 	initialMsg := sanitizeInitialMessage(opts.InitialMsg)
@@ -227,6 +228,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		}
 		commitMsgPath = filepath.Join(gitDir, commitMessageFile)
 		_ = clearCommitMessageFile(commitMsgPath)
+		liveCommitMsgPath = strings.TrimSpace(os.Getenv(activeCommitMessageFileEnv))
 	}
 
 	// Handle --force: delete existing attestation if present
@@ -1071,6 +1073,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 							verbose:            verbose,
 							initialMsg:         initialMsg,
 							commitMsgPath:      commitMsgPath,
+							liveCommitMsgPath:  liveCommitMsgPath,
 							diffContent:        diffContent,
 							reviewID:           reviewID,
 							attestationWritten: &attestationWritten,
@@ -1140,6 +1143,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				verbose:            verbose,
 				initialMsg:         initialMsg,
 				commitMsgPath:      commitMsgPath,
+				liveCommitMsgPath:  liveCommitMsgPath,
 				diffContent:        diffContent,
 				reviewID:           reviewID,
 				attestationWritten: &attestationWritten,
@@ -1217,6 +1221,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					verbose:            verbose,
 					initialMsg:         initialMsg,
 					commitMsgPath:      commitMsgPath,
+					liveCommitMsgPath:  liveCommitMsgPath,
 					diffContent:        diffContent,
 					reviewID:           reviewID,
 					attestationWritten: &attestationWritten,
@@ -1416,6 +1421,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					verbose:            verbose,
 					initialMsg:         initialMsg,
 					commitMsgPath:      commitMsgPath,
+					liveCommitMsgPath:  liveCommitMsgPath,
 					diffContent:        diffContent,
 					reviewID:           reviewID,
 					attestationWritten: &attestationWritten,
@@ -1439,7 +1445,11 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 							}
 
 							if strings.TrimSpace(msgToPersist) != "" {
-								if err := persistCommitMessage(commitMsgPath, msgToPersist); err != nil {
+								if liveCommitMsgPath != "" {
+									if err := persistActiveCommitMessage(liveCommitMsgPath, msgToPersist); err != nil {
+										fmt.Fprintf(os.Stderr, "Warning: failed to store live commit message: %v\n", err)
+									}
+								} else if err := persistCommitMessage(commitMsgPath, msgToPersist); err != nil {
 									fmt.Fprintf(os.Stderr, "Warning: failed to store commit message: %v\n", err)
 								}
 							} else {
@@ -1467,6 +1477,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					verbose:            verbose,
 					initialMsg:         initialMsg,
 					commitMsgPath:      commitMsgPath,
+					liveCommitMsgPath:  liveCommitMsgPath,
 					diffContent:        diffContent,
 					reviewID:           reviewID,
 					attestationWritten: &attestationWritten,
@@ -2408,6 +2419,21 @@ func persistCommitMessage(commitMsgPath, message string) error {
 
 	normalized := trimmed + "\n"
 	return storage.WriteFile(commitMsgPath, []byte(normalized), 0600)
+}
+
+// persistActiveCommitMessage writes directly into Git's live commit message file.
+func persistActiveCommitMessage(liveCommitMsgPath, message string) error {
+	if strings.TrimSpace(liveCommitMsgPath) == "" {
+		return nil
+	}
+
+	trimmed := strings.TrimRight(message, "\r\n")
+	if strings.TrimSpace(trimmed) == "" {
+		return nil
+	}
+
+	normalized := trimmed + "\n"
+	return storage.WriteFile(liveCommitMsgPath, []byte(normalized), 0600)
 }
 
 // clearCommitMessageFile removes any pending commit-message override file.

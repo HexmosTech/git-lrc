@@ -17,6 +17,8 @@ STATE_FILE="$GIT_DIR/livereview_state"
 LOCK_DIR="$GIT_DIR/livereview_state.lock"
 INITIAL_MSG_FILE="$GIT_DIR/livereview_initial_message.$$"
 
+rm -f "$EDITOR_OVERRIDE_STATE" 2>/dev/null || true
+
 apply_commit_message_override() {
 	if [ -n "$COMMIT_MSG_FILE" ] && [ -f "$COMMIT_MSG_OVERRIDE" ] && [ -s "$COMMIT_MSG_OVERRIDE" ]; then
 		cat "$COMMIT_MSG_OVERRIDE" > "$COMMIT_MSG_FILE" 2>/dev/null || true
@@ -27,14 +29,10 @@ enable_noop_editor_for_prefilled_commit_message() {
 	if [ -n "$COMMIT_SOURCE" ]; then
 		return
 	fi
-	if [ -z "$COMMIT_MSG_FILE" ] || [ ! -f "$COMMIT_MSG_OVERRIDE" ] || [ ! -s "$COMMIT_MSG_OVERRIDE" ]; then
+	if [ -z "$COMMIT_MSG_FILE" ] || [ ! -f "$COMMIT_MSG_FILE" ] || [ ! -s "$COMMIT_MSG_FILE" ]; then
 		return
 	fi
-	if [ ! -f "$EDITOR_OVERRIDE_STATE" ]; then
-		PREVIOUS_EDITOR="$(git config --local --get core.editor 2>/dev/null || echo __LRC_UNSET__)"
-		printf '%s\n' "$PREVIOUS_EDITOR" > "$EDITOR_OVERRIDE_STATE"
-	fi
-	git config --local core.editor true >/dev/null 2>&1 || true
+	printf 'prefilled\n' > "$EDITOR_OVERRIDE_STATE"
 }
 
 prepare_prefilled_commit_message() {
@@ -149,10 +147,10 @@ fi
 # Run review
 if [ "$LRC_INTERACTIVE" = "1" ]; then
 	echo "Running LiveReview commit check..." >&2
-	LRC_INITIAL_MESSAGE_FILE="$INITIAL_MSG_FILE" lrc review --staged --precommit
+	LRC_ACTIVE_COMMIT_MSG_FILE="$COMMIT_MSG_FILE" LRC_INITIAL_MESSAGE_FILE="$INITIAL_MSG_FILE" lrc review --staged --precommit
 	REVIEW_EXIT=$?
 else
-	LRC_INITIAL_MESSAGE_FILE="$INITIAL_MSG_FILE" lrc review --staged --output json >/dev/null 2>&1
+	LRC_ACTIVE_COMMIT_MSG_FILE="$COMMIT_MSG_FILE" LRC_INITIAL_MESSAGE_FILE="$INITIAL_MSG_FILE" lrc review --staged --output json >/dev/null 2>&1
 	REVIEW_EXIT=$?
 fi
 

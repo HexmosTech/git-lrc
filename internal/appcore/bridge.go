@@ -32,10 +32,11 @@ type fakeReviewEventsResponse struct {
 }
 
 const (
-	commitMessageFile   = "livereview_commit_message"
-	editorWrapperScript = "lrc_editor.sh"
-	editorBackupFile    = ".lrc_editor_backup"
-	pushRequestFile     = "livereview_push_request"
+	commitMessageFile          = "livereview_commit_message"
+	activeCommitMessageFileEnv = "LRC_ACTIVE_COMMIT_MSG_FILE"
+	editorWrapperScript        = "lrc_editor.sh"
+	editorBackupFile           = ".lrc_editor_backup"
+	pushRequestFile            = "livereview_push_request"
 )
 
 const (

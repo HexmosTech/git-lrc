@@ -44,3 +44,40 @@ func TestExecuteDecisionDeferredCommitPersistsArtifacts(t *testing.T) {
 		t.Fatalf("expected push marker at %q: %v", pushMarkerPath, statErr)
 	}
 }
+
+func TestExecuteDecisionDeferredCommitWritesLiveCommitMessageWhenProvided(t *testing.T) {
+	gitDir := t.TempDir()
+	overridePath := filepath.Join(gitDir, commitMessageFile)
+	livePath := filepath.Join(gitDir, "COMMIT_EDITMSG")
+	attestationWritten := false
+
+	err := executeDecision(decisionflow.DecisionCommit, "feat: live path", false, decisionExecutionContext{
+		deferCommit:        true,
+		commitMsgPath:      overridePath,
+		liveCommitMsgPath:  livePath,
+		initialMsg:         "feat: initial",
+		attestationWritten: &attestationWritten,
+	})
+
+	if err != nil {
+		exitErr, ok := err.(cli.ExitCoder)
+		if !ok {
+			t.Fatalf("executeDecision() error = %T, want cli.ExitCoder or nil", err)
+		}
+		if exitErr.ExitCode() != decisionflow.DecisionCommit {
+			t.Fatalf("exit code = %d, want %d", exitErr.ExitCode(), decisionflow.DecisionCommit)
+		}
+	}
+
+	data, readErr := os.ReadFile(livePath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%q) error = %v", livePath, readErr)
+	}
+	if got := string(data); got != "feat: live path\n" {
+		t.Fatalf("live commit message = %q, want %q", got, "feat: live path\n")
+	}
+
+	if _, statErr := os.Stat(overridePath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no override file at %q, stat err = %v", overridePath, statErr)
+	}
+}

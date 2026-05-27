@@ -2,6 +2,7 @@ package appcore
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -160,5 +161,23 @@ func TestWriteAndReadRepoHookSurfaceState(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGenerateEditorWrapperScriptUsesMarkerAndBackup(t *testing.T) {
+	backupPath := filepath.Join("/tmp", ".lrc_editor_backup")
+	script := generateEditorWrapperScript(backupPath)
+
+	checks := []string{
+		"BACKUP_FILE=\"" + backupPath + "\"",
+		"OVERRIDE_FILE=\"$TARGET_DIR/" + commitMessageFile + "\"",
+		"OVERRIDE_STATE=\"$TARGET_DIR/livereview_editor_override\"",
+		"if [ -f \"$OVERRIDE_STATE\" ]; then",
+		"run_editor_command \"$BACKUP_EDITOR\" \"$@\"",
+	}
+	for _, want := range checks {
+		if !strings.Contains(script, want) {
+			t.Fatalf("wrapper script missing %q", want)
+		}
 	}
 }

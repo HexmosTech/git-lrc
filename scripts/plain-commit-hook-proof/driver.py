@@ -29,6 +29,15 @@ DEFAULT_MESSAGE = "feat: isolated proof"
 TEMP_ROOT_PREFIX = "git-lrc-plain-commit-proof-"
 
 
+def sanitized_git_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    env = os.environ.copy()
+    for key in ("GIT_EDITOR", "EDITOR", "VISUAL"):
+        env.pop(key, None)
+    if extra:
+        env.update(extra)
+    return env
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run an isolated plain git commit hook proof under /tmp."
@@ -89,14 +98,15 @@ def wait_for_path(path: Path, timeout_seconds: float) -> bool:
 
 
 def setup_repo(repo_dir: Path, editor_wrapper: Path) -> None:
-    run_command(["git", "init", "--initial-branch=main", str(repo_dir)])
-    run_command(["git", "config", "user.email", "proof@example.com"], cwd=repo_dir)
-    run_command(["git", "config", "user.name", "Proof Driver"], cwd=repo_dir)
-    run_command(["git", "config", "core.editor", str(editor_wrapper)], cwd=repo_dir)
+    base_env = sanitized_git_env()
+    run_command(["git", "init", "--initial-branch=main", str(repo_dir)], env=base_env)
+    run_command(["git", "config", "user.email", "proof@example.com"], cwd=repo_dir, env=base_env)
+    run_command(["git", "config", "user.name", "Proof Driver"], cwd=repo_dir, env=base_env)
+    run_command(["git", "config", "core.editor", str(editor_wrapper)], cwd=repo_dir, env=base_env)
 
     tracked_file = repo_dir / "note.txt"
     tracked_file.write_text("isolated proof\n", encoding="utf-8")
-    run_command(["git", "add", "."], cwd=repo_dir)
+    run_command(["git", "add", "."], cwd=repo_dir, env=base_env)
 
 
 def helper_script_text() -> str:
@@ -237,6 +247,7 @@ def start_commit_process(repo_dir: Path, hooks_dir: Path) -> subprocess.Popen[st
     return subprocess.Popen(
         ["script", "-qfec", cmd_text, "/dev/null"],
         cwd=repo_dir,
+        env=sanitized_git_env(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -244,7 +255,7 @@ def start_commit_process(repo_dir: Path, hooks_dir: Path) -> subprocess.Popen[st
 
 
 def collect_commit_message(repo_dir: Path) -> str:
-    completed = run_command(["git", "log", "-1", "--format=%B"], cwd=repo_dir)
+    completed = run_command(["git", "log", "-1", "--format=%B"], cwd=repo_dir, env=sanitized_git_env())
     return completed.stdout.rstrip("\n")
 
 

@@ -111,6 +111,7 @@ func installGitHookSurface(c *cli.Context) error {
 	requestedPath := strings.TrimSpace(c.String("path"))
 	var hooksPath string
 	var prevGlobalPath string
+	var gitDir string
 	setConfig := false
 
 	if localInstall {
@@ -118,10 +119,11 @@ func installGitHookSurface(c *cli.Context) error {
 			return fmt.Errorf("not in a git repository (no .git directory found)")
 		}
 
-		repoRoot, _, gitCommonDir, err := resolveRepoContext()
+		repoRoot, resolvedGitDir, gitCommonDir, err := resolveRepoContext()
 		if err != nil {
 			return err
 		}
+		gitDir = resolvedGitDir
 		hooksPath, err = resolveRepoHooksPath(repoRoot, gitCommonDir)
 		if err != nil {
 			return err
@@ -173,6 +175,16 @@ func installGitHookSurface(c *cli.Context) error {
 
 	if err := writeManagedHookScripts(managedDir); err != nil {
 		return err
+	}
+
+	if localInstall {
+		if err := installEditorWrapper(gitDir); err != nil {
+			return fmt.Errorf("failed to install local editor wrapper: %w", err)
+		}
+	} else {
+		if err := installGlobalEditorWrapper(managedDir); err != nil {
+			return fmt.Errorf("failed to install global editor wrapper: %w", err)
+		}
 	}
 
 	for _, hookName := range managedHooks {
@@ -240,15 +252,17 @@ func uninstallGitHookSurface(c *cli.Context) error {
 	localUninstall := c.Bool("local")
 	requestedPath := strings.TrimSpace(c.String("path"))
 	var hooksPath string
+	var gitDir string
 
 	if localUninstall {
 		if !isGitRepository() {
 			return fmt.Errorf("not in a git repository (no .git directory found)")
 		}
-		repoRoot, _, gitCommonDir, err := resolveRepoContext()
+		repoRoot, resolvedGitDir, gitCommonDir, err := resolveRepoContext()
 		if err != nil {
 			return err
 		}
+		gitDir = resolvedGitDir
 		hooksPath, err = resolveRepoHooksPath(repoRoot, gitCommonDir)
 		if err != nil {
 			return err
@@ -278,6 +292,16 @@ func uninstallGitHookSurface(c *cli.Context) error {
 	var meta *hooksMeta
 	if !localUninstall {
 		meta, _ = readHooksMeta(absHooksPath)
+	}
+
+	if localUninstall {
+		if err := uninstallEditorWrapper(gitDir); err != nil {
+			fmt.Printf("⚠️  Warning: failed to uninstall local editor wrapper: %v\n", err)
+		}
+	} else {
+		if err := uninstallGlobalEditorWrapper(filepath.Join(absHooksPath, "lrc")); err != nil {
+			fmt.Printf("⚠️  Warning: failed to uninstall global editor wrapper: %v\n", err)
+		}
 	}
 
 	removed := 0
@@ -716,34 +740,11 @@ func installEditorWrapper(gitDir string) error {
 	backupPath := filepath.Join(gitDir, editorBackupFile)
 
 	currentEditor, _ := readGitConfig(repoRoot, "core.editor")
-	if currentEditor != "" {
+	if currentEditor != "" && currentEditor != scriptPath {
 		_ = storage.WriteFile(backupPath, []byte(currentEditor), 0600)
 	}
 
-	script := fmt.Sprintf(`#!/bin/sh
-set -e
-
-OVERRIDE_FILE="%s"
-
-if [ -f "$OVERRIDE_FILE" ] && [ -s "$OVERRIDE_FILE" ]; then
-    cat "$OVERRIDE_FILE" > "$1"
-    exit 0
-fi
-
-if [ -n "$LRC_FALLBACK_EDITOR" ]; then
-    exec $LRC_FALLBACK_EDITOR "$@"
-fi
-
-if [ -n "$VISUAL" ]; then
-    exec "$VISUAL" "$@"
-fi
-
-if [ -n "$EDITOR" ]; then
-    exec "$EDITOR" "$@"
-fi
-
-exec vi "$@"
-`, filepath.Join(gitDir, commitMessageFile))
+	script := generateEditorWrapperScript(backupPath)
 
 	if err := storage.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return fmt.Errorf("failed to write editor wrapper: %w", err)
@@ -751,6 +752,31 @@ exec vi "$@"
 
 	if err := setGitConfig(repoRoot, "core.editor", scriptPath); err != nil {
 		return fmt.Errorf("failed to set core.editor: %w", err)
+	}
+
+	return nil
+}
+
+func installGlobalEditorWrapper(managedDir string) error {
+	if err := storage.EnsureHooksPathDir(managedDir); err != nil {
+		return fmt.Errorf("failed to create managed hooks directory for editor wrapper: %w", err)
+	}
+
+	scriptPath := filepath.Join(managedDir, editorWrapperScript)
+	backupPath := filepath.Join(managedDir, editorBackupFile)
+
+	currentEditor, _ := readGlobalGitConfig("core.editor")
+	if currentEditor != "" && currentEditor != scriptPath {
+		_ = storage.WriteFile(backupPath, []byte(currentEditor), 0600)
+	}
+
+	script := generateEditorWrapperScript(backupPath)
+	if err := storage.WriteFile(scriptPath, []byte(script), 0755); err != nil {
+		return fmt.Errorf("failed to write global editor wrapper: %w", err)
+	}
+
+	if err := setGlobalGitConfig("core.editor", scriptPath); err != nil {
+		return fmt.Errorf("failed to set global core.editor: %w", err)
 	}
 
 	return nil
@@ -770,7 +796,7 @@ func uninstallEditorWrapper(gitDir string) error {
 		if value != "" {
 			_ = setGitConfig(repoRoot, "core.editor", value)
 		}
-	} else {
+	} else if currentEditor, err := readGitConfig(repoRoot, "core.editor"); err == nil && currentEditor == scriptPath {
 		_ = unsetGitConfig(repoRoot, "core.editor")
 	}
 
@@ -780,9 +806,81 @@ func uninstallEditorWrapper(gitDir string) error {
 	return nil
 }
 
+func uninstallGlobalEditorWrapper(managedDir string) error {
+	scriptPath := filepath.Join(managedDir, editorWrapperScript)
+	backupPath := filepath.Join(managedDir, editorBackupFile)
+
+	if data, err := storage.ReadEditorBackupFile(backupPath); err == nil {
+		value := strings.TrimSpace(string(data))
+		if value != "" {
+			_ = setGlobalGitConfig("core.editor", value)
+		}
+	} else if currentEditor, err := readGlobalGitConfig("core.editor"); err == nil && currentEditor == scriptPath {
+		_ = unsetGlobalGitConfig("core.editor")
+	}
+
+	_ = storage.RemoveEditorWrapperScript(scriptPath)
+	_ = storage.RemoveEditorBackupStateFile(backupPath)
+
+	return nil
+}
+
+func generateEditorWrapperScript(backupPath string) string {
+	return fmt.Sprintf(`#!/bin/sh
+set -e
+
+BACKUP_FILE="%s"
+
+run_editor_command() {
+	editor_cmd="$1"
+	shift
+	exec sh -c 'editor_cmd="$1"; shift; exec $editor_cmd "$@"' sh "$editor_cmd" "$@"
+}
+
+if [ $# -gt 0 ] && [ -n "$1" ]; then
+	TARGET_FILE="$1"
+	TARGET_DIR="$(dirname "$TARGET_FILE")"
+	OVERRIDE_FILE="$TARGET_DIR/%s"
+	OVERRIDE_STATE="$TARGET_DIR/livereview_editor_override"
+
+	if [ -f "$OVERRIDE_STATE" ]; then
+		if [ -f "$OVERRIDE_FILE" ] && [ -s "$OVERRIDE_FILE" ]; then
+			cat "$OVERRIDE_FILE" > "$TARGET_FILE"
+		fi
+		exit 0
+	fi
+fi
+
+if [ -f "$BACKUP_FILE" ] && [ -s "$BACKUP_FILE" ]; then
+	BACKUP_EDITOR="$(cat "$BACKUP_FILE" 2>/dev/null || true)"
+	if [ -n "$BACKUP_EDITOR" ]; then
+		run_editor_command "$BACKUP_EDITOR" "$@"
+	fi
+fi
+
+if [ -n "$LRC_FALLBACK_EDITOR" ]; then
+	run_editor_command "$LRC_FALLBACK_EDITOR" "$@"
+fi
+
+if [ -n "$VISUAL" ]; then
+	run_editor_command "$VISUAL" "$@"
+fi
+
+if [ -n "$EDITOR" ]; then
+	run_editor_command "$EDITOR" "$@"
+fi
+
+exec vi "$@"
+`, backupPath, commitMessageFile)
+}
+
 // readGitConfig reads a single git config key from the repository root.
 func readGitConfig(repoRoot, key string) (string, error) {
 	return gitops.ReadGitConfig(repoRoot, key)
+}
+
+func readGlobalGitConfig(key string) (string, error) {
+	return gitops.ReadGlobalGitConfig(key)
 }
 
 // setGitConfig sets a git config key in the given repository.
@@ -790,9 +888,17 @@ func setGitConfig(repoRoot, key, value string) error {
 	return gitops.SetGitConfig(repoRoot, key, value)
 }
 
+func setGlobalGitConfig(key, value string) error {
+	return gitops.SetGlobalGitConfig(key, value)
+}
+
 // unsetGitConfig removes a git config key in the given repository.
 func unsetGitConfig(repoRoot, key string) error {
 	return gitops.UnsetGitConfig(repoRoot, key)
+}
+
+func unsetGlobalGitConfig(key string) error {
+	return gitops.UnsetGlobalGitConfig(key)
 }
 
 // replaceLrcSection replaces the lrc-managed section in hook content

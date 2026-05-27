@@ -17,6 +17,7 @@ type decisionExecutionContext struct {
 	verbose            bool
 	initialMsg         string
 	commitMsgPath      string
+	liveCommitMsgPath  string
 	diffContent        []byte
 	reviewID           string
 	attestationWritten *bool
@@ -49,7 +50,13 @@ func executeDecision(code int, message string, push bool, ctx decisionExecutionC
 			finalMsg = strings.TrimSpace(ctx.initialMsg)
 		}
 		if ctx.deferCommit {
-			if ctx.commitMsgPath != "" {
+			if ctx.liveCommitMsgPath != "" {
+				if strings.TrimSpace(finalMsg) != "" {
+					if err := persistActiveCommitMessage(ctx.liveCommitMsgPath, finalMsg); err != nil {
+						syncedFprintf(os.Stderr, "Warning: failed to store live commit message: %v\n", err)
+					}
+				}
+			} else if ctx.commitMsgPath != "" {
 				if strings.TrimSpace(finalMsg) != "" {
 					if err := persistCommitMessage(ctx.commitMsgPath, finalMsg); err != nil {
 						syncedFprintf(os.Stderr, "Warning: failed to store commit message: %v\n", err)

@@ -17,12 +17,6 @@ restore_noop_editor_override() {
 	if [ ! -f "$EDITOR_OVERRIDE_STATE" ]; then
 		return
 	fi
-	PREVIOUS_EDITOR="$(cat "$EDITOR_OVERRIDE_STATE" 2>/dev/null || echo __LRC_UNSET__)"
-	if [ "$PREVIOUS_EDITOR" = "__LRC_UNSET__" ]; then
-		git config --local --unset core.editor >/dev/null 2>&1 || true
-	else
-		git config --local core.editor "$PREVIOUS_EDITOR" >/dev/null 2>&1 || true
-	fi
 	rm -f "$EDITOR_OVERRIDE_STATE" 2>/dev/null || true
 }
 
