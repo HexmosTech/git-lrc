@@ -147,7 +147,11 @@ fi
 # Run review
 if [ "$LRC_INTERACTIVE" = "1" ]; then
 	echo "Running LiveReview commit check..." >&2
-	LRC_ACTIVE_COMMIT_MSG_FILE="$COMMIT_MSG_FILE" LRC_INITIAL_MESSAGE_FILE="$INITIAL_MSG_FILE" lrc review --staged --precommit
+	if [ "${LRC_TERMINAL:-}" = "1" ]; then
+		LRC_ACTIVE_COMMIT_MSG_FILE="$COMMIT_MSG_FILE" LRC_INITIAL_MESSAGE_FILE="$INITIAL_MSG_FILE" lrc review --staged --precommit --terminal
+	else
+		LRC_ACTIVE_COMMIT_MSG_FILE="$COMMIT_MSG_FILE" LRC_INITIAL_MESSAGE_FILE="$INITIAL_MSG_FILE" lrc review --staged --precommit
+	fi
 	REVIEW_EXIT=$?
 else
 	LRC_ACTIVE_COMMIT_MSG_FILE="$COMMIT_MSG_FILE" LRC_INITIAL_MESSAGE_FILE="$INITIAL_MSG_FILE" lrc review --staged --output json >/dev/null 2>&1

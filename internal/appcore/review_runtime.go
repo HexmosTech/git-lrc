@@ -273,6 +273,11 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		}
 	}
 
+	// Apply terminal mode from config if not explicitly set via CLI flag
+	if !opts.Terminal && config.Terminal {
+		opts.Terminal = true
+	}
+
 	// Determine repo name
 	repoName := opts.RepoName
 	if repoName == "" {
@@ -449,7 +454,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 	// Generate and serve skeleton HTML immediately if --serve is enabled
 	// Auto-enable serve when no HTML path specified and not in post-commit mode
-	autoServeEnabled := !opts.Serve && opts.SaveHTML == "" && !isPostCommitReview
+	// Skip auto-serve if terminal mode is enabled
+	autoServeEnabled := !opts.Serve && opts.SaveHTML == "" && !isPostCommitReview && !opts.Terminal
 	if autoServeEnabled {
 		opts.Serve = true
 	}
@@ -1515,6 +1521,58 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		}
 	}
 
+	// Terminal mode: show results in terminal and handle decision if precommit
+	if opts.Terminal && !opts.Serve {
+		if err := renderResult(result, opts.Output); err != nil {
+			return fmt.Errorf("failed to render result: %w", err)
+		}
+
+		// If in precommit mode, prompt for decision
+		if opts.Precommit && !isPostCommitReview {
+			code, msg, push, err := terminalDecisionPrompt(initialMsg, result)
+			if err != nil {
+				return fmt.Errorf("terminal decision failed: %w", err)
+			}
+
+			// Handle the decision
+			if err := ensureAttestation(attestationAction, verbose, &attestationWritten); err != nil {
+				return err
+			}
+
+			if opts.Precommit {
+				exitCode := precommitExitCodeForDecision(code)
+				if commitMsgPath != "" {
+					if exitCode == decisionflow.DecisionCommit {
+						msgToPersist := msg
+						if strings.TrimSpace(msgToPersist) == "" {
+							msgToPersist = initialMsg
+						}
+						if strings.TrimSpace(msgToPersist) != "" {
+							if liveCommitMsgPath != "" {
+								if err := persistActiveCommitMessage(liveCommitMsgPath, msgToPersist); err != nil {
+									fmt.Fprintf(os.Stderr, "Warning: failed to store live commit message: %v\n", err)
+								}
+							} else if err := persistCommitMessage(commitMsgPath, msgToPersist); err != nil {
+								fmt.Fprintf(os.Stderr, "Warning: failed to store commit message: %v\n", err)
+							}
+						}
+					} else {
+						_ = clearCommitMessageFile(commitMsgPath)
+					}
+
+					if exitCode == decisionflow.DecisionCommit && push {
+						if err := persistPushRequest(commitMsgPath); err != nil {
+							fmt.Fprintf(os.Stderr, "Warning: failed to store push request: %v\n", err)
+						}
+					} else {
+						_ = clearPushRequest(commitMsgPath)
+					}
+				}
+				return cli.Exit("", exitCode)
+			}
+		}
+	}
+
 	// Only write attestation for pre-commit reviews, not post-commit reviews
 	if !isPostCommitReview {
 		if err := ensureAttestation(attestationAction, verbose, &attestationWritten); err != nil {
@@ -1767,6 +1825,48 @@ func renderPretty(result *reviewmodel.DiffReviewResponse) error {
 	return nil
 }
 
+// terminalDecisionPrompt shows a simple terminal prompt for commit/skip/vouch decisions
+func terminalDecisionPrompt(initialMsg string, result *reviewmodel.DiffReviewResponse) (int, string, bool, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Println("\n" + strings.Repeat("-", 80))
+		fmt.Println("Review complete. Choose an action:")
+		fmt.Println("  [Enter]  Commit (with optional message)")
+		fmt.Println("  [s]      Skip review and commit anyway")
+		fmt.Println("  [v]      Vouch for changes without AI review")
+		fmt.Println("  [a]      Abort commit")
+		fmt.Print("> ")
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, "", false, fmt.Errorf("failed to read input: %w", err)
+		}
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		switch input {
+		case "":
+			// Commit with existing message
+			fmt.Println("Committing...")
+			return 0, initialMsg, false, nil
+		case "s":
+			// Skip review
+			fmt.Println("Skipping review, committing anyway...")
+			return 2, initialMsg, false, nil
+		case "v":
+			// Vouch
+			fmt.Println("Vouching for changes...")
+			return 2, initialMsg, false, nil
+		case "a":
+			// Abort
+			fmt.Println("Aborting commit.")
+			return 1, "", false, nil
+		default:
+			fmt.Printf("Unknown option: %s. Please try again.\n", input)
+		}
+	}
+}
+
 func printEnvelopeUsageSummary(label string, envelope *reviewmodel.PlanUsageEnvelope) {
 	if envelope == nil {
 		return
@@ -1851,6 +1951,7 @@ type Config struct {
 	JWT          string
 	RefreshToken string
 	ConfigPath   string
+	Terminal     bool
 }
 
 // loadConfigValues attempts to load configuration from ~/.lrc.toml, then applies CLI/env overrides
@@ -1911,6 +2012,7 @@ func loadConfigValues(apiKeyOverride, apiURLOverride string, verbose bool) (*Con
 		config.OrgID = strings.TrimSpace(k.String("org_id"))
 		config.JWT = strings.TrimSpace(k.String("jwt"))
 		config.RefreshToken = strings.TrimSpace(k.String("refresh_token"))
+		config.Terminal = k.Bool("terminal")
 	}
 
 	return config, nil

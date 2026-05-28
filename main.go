@@ -42,6 +42,7 @@ var baseFlags = []cli.Flag{
 	&cli.BoolFlag{Name: "skip", Usage: "mark review as skipped and write attestation without contacting the API", EnvVars: []string{"LRC_SKIP"}},
 	&cli.BoolFlag{Name: "force", Usage: "force rerun by removing existing attestation/hash for current tree", EnvVars: []string{"LRC_FORCE"}},
 	&cli.BoolFlag{Name: "vouch", Usage: "vouch for changes manually without running AI review (records attestation with coverage stats from prior iterations)", EnvVars: []string{"LRC_VOUCH"}},
+	&cli.BoolFlag{Name: "terminal", Aliases: []string{"t"}, Usage: "display review results in terminal instead of opening browser", EnvVars: []string{"LRC_TERMINAL"}},
 }
 
 var debugFlags = []cli.Flag{

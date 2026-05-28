@@ -43,6 +43,7 @@ type Options struct {
 	Force                 bool
 	Vouch                 bool
 	InitialMsg            string
+	Terminal              bool
 }
 
 func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
@@ -76,6 +77,7 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		SaveJSON:              c.String("save-json"),
 		SaveText:              c.String("save-text"),
 		InitialMsg:            initialMsg,
+		Terminal:              c.Bool("terminal"),
 	}
 
 	if opts.Skip || opts.Vouch {
@@ -111,7 +113,7 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		diffSource = "commit"
 		opts.Precommit = false
 		opts.Skip = false
-		if !c.IsSet("serve") && !c.IsSet("save-html") {
+		if !c.IsSet("serve") && !c.IsSet("save-html") && !opts.Terminal {
 			opts.Serve = true
 		}
 	} else if opts.RangeVal != "" {
@@ -144,6 +146,11 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 
 	if opts.Output == "" {
 		opts.Output = DefaultOutputFormat
+	}
+
+	// If terminal mode is explicitly enabled, ensure serve is disabled
+	if opts.Terminal {
+		opts.Serve = false
 	}
 
 	return opts, nil
