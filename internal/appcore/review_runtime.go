@@ -1515,7 +1515,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	}
 
 	// Render result to stdout (skip in interactive mode or when serving - handled by UI)
-	if !useDecisionUI && !opts.Serve {
+	if !useDecisionUI && !opts.Serve && !opts.Terminal {
 		if err := renderResult(result, opts.Output); err != nil {
 			return fmt.Errorf("failed to render result: %w", err)
 		}
@@ -1539,9 +1539,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				return err
 			}
 
-			if opts.Precommit {
-				exitCode := precommitExitCodeForDecision(code)
-				if commitMsgPath != "" {
+			exitCode := precommitExitCodeForDecision(code)
+			if commitMsgPath != "" {
 					if exitCode == decisionflow.DecisionCommit {
 						msgToPersist := msg
 						if strings.TrimSpace(msgToPersist) == "" {
@@ -1570,7 +1569,6 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				}
 				return cli.Exit("", exitCode)
 			}
-		}
 	}
 
 	// Only write attestation for pre-commit reviews, not post-commit reviews
@@ -1827,7 +1825,17 @@ func renderPretty(result *reviewmodel.DiffReviewResponse) error {
 
 // terminalDecisionPrompt shows a simple terminal prompt for commit/skip/vouch decisions
 func terminalDecisionPrompt(initialMsg string, result *reviewmodel.DiffReviewResponse) (int, string, bool, error) {
-	reader := bufio.NewReader(os.Stdin)
+	// Check if stdin is a terminal, if not try to open /dev/tty
+	inFile := os.Stdin
+	if !term.IsTerminal(int(inFile.Fd())) {
+		tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if err != nil {
+			return 0, "", false, fmt.Errorf("stdin is not a terminal and cannot open /dev/tty: %w", err)
+		}
+		defer tty.Close()
+		inFile = tty
+	}
+	reader := bufio.NewReader(inFile)
 
 	for {
 		fmt.Println("\n" + strings.Repeat("-", 80))
@@ -1854,9 +1862,9 @@ func terminalDecisionPrompt(initialMsg string, result *reviewmodel.DiffReviewRes
 			fmt.Println("Skipping review, committing anyway...")
 			return 2, initialMsg, false, nil
 		case "v":
-			// Vouch
+			// Vouch (DecisionVouch = 4)
 			fmt.Println("Vouching for changes...")
-			return 2, initialMsg, false, nil
+			return 4, initialMsg, false, nil
 		case "a":
 			// Abort
 			fmt.Println("Aborting commit.")
