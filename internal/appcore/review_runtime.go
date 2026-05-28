@@ -1541,34 +1541,34 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 			exitCode := precommitExitCodeForDecision(code)
 			if commitMsgPath != "" {
-					if exitCode == decisionflow.DecisionCommit {
-						msgToPersist := msg
-						if strings.TrimSpace(msgToPersist) == "" {
-							msgToPersist = initialMsg
-						}
-						if strings.TrimSpace(msgToPersist) != "" {
-							if liveCommitMsgPath != "" {
-								if err := persistActiveCommitMessage(liveCommitMsgPath, msgToPersist); err != nil {
-									fmt.Fprintf(os.Stderr, "Warning: failed to store live commit message: %v\n", err)
-								}
-							} else if err := persistCommitMessage(commitMsgPath, msgToPersist); err != nil {
-								fmt.Fprintf(os.Stderr, "Warning: failed to store commit message: %v\n", err)
+				if exitCode == decisionflow.DecisionCommit {
+					msgToPersist := msg
+					if strings.TrimSpace(msgToPersist) == "" {
+						msgToPersist = initialMsg
+					}
+					if strings.TrimSpace(msgToPersist) != "" {
+						if liveCommitMsgPath != "" {
+							if err := persistActiveCommitMessage(liveCommitMsgPath, msgToPersist); err != nil {
+								fmt.Fprintf(os.Stderr, "Warning: failed to store live commit message: %v\n", err)
 							}
+						} else if err := persistCommitMessage(commitMsgPath, msgToPersist); err != nil {
+							fmt.Fprintf(os.Stderr, "Warning: failed to store commit message: %v\n", err)
 						}
-					} else {
-						_ = clearCommitMessageFile(commitMsgPath)
 					}
-
-					if exitCode == decisionflow.DecisionCommit && push {
-						if err := persistPushRequest(commitMsgPath); err != nil {
-							fmt.Fprintf(os.Stderr, "Warning: failed to store push request: %v\n", err)
-						}
-					} else {
-						_ = clearPushRequest(commitMsgPath)
-					}
+				} else {
+					_ = clearCommitMessageFile(commitMsgPath)
 				}
-				return cli.Exit("", exitCode)
+
+				if exitCode == decisionflow.DecisionCommit && push {
+					if err := persistPushRequest(commitMsgPath); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to store push request: %v\n", err)
+					}
+				} else {
+					_ = clearPushRequest(commitMsgPath)
+				}
 			}
+			return cli.Exit("", exitCode)
+		}
 	}
 
 	// Only write attestation for pre-commit reviews, not post-commit reviews
@@ -1823,6 +1823,27 @@ func renderPretty(result *reviewmodel.DiffReviewResponse) error {
 	return nil
 }
 
+// parseTerminalDecision processes a raw input string from the terminal prompt
+func parseTerminalDecision(input string, initialMsg string) (code int, msg string, push bool, matched bool) {
+	input = strings.TrimSpace(strings.ToLower(input))
+	switch input {
+	case "":
+		// Commit with existing message
+		return 0, initialMsg, false, true
+	case "s":
+		// Skip review
+		return 2, initialMsg, false, true
+	case "v":
+		// Vouch (DecisionVouch = 4)
+		return 4, initialMsg, false, true
+	case "a":
+		// Abort
+		return 1, "", false, true
+	default:
+		return 0, "", false, false
+	}
+}
+
 // terminalDecisionPrompt shows a simple terminal prompt for commit/skip/vouch decisions
 func terminalDecisionPrompt(initialMsg string, result *reviewmodel.DiffReviewResponse) (int, string, bool, error) {
 	// Check if stdin is a terminal, if not try to open /dev/tty
@@ -1850,28 +1871,23 @@ func terminalDecisionPrompt(initialMsg string, result *reviewmodel.DiffReviewRes
 		if err != nil {
 			return 0, "", false, fmt.Errorf("failed to read input: %w", err)
 		}
-		input = strings.TrimSpace(strings.ToLower(input))
 
-		switch input {
-		case "":
-			// Commit with existing message
-			fmt.Println("Committing...")
-			return 0, initialMsg, false, nil
-		case "s":
-			// Skip review
-			fmt.Println("Skipping review, committing anyway...")
-			return 2, initialMsg, false, nil
-		case "v":
-			// Vouch (DecisionVouch = 4)
-			fmt.Println("Vouching for changes...")
-			return 4, initialMsg, false, nil
-		case "a":
-			// Abort
-			fmt.Println("Aborting commit.")
-			return 1, "", false, nil
-		default:
-			fmt.Printf("Unknown option: %s. Please try again.\n", input)
+		code, msg, push, matched := parseTerminalDecision(input, initialMsg)
+		if matched {
+			switch code {
+			case 0:
+				fmt.Println("Committing...")
+			case 2:
+				fmt.Println("Skipping review, committing anyway...")
+			case 4:
+				fmt.Println("Vouching for changes...")
+			case 1:
+				fmt.Println("Aborting commit.")
+			}
+			return code, msg, push, nil
 		}
+
+		fmt.Printf("Unknown option: %s. Please try again.\n", strings.TrimSpace(input))
 	}
 }
 

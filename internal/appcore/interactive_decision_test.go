@@ -81,3 +81,115 @@ func TestExecuteDecisionDeferredCommitWritesLiveCommitMessageWhenProvided(t *tes
 		t.Fatalf("expected no override file at %q, stat err = %v", overridePath, statErr)
 	}
 }
+
+func TestParseTerminalDecision(t *testing.T) {
+	initialMsg := "feat: test initial message"
+
+	tests := []struct {
+		name        string
+		input       string
+		wantCode    int
+		wantMsg     string
+		wantPush    bool
+		wantMatched bool
+	}{
+		{
+			name:        "empty input (Enter) commits with initial message",
+			input:       "",
+			wantCode:    0,
+			wantMsg:     initialMsg,
+			wantPush:    false,
+			wantMatched: true,
+		},
+		{
+			name:        "spaces input (Enter with whitespace) commits with initial message",
+			input:       "   \n",
+			wantCode:    0,
+			wantMsg:     initialMsg,
+			wantPush:    false,
+			wantMatched: true,
+		},
+		{
+			name:        "input 's' skips",
+			input:       "s",
+			wantCode:    2,
+			wantMsg:     initialMsg,
+			wantPush:    false,
+			wantMatched: true,
+		},
+		{
+			name:        "input 'S' with whitespace skips",
+			input:       "  S  \n",
+			wantCode:    2,
+			wantMsg:     initialMsg,
+			wantPush:    false,
+			wantMatched: true,
+		},
+		{
+			name:        "input 'v' vouches",
+			input:       "v",
+			wantCode:    4,
+			wantMsg:     initialMsg,
+			wantPush:    false,
+			wantMatched: true,
+		},
+		{
+			name:        "input 'V' vouches",
+			input:       "V",
+			wantCode:    4,
+			wantMsg:     initialMsg,
+			wantPush:    false,
+			wantMatched: true,
+		},
+		{
+			name:        "input 'a' aborts",
+			input:       "a",
+			wantCode:    1,
+			wantMsg:     "",
+			wantPush:    false,
+			wantMatched: true,
+		},
+		{
+			name:        "input 'A' aborts",
+			input:       "A",
+			wantCode:    1,
+			wantMsg:     "",
+			wantPush:    false,
+			wantMatched: true,
+		},
+		{
+			name:        "unknown input does not match",
+			input:       "invalid",
+			wantCode:    0,
+			wantMsg:     "",
+			wantPush:    false,
+			wantMatched: false,
+		},
+		{
+			name:        "unknown single character does not match",
+			input:       "x",
+			wantCode:    0,
+			wantMsg:     "",
+			wantPush:    false,
+			wantMatched: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			code, msg, push, matched := parseTerminalDecision(tc.input, initialMsg)
+			if code != tc.wantCode {
+				t.Errorf("code = %d, want %d", code, tc.wantCode)
+			}
+			if msg != tc.wantMsg {
+				t.Errorf("msg = %q, want %q", msg, tc.wantMsg)
+			}
+			if push != tc.wantPush {
+				t.Errorf("push = %v, want %v", push, tc.wantPush)
+			}
+			if matched != tc.wantMatched {
+				t.Errorf("matched = %v, want %v", matched, tc.wantMatched)
+			}
+		})
+	}
+}

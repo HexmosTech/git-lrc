@@ -54,11 +54,43 @@ func TestBuildFromContextBlockingReview(t *testing.T) {
 	})
 }
 
+func TestBuildFromContextTerminal(t *testing.T) {
+	t.Run("terminal mode disables serve", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--terminal"})
+
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if !opts.Terminal {
+			t.Fatalf("Terminal = false, want true")
+		}
+		if opts.Serve {
+			t.Fatalf("Serve = true, want false (terminal mode must disable serve)")
+		}
+	})
+
+	t.Run("terminal mode with commit disables serve", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--terminal", "--commit", "HEAD"})
+
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if !opts.Terminal {
+			t.Fatalf("Terminal = false, want true")
+		}
+		if opts.Serve {
+			t.Fatalf("Serve = true, want false (terminal mode must override commit auto-serve)")
+		}
+	})
+}
+
 func newOptionsTestContext(t *testing.T, args []string) *cli.Context {
 	t.Helper()
 
 	set := flag.NewFlagSet("reviewopts-test", flag.ContinueOnError)
-	for _, boolName := range []string{"staged", "serve", "verbose", "precommit", "blocking-review", "skip", "force", "vouch"} {
+	for _, boolName := range []string{"staged", "serve", "verbose", "precommit", "blocking-review", "skip", "force", "vouch", "terminal"} {
 		set.Bool(boolName, false, "")
 	}
 	for _, stringName := range []string{"repo-name", "range", "commit", "diff-file", "api-url", "api-key", "output", "save-html", "save-json", "save-text", "diff-source"} {
