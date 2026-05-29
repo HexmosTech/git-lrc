@@ -18,6 +18,7 @@ import (
 // RunSetup is the handler for "lrc setup".
 func RunSetup(c *cli.Context) error {
 	slog := newSetupLog()
+	defer cleanupSetupLog(slog)
 
 	fmt.Println()
 	fmt.Printf("  %s%s🔧 git-lrc setup%s\n", clr(cBold), clr(cCyan), clr(cReset))
@@ -30,25 +31,66 @@ func RunSetup(c *cli.Context) error {
 		return setupError(slog, err)
 	}
 
-	if err := backupExistingConfig(slog); err != nil {
-		return setupError(slog, err)
+	var (
+		result    *setupResult
+		skipLogin bool
+	)
+
+	preflight, preflightErr := runSetupPreflight(selectedAPIURL, slog)
+	if preflightErr != nil {
+		slog.write("setup preflight unavailable: %v", preflightErr)
+	}
+	if preflight != nil && preflight.AuthReady {
+		if preflight.HasConnector {
+			rerunSetup, promptErr := promptSetupYesNo(
+				fmt.Sprintf("  Existing LiveReview setup found for %s with %d AI connector(s). Re-run login and minimum AI setup?", existingSetupLabel(preflight), len(preflight.Connectors)),
+				false,
+			)
+			if promptErr != nil {
+				return setupError(slog, promptErr)
+			}
+			if !rerunSetup {
+				printSetupAlreadyReady(preflight)
+				return nil
+			}
+		} else {
+			reuseSession, promptErr := promptSetupYesNo(
+				fmt.Sprintf("  Existing LiveReview session found for %s. Reuse it and only configure AI?", existingSetupLabel(preflight)),
+				true,
+			)
+			if promptErr != nil {
+				return setupError(slog, promptErr)
+			}
+			if reuseSession {
+				result = preflight.Session
+				skipLogin = true
+				printSetupReuseExistingSession(preflight)
+				slog.write("setup preflight: reusing existing authenticated session")
+			}
+		}
 	}
 
-	fmt.Printf("  %s%sStep 1/2%s  🔑 Authenticate with Hexmos\n", clr(cBold), clr(cBlue), clr(cReset))
-	fmt.Println()
-	slog.write("phase 1: starting hexmos login flow")
+	if !skipLogin {
+		if err := backupExistingConfig(slog); err != nil {
+			return setupError(slog, err)
+		}
 
-	result, err := runHexmosLoginFlow(slog, selectedAPIURL)
-	if err != nil {
-		return setupError(slog, fmt.Errorf("authentication failed: %w", err))
-	}
+		fmt.Printf("  %s%sStep 1/2%s  🔑 Authenticate with Hexmos\n", clr(cBold), clr(cBlue), clr(cReset))
+		fmt.Println()
+		slog.write("phase 1: starting hexmos login flow")
 
-	fmt.Printf("  %s✅ Authenticated as %s%s%s\n", clr(cGreen), clr(cBold), result.Email, clr(cReset))
-	if result.OrgName != "" {
-		fmt.Printf("  %s   Organization: %s%s\n", clr(cDim), result.OrgName, clr(cReset))
+		result, err = runHexmosLoginFlow(slog, selectedAPIURL)
+		if err != nil {
+			return setupError(slog, fmt.Errorf("authentication failed: %w", err))
+		}
+
+		fmt.Printf("  %s✅ Authenticated as %s%s%s\n", clr(cGreen), clr(cBold), result.Email, clr(cReset))
+		if result.OrgName != "" {
+			fmt.Printf("  %s   Organization: %s%s\n", clr(cDim), result.OrgName, clr(cReset))
+		}
+		fmt.Println()
+		slog.write("phase 1 complete: user=%s org=%s", result.Email, result.OrgID)
 	}
-	fmt.Println()
-	slog.write("phase 1 complete: user=%s org=%s", result.Email, result.OrgID)
 
 	fmt.Printf("  %s%sStep 2/2%s  🤖 Configure AI (Gemini)\n", clr(cBold), clr(cBlue), clr(cReset))
 	fmt.Println()
@@ -76,17 +118,24 @@ func RunSetup(c *cli.Context) error {
 	fmt.Println()
 	slog.write("gemini connector created")
 
-	if err := writeConfig(result, selectedAPIURL); err != nil {
-		return setupError(slog, fmt.Errorf("failed to write config: %w", err))
+	if !skipLogin {
+		if err := writeConfig(result, selectedAPIURL); err != nil {
+			return setupError(slog, fmt.Errorf("failed to write config: %w", err))
+		}
+		slog.write("config written to ~/.lrc.toml")
 	}
-	slog.write("config written to ~/.lrc.toml")
 
 	printSetupSuccess(result)
+	return nil
+}
 
+func cleanupSetupLog(slog *setupLog) {
+	if slog == nil {
+		return
+	}
 	if err := storage.RemoveSetupLogFile(slog.logFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		slog.write("warning: could not remove log file: %v", err)
 	}
-	return nil
 }
 
 func resolveSetupTargetAPIURL(raw string) string {

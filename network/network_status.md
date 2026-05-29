@@ -10,8 +10,8 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 
 - Network boundary: outbound HTTP API operations and response handling in network package.
 - Modes represented: api.
-- Operation count tracked: 18 operations.
-- Severity distribution: High 9, Medium 7, Low 2.
+- Operation count tracked: 19 operations.
+- Severity distribution: High 10, Medium 7, Low 2.
 - Current diff note: worktree hook-runtime and local hook-management fixes changed hook/appcore/git-path helper logic only; no network package operation surface change.
 - Current diff note: internal reviewapi helper evidence links were revalidated after git path helper additions; network inventory scope is unchanged.
 - Primary sensitive data in scope: API keys, bearer tokens, org-context headers, diff content, connector validation payloads, update manifest metadata, binary download stream.
@@ -48,6 +48,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | SetupCreateAPIKey | api | API key label and returned plaintext API key | Create connector/review API key | High | High sensitivity secret material exposure risk | Compensated by explicit auth flow and setup caller no-log/no-echo handling for create-key error paths; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L16) |
 | SetupValidateConnectorKey | api | Provider key and validation request body | Validate AI connector key before persistence | High | Third-party key exposure/handling risk | Compensated by authenticated request path plus connector key redaction in setup error surfaces; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L21) |
 | SetupCreateConnector | api | Connector configuration payload | Persist connector configuration via LiveReview API | High | Misconfiguration and sensitive metadata transmission risk | Compensated by bearer auth plus org context boundary; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L26) |
+| SetupListConnectors | api | Existing connector inventory for current org | Inspect minimum AI readiness during setup and re-auth preflight | High | Sensitive connector metadata and auth-context exposure risk | Compensated by bearer auth plus org context boundary; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L31) |
 
 ## Inventory: Proxy And Forwarding APIs
 

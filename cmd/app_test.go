@@ -32,3 +32,34 @@ func TestSetupCommandIncludesAPIURLChoiceFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestEnsureCommandIncludesAPIURLFlags(t *testing.T) {
+	app := BuildApp("dev", "now", "none", "prod", nil, nil, Handlers{})
+
+	var ensureCommandFound bool
+	var ensureCommandFlags map[string]bool
+
+	for _, command := range app.Commands {
+		if command.Name != "ensure" {
+			continue
+		}
+		ensureCommandFound = true
+		ensureCommandFlags = map[string]bool{}
+		for _, flag := range command.Flags {
+			for _, name := range flag.Names() {
+				ensureCommandFlags[name] = true
+			}
+		}
+		break
+	}
+
+	if !ensureCommandFound {
+		t.Fatalf("ensure command not found")
+	}
+
+	for _, expected := range []string{"api-url", "base-url"} {
+		if !ensureCommandFlags[expected] {
+			t.Fatalf("ensure command missing flag %q", expected)
+		}
+	}
+}

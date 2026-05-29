@@ -164,6 +164,62 @@ func TestWriteConfigUsesSelectedAPIURL(t *testing.T) {
 	}
 }
 
+func TestWriteConfigPreservesExistingUnrelatedFields(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	configPath := filepath.Join(tmpHome, ".lrc.toml")
+	original := `custom_setting = "keep-me"
+
+# BEGIN lrc managed ai_connectors
+[[ai_connectors]]
+id = 7
+provider_name = "gemini"
+connector_name = "Existing Gemini"
+api_key = "existing-key"
+selected_model = "gemini-2.5-flash"
+display_order = 1
+# END lrc managed ai_connectors
+`
+	if err := os.WriteFile(configPath, []byte(original), 0600); err != nil {
+		t.Fatalf("write original config: %v", err)
+	}
+
+	result := &setupResult{
+		PlainAPIKey:  "lr_key_123",
+		Email:        "user@example.com",
+		FirstName:    "Jane",
+		LastName:     "Doe",
+		AvatarURL:    "https://cdn.hexmos.com/u/jane.png",
+		UserID:       "u-1",
+		OrgID:        "o-1",
+		OrgName:      "Acme Org",
+		AccessToken:  "jwt-1",
+		RefreshToken: "ref-1",
+	}
+
+	if err := writeConfig(result, cloudAPIURL); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	content := string(data)
+	for _, expected := range []string{
+		`custom_setting = "keep-me"`,
+		`provider_name = "gemini"`,
+		`api_key = "lr_key_123"`,
+		`jwt = "jwt-1"`,
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("config missing %s in %s", expected, content)
+		}
+	}
+}
+
 func TestResolveSetupAPIURLNonInteractiveRequiresExplicitChoice(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)

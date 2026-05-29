@@ -10,6 +10,7 @@ import (
 type Handlers struct {
 	RunReviewSimple       cli.ActionFunc
 	RunReviewDebug        cli.ActionFunc
+	RunEnsure             cli.ActionFunc
 	RunUninstall          cli.ActionFunc
 	RunHooksInstall       cli.ActionFunc
 	RunHooksUninstall     cli.ActionFunc
@@ -32,6 +33,18 @@ func BuildApp(version, buildTime, gitCommit, reviewMode string, baseFlags, debug
 		Version: version,
 		Flags:   baseFlags,
 		Commands: []*cli.Command{
+			{
+				Name:  "ensure",
+				Usage: "Check whether LiveReview auth and at least one AI connector are ready for review",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "api-url",
+						Aliases: []string{"base-url"},
+						Usage:   "override LiveReview API base URL for readiness check",
+					},
+				},
+				Action: h.RunEnsure,
+			},
 			{
 				Name:  "uninstall",
 				Usage: "Uninstall lrc from your user environment",

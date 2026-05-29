@@ -26,3 +26,8 @@ func SetupValidateConnectorKey(client *Client, cloudBase, orgID string, payload 
 func SetupCreateConnector(client *Client, cloudBase, orgID string, payload any, accessToken string) (*Response, error) {
 	return client.DoJSON(http.MethodPost, SetupCreateConnectorURL(cloudBase), payload, accessToken, orgID, nil)
 }
+
+// SetupListConnectors retrieves the current connector inventory for setup preflight.
+func SetupListConnectors(client *Client, cloudBase, orgID, accessToken string) (*Response, error) {
+	return client.DoJSON(http.MethodGet, SetupCreateConnectorURL(cloudBase), nil, accessToken, orgID, nil)
+}

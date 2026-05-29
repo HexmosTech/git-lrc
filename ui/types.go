@@ -7,6 +7,7 @@ const (
 
 type RuntimeConfig struct {
 	APIURL        string
+	APIKey        string
 	JWT           string
 	RefreshJWT    string
 	OrgID         string

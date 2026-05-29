@@ -46,6 +46,7 @@ func LoadRuntimeConfig(defaultAPIURL string) (*RuntimeConfig, error) {
 	}
 
 	cfg.APIURL = apiURL
+	cfg.APIKey = strings.TrimSpace(k.String("api_key"))
 	cfg.JWT = strings.TrimSpace(k.String("jwt"))
 	cfg.RefreshJWT = strings.TrimSpace(k.String("refresh_token"))
 	cfg.OrgID = strings.TrimSpace(k.String("org_id"))
