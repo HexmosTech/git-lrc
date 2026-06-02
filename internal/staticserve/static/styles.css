@@ -1,5 +1,42 @@
 /* LiveReview UI Styles */
 
+/* ── Inter — professional UI typeface (vendored woff2, no external CDN) ── */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/vendor/fonts/inter-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/vendor/fonts/inter-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/static/vendor/fonts/inter-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/vendor/fonts/inter-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/static/vendor/fonts/inter-800.woff2") format("woff2");
+}
+
 /* Reset and CSS Variables */
 * {
   margin: 0;
@@ -103,6 +140,7 @@
 }
 
 :root {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --space-xs: 6px;
   --space-sm: 10px;
   --space-md: 16px;
@@ -145,6 +183,120 @@
   --status-error-border: rgba(241, 76, 76, 0.4);
   --status-error-text: #f48771;
   --severity-filter-sticky-offset: 3.5rem;
+
+  /* ── Premium UI foundation ─────────────────────────────────────────
+     Added for the dashboard upgrade: an elevation/shadow scale, a radius
+     scale, a focus ring, and reusable accent gradients. Everything is
+     token-driven so both UIs stay consistent and easy to retheme. */
+
+  /* Radius scale (theme-agnostic) */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* Elevation / shadow scale (tuned for a dark surface) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30), 0 2px 6px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.38), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 12px 30px rgba(0, 0, 0, 0.45), 0 4px 10px rgba(0, 0, 0, 0.32);
+  --shadow-accent: 0 6px 18px rgba(0, 120, 212, 0.35);
+  --shadow-accent-strong: 0 8px 24px rgba(0, 120, 212, 0.48);
+
+  /* Hairline highlight that gives surfaces a lit top edge */
+  --ring-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* Focus ring (keyboard accessibility) */
+  --focus-ring: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent-blue);
+
+  /* Surfaces with subtle depth gradients */
+  --surface-card: linear-gradient(180deg, #26262a 0%, #212124 100%);
+  --surface-raised: linear-gradient(180deg, #303035 0%, #29292d 100%);
+  --surface-glass: rgba(37, 37, 38, 0.72);
+
+  /* Accent gradients for primary actions / brand marks */
+  --accent-gradient: linear-gradient(135deg, #1c8fe6 0%, #0078d4 100%);
+  --accent-gradient-hover: linear-gradient(135deg, #2f9bf0 0%, #0a84e0 100%);
+  --danger-gradient: linear-gradient(135deg, #f1605c 0%, #d6403c 100%);
+
+  /* Motion timings */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+
+  /* Ambient page background + display-title gradient (dark) */
+  --ambient:
+    radial-gradient(1200px 600px at 15% -10%, rgba(0, 120, 212, 0.10), transparent 60%),
+    radial-gradient(1000px 500px at 110% 0%, rgba(78, 201, 176, 0.06), transparent 55%),
+    var(--bg-primary);
+  --title-gradient: linear-gradient(180deg, #ffffff 0%, #c9d4df 100%);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   LIGHT THEME — applied globally when <html data-theme="light">.
+   A professional light palette inspired by GitHub, Stripe & Notion:
+   white surfaces, soft diffuse shadows, a refined neutral text ramp and a
+   single brand-blue accent. Only color/surface/shadow tokens are overridden
+   here — radii, spacing and motion fall through from :root, so the entire
+   token-driven UI (both routes) flips with one attribute.
+   ════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] {
+  --bg-primary: #f5f6f8;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f6f8fa;
+  --bg-hover: #eef1f4;
+  --bg-active: #e6eaef;
+  --border-subtle: #e8eaed;
+  --border-medium: #d6dade;
+
+  --text-primary: #1f2328;
+  --text-secondary: #353b41;
+  --text-muted: #656d76;
+  --text-dim: #8b949e;
+
+  --accent-blue: #0a6fd1;
+  --accent-blue-hover: #0b7ae6;
+  --accent-blue-light: #0969da;
+  --accent-teal: #0e7c66;
+  --accent-green: #1a7f37;
+  --accent-purple: #8250df;
+  --accent-yellow: #9a6700;
+  --accent-orange: #bc4c00;
+  --accent-red: #cf222e;
+
+  --status-success-bg: #dafbe1;
+  --status-success-border: #aceebb;
+  --status-success-text: #1a7f37;
+  --status-success-icon-bg: #c8f5d2;
+  --status-error-bg: #ffebe9;
+  --status-error-border: #ffcecb;
+  --status-error-text: #cf222e;
+
+  --shadow-xs: 0 1px 2px rgba(27, 31, 36, 0.05);
+  --shadow-sm: 0 1px 3px rgba(27, 31, 36, 0.06), 0 1px 2px rgba(27, 31, 36, 0.04);
+  --shadow-md: 0 6px 18px rgba(27, 31, 36, 0.08), 0 2px 5px rgba(27, 31, 36, 0.05);
+  --shadow-lg: 0 18px 42px rgba(27, 31, 36, 0.13), 0 6px 14px rgba(27, 31, 36, 0.06);
+  --shadow-accent: 0 8px 20px rgba(10, 111, 209, 0.22);
+  --shadow-accent-strong: 0 10px 26px rgba(10, 111, 209, 0.30);
+
+  --ring-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px rgba(10, 111, 209, 0.6);
+
+  --surface-card: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-glass: rgba(255, 255, 255, 0.78);
+
+  --accent-gradient: linear-gradient(135deg, #2a8bf2 0%, #0a6fd1 100%);
+  --accent-gradient-hover: linear-gradient(135deg, #3a97f5 0%, #0b7ae6 100%);
+  --danger-gradient: linear-gradient(135deg, #e5534b 0%, #cf222e 100%);
+
+  --ambient:
+    radial-gradient(1100px 620px at 100% -8%, rgba(99, 91, 255, 0.07), transparent 55%),
+    radial-gradient(1000px 560px at -8% 2%, rgba(10, 111, 209, 0.06), transparent 55%),
+    radial-gradient(1000px 600px at 55% 120%, rgba(26, 127, 55, 0.045), transparent 60%),
+    var(--bg-primary);
+  --title-gradient: linear-gradient(180deg, #1f2328 0%, #434b54 100%);
 }
 
 @media (max-width: 980px) {
@@ -161,9 +313,7 @@
 
 /* Layout */
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-secondary);
@@ -2260,8 +2410,13 @@ body {
 }
 
 .comment-copy-btn::before {
-  content: "📋";
-  font-size: 12px;
+  content: "";
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .comment-visibility-btn {
@@ -2292,7 +2447,8 @@ body {
 }
 
 .comment-copy-btn.copied::before {
-  content: "✓";
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .comment-badge {
@@ -3218,3 +3374,273 @@ body {
     transform: translateY(0);
   }
 }
+
+/* ── Accessibility: honor reduced-motion preference ───────────────────
+   Disables non-essential animation/transition for users who opt out at
+   the OS level. Required when introducing motion to the dashboard. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Global theme toggle button (see theme.js) ────────────────────────
+   Floating, fixed bottom-left so it clears both the connectors header and
+   the review viewer's bottom-right pager. Fully token-driven, so it adapts
+   to whichever theme is active. */
+.lrc-theme-toggle {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 30000;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: transform var(--motion-base, 200ms) cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow var(--motion-base, 200ms) ease,
+              color var(--motion-fast, 120ms) ease,
+              background var(--motion-fast, 120ms) ease;
+}
+.lrc-theme-toggle:hover {
+  transform: translateY(-2px);
+  color: var(--accent-blue-light);
+  border-color: var(--accent-blue);
+  box-shadow: var(--shadow-lg);
+}
+.lrc-theme-toggle:active { transform: translateY(0) scale(0.96); }
+.lrc-theme-toggle:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.lrc-theme-toggle svg { width: 20px; height: 20px; }
+
+/* ── Light-mode override layer for the review viewer ──────────────────
+   The review report viewer (index.html) predates the token system in a few
+   spots and hardcodes dark colors. These overrides only apply under the
+   light theme; dark mode keeps the original look untouched. */
+:root[data-theme="light"] .diff-line { background: transparent; }
+:root[data-theme="light"] .diff-line:hover { background: rgba(9, 105, 218, 0.06); }
+:root[data-theme="light"] .diff-line.line-highlight,
+:root[data-theme="light"] .diff-line.line-highlight .line-content { background: rgba(9, 105, 218, 0.12); }
+:root[data-theme="light"] .line-num { background: rgba(27, 31, 36, 0.03); }
+:root[data-theme="light"] .diff-context .line-content { background: transparent; }
+:root[data-theme="light"] .diff-add,
+:root[data-theme="light"] .diff-add .line-content { background: rgba(26, 127, 55, 0.12); }
+:root[data-theme="light"] .diff-add .line-content { color: #0f5323; }
+:root[data-theme="light"] .diff-del,
+:root[data-theme="light"] .diff-del .line-content { background: rgba(207, 34, 46, 0.10); }
+:root[data-theme="light"] .diff-del .line-content { color: #a40e26; }
+:root[data-theme="light"] .hunk-header { background: var(--bg-tertiary); }
+:root[data-theme="light"] .comment-row { background: rgba(9, 105, 218, 0.05); border-color: rgba(9, 105, 218, 0.22); }
+
+/* Summary view toggle + slideshow chrome (hardcoded dark panels) */
+:root[data-theme="light"] .summary-view-btn.active {
+  background: rgba(10, 111, 209, 0.12);
+  color: var(--accent-blue);
+}
+:root[data-theme="light"] .summary-view-btn:hover { background: rgba(27, 31, 36, 0.05); }
+:root[data-theme="light"] .summary-slideshow-surface { border-color: var(--border-subtle); }
+:root[data-theme="light"] .summary-slideshow-chrome,
+:root[data-theme="light"] .summary-slideshow-controls {
+  background: var(--bg-tertiary);
+  border-color: var(--border-subtle);
+}
+
+/* Generic: neutralize white-on-white overlay hovers in light mode */
+:root[data-theme="light"] .summary-slideshow-controls { border-top-color: var(--border-subtle); }
+
+/* AI comment cards — hardcoded dark navy in the original. In light mode the
+   card becomes a clean white surface (Untitled-UI / GitHub style) with a soft
+   shadow, and all the light-on-dark accents are rebalanced for contrast. */
+:root[data-theme="light"] .comment-container {
+  background: var(--bg-secondary);
+  border-color: rgba(9, 105, 218, 0.22);
+  box-shadow: var(--shadow-md);
+}
+:root[data-theme="light"] .comment-category { color: var(--text-muted); }
+:root[data-theme="light"] .comment-copy-btn,
+:root[data-theme="light"] .comment-visibility-btn {
+  background: rgba(130, 80, 223, 0.10);
+  border-color: rgba(130, 80, 223, 0.28);
+  color: #6639ba;
+}
+:root[data-theme="light"] .comment-copy-btn:hover,
+:root[data-theme="light"] .comment-visibility-btn:hover {
+  background: rgba(130, 80, 223, 0.16);
+  border-color: rgba(130, 80, 223, 0.5);
+}
+:root[data-theme="light"] .comment-copy-btn.copied {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+  color: var(--status-success-text);
+}
+:root[data-theme="light"] .comment-hidden-placeholder {
+  background: #fff5f5;
+  border-color: rgba(207, 34, 46, 0.35);
+  box-shadow: none;
+}
+
+/* Severity badges — light-on-translucent-dark → solid light chips */
+:root[data-theme="light"] .badge-info {
+  background: rgba(9, 105, 218, 0.12);
+  color: #0a52b8;
+  border-color: rgba(9, 105, 218, 0.30);
+}
+:root[data-theme="light"] .badge-warning {
+  background: #fff4d6;
+  color: #7a5200;
+  border-color: #f0d28a;
+}
+:root[data-theme="light"] .badge-error {
+  background: #fff1e5;
+  color: #9a4d00;
+  border-color: #f3c89c;
+}
+:root[data-theme="light"] .badge-critical {
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+  border-color: var(--status-error-border);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Light-theme audit pass — remaining review-viewer clusters.
+   Rebalances alerts, quota banner and the summary slideshow (chapter
+   cards, slide buttons, file chips, inline code) that hardcode dark
+   surfaces / light-on-dark text. Light theme only; dark is untouched.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Main alerts */
+:root[data-theme="light"] .main-alert-warn { color: #7a5200; }
+:root[data-theme="light"] .main-alert-error { color: #a40e26; }
+:root[data-theme="light"] .main-alert-btn-outline:hover { background: rgba(27, 31, 36, 0.05); }
+:root[data-theme="light"] .main-alert-desc { border-top-color: rgba(27, 31, 36, 0.10); }
+
+/* Quota banner */
+:root[data-theme="light"] .quota-banner-slate {
+  background: var(--bg-secondary);
+  border-top-color: var(--border-subtle);
+  border-right-color: var(--border-subtle);
+  border-bottom-color: var(--border-subtle);
+  box-shadow: var(--shadow-md);
+}
+:root[data-theme="light"] .qbs-text { color: var(--text-muted); }
+
+/* Summary slideshow shell */
+:root[data-theme="light"] .summary-slideshow-surface {
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-md);
+}
+:root[data-theme="light"] .summary-slideshow-controls { border-color: var(--border-subtle); }
+:root[data-theme="light"] .summary-slideshow-nav-overlay { background: rgba(255, 255, 255, 0.75); }
+
+/* Slide navigation buttons */
+:root[data-theme="light"] .summary-slide-btn {
+  background: var(--bg-tertiary);
+  border-color: var(--border-medium);
+  color: var(--text-secondary);
+}
+:root[data-theme="light"] .summary-slide-btn:hover { background: var(--bg-hover); }
+:root[data-theme="light"] .summary-slide-btn.active { color: var(--accent-blue); }
+
+/* Chapter explorer */
+:root[data-theme="light"] .summary-chapter-marker {
+  background: var(--bg-secondary);
+  box-shadow: 0 0 0 1px var(--border-medium);
+}
+:root[data-theme="light"] .summary-chapter-explorer-card {
+  background: var(--bg-tertiary);
+  border-color: var(--border-subtle);
+}
+:root[data-theme="light"] .summary-chapter-explorer-subchapter { background: var(--bg-tertiary); }
+:root[data-theme="light"] .summary-chapter-explorer-subchapter.is-active { background: var(--bg-hover); }
+
+/* File chips + inline code in the summary */
+:root[data-theme="light"] .summary-file-chip {
+  border-color: var(--border-medium);
+  background: var(--bg-tertiary);
+}
+:root[data-theme="light"] .summary-file-inline-code { background: var(--bg-tertiary); }
+:root[data-theme="light"] .summary-slideshow-embedded .summary-slideshow-content code,
+:root[data-theme="light"] .summary-slideshow-embedded .summary-slideshow-content pre,
+:root[data-theme="light"] .summary .summary-slideshow-content code { border-color: var(--border-subtle); }
+
+/* Severity filter + copy-visible button — light tweaks */
+:root[data-theme="light"] .severity-filter-btn:hover { background: rgba(27, 31, 36, 0.05); }
+:root[data-theme="light"] .severity-filter-btn.warning { --sev-color: #9a6700; }
+:root[data-theme="light"] .severity-filter-btn.warning.active { color: #9a6700; }
+:root[data-theme="light"] .copy-visible-btn.empty { color: #7a5200; }
+:root[data-theme="light"] .copy-visible-btn.error { color: #a40e26; }
+:root[data-theme="light"] .summary-slideshow-status { color: var(--text-muted); }
+
+/* ── Light-mode contrast fixes (audit pass 2) ─────────────────────────
+   Text colors that stayed near-white (invisible on white) in light mode:
+   quota banner, summary slideshow chapter explorer / file chips / inline
+   code / counters, and the event log. Light theme only. */
+:root[data-theme="light"] .qbs-title,
+:root[data-theme="light"] .qbs-text strong { color: var(--text-primary); }
+:root[data-theme="light"] .summary-slideshow-counter,
+:root[data-theme="light"] .summary-chapter-explorer-card-count,
+:root[data-theme="light"] .summary-chapter-explorer-card-caption,
+:root[data-theme="light"] .summary-chapter-explorer-subchapter-count { color: var(--text-muted); }
+:root[data-theme="light"] .summary-slideshow-nav-overlay,
+:root[data-theme="light"] .summary-chapter-explorer-subchapter { color: var(--text-secondary); }
+:root[data-theme="light"] .summary-chapter-explorer-card-title,
+:root[data-theme="light"] .summary-chapter-explorer-subchapter.is-active { color: var(--text-primary); }
+:root[data-theme="light"] .summary-file-chip,
+:root[data-theme="light"] .summary-file-chip-interactive:focus-visible { color: var(--accent-blue-light); }
+:root[data-theme="light"] .summary-file-inline-code { color: var(--accent-blue); }
+:root[data-theme="light"] .event-message { color: var(--text-secondary); }
+:root[data-theme="light"] .event-type.completion { color: #8250df; }
+
+/* ── Light-mode fixes: progress banner + global usage chip ────────────
+   The "Review in progress" loader and the usage chip hardcode dark
+   surfaces; the usage chip overrides previously only lived in the
+   connectors inline CSS, so the review viewer's chip stayed faint. These
+   global rules fix both. Light theme only. */
+:root[data-theme="light"] .loader-container {
+  background: var(--bg-secondary);
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-md);
+}
+:root[data-theme="light"] .usage-chip-tone-ok {
+  background: var(--status-success-bg); border-color: var(--status-success-border); color: var(--status-success-text);
+}
+:root[data-theme="light"] .usage-chip-tone-ok:hover { background: #c8f5d2; }
+:root[data-theme="light"] .usage-chip-tone-warn {
+  background: #fff4d6; border-color: #f5d98a; color: #9a6700;
+}
+:root[data-theme="light"] .usage-chip-tone-critical {
+  background: var(--status-error-bg); border-color: var(--status-error-border); color: var(--status-error-text);
+}
+:root[data-theme="light"] .usage-chip-tone-unavailable {
+  background: var(--bg-tertiary); border-color: var(--border-medium); color: var(--text-muted);
+}
+:root[data-theme="light"] .usage-chip-tone-unavailable:hover { background: var(--bg-hover); }
+:root[data-theme="light"] .usage-chip-popover {
+  background: var(--bg-secondary); border-color: var(--border-subtle); box-shadow: var(--shadow-lg);
+}
+:root[data-theme="light"] .usage-chip-title { color: var(--text-primary); }
+:root[data-theme="light"] .usage-chip-help,
+:root[data-theme="light"] .usage-chip-cell-label,
+:root[data-theme="light"] .usage-chip-cell-muted,
+:root[data-theme="light"] .usage-chip-members-title,
+:root[data-theme="light"] .usage-chip-footnote { color: var(--text-muted); }
+:root[data-theme="light"] .usage-chip-cell-value,
+:root[data-theme="light"] .usage-chip-cell-sub,
+:root[data-theme="light"] .usage-chip-members-row { color: var(--text-primary); }
+:root[data-theme="light"] .usage-chip-cell,
+:root[data-theme="light"] .usage-chip-members { background: var(--bg-tertiary); border-color: var(--border-subtle); }
+:root[data-theme="light"] .usage-banner-warn .usage-banner-title { color: #9a6700; }
+:root[data-theme="light"] .usage-banner-warn .usage-banner-text { color: #7a5200; }
+:root[data-theme="light"] .usage-banner-error .usage-banner-title { color: var(--status-error-text); }
+:root[data-theme="light"] .usage-banner-error .usage-banner-text { color: #a40e26; }

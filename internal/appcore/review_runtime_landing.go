@@ -193,6 +193,28 @@ Using git-lrc to AI-review every commit before it lands.
 <div class="stat-row"><span class="stat-label">Warnings</span><span class="stat-val">%s</span></div>`,
 		totalReviews, issuesFound, bugsCaught, critical, errsCount, warnings)
 
+	// Nexus-style metric cards for the dashboard hero, built from the same
+	// impact figures shown in the side panel.
+	statCards := fmt.Sprintf(`
+<div class="stat-cards">
+  <div class="stat-card sc-blue">
+    <div class="stat-card-top"><span class="stat-card-icon"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span><span class="stat-card-label">Reviews completed</span></div>
+    <div class="stat-card-value">%s</div>
+  </div>
+  <div class="stat-card sc-amber">
+    <div class="stat-card-top"><span class="stat-card-icon"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><span class="stat-card-label">Issues found</span></div>
+    <div class="stat-card-value">%s</div>
+  </div>
+  <div class="stat-card sc-green">
+    <div class="stat-card-top"><span class="stat-card-icon"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="stat-card-label">Bugs caught pre-prod</span></div>
+    <div class="stat-card-value">%s</div>
+  </div>
+  <div class="stat-card sc-red">
+    <div class="stat-card-top"><span class="stat-card-icon"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></svg></span><span class="stat-card-label">Critical issues</span></div>
+    <div class="stat-card-value">%s</div>
+  </div>
+</div>`, totalReviews, issuesFound, bugsCaught, critical)
+
 	tableRows := ""
 	if len(reviews) == 0 {
 		tableRows = `<tr><td colspan="5" style="text-align:center;padding:32px 0;color:#6a6a6a;font-style:italic;">No active reviews</td></tr>`
@@ -240,9 +262,9 @@ Using git-lrc to AI-review every commit before it lands.
 </div>
 <p class="gh-desc">AI-powered code review in your git commit flow.</p>
 <div class="gh-stats">
-  <div class="gh-stat"><span class="gh-stat-icon">★</span><span class="gh-stat-val">1048+</span><span class="gh-stat-lbl">stars</span></div>
-  <div class="gh-stat"><span class="gh-stat-icon">⑂</span><span class="gh-stat-val">157+</span><span class="gh-stat-lbl">forks</span></div>
-  <div class="gh-stat"><span class="gh-stat-icon">◎</span><span class="gh-stat-val">20+</span><span class="gh-stat-lbl">issues</span></div>
+  <div class="gh-stat"><span class="gh-stat-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span><span class="gh-stat-val">1048+</span><span class="gh-stat-lbl">stars</span></div>
+  <div class="gh-stat"><span class="gh-stat-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="3" r="1.8"/><circle cx="6" cy="15" r="1.8"/><circle cx="18" cy="6" r="1.8"/><path d="M18 7.8v.7a3 3 0 0 1-3 3H9a3 3 0 0 0-3 3v.7"/><line x1="6" y1="4.8" x2="6" y2="13.2"/></svg></span><span class="gh-stat-val">157+</span><span class="gh-stat-lbl">forks</span></div>
+  <div class="gh-stat"><span class="gh-stat-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="gh-stat-val">20+</span><span class="gh-stat-lbl">issues</span></div>
 </div>
 <div class="gh-lang"><span class="lang-dot"></span>Go</div>
 <a href="https://github.com/HexmosTech/git-lrc" target="_blank" class="star-btn">
@@ -263,9 +285,9 @@ Using git-lrc to AI-review every commit before it lands.
 </div>
 <p class="gh-desc">%s</p>
 <div class="gh-stats">
-  <div class="gh-stat"><span class="gh-stat-icon">★</span><span class="gh-stat-val">%d</span><span class="gh-stat-lbl">stars</span></div>
-  <div class="gh-stat"><span class="gh-stat-icon">⑂</span><span class="gh-stat-val">%d</span><span class="gh-stat-lbl">forks</span></div>
-  <div class="gh-stat"><span class="gh-stat-icon">◎</span><span class="gh-stat-val">%d</span><span class="gh-stat-lbl">issues</span></div>
+  <div class="gh-stat"><span class="gh-stat-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span><span class="gh-stat-val">%d</span><span class="gh-stat-lbl">stars</span></div>
+  <div class="gh-stat"><span class="gh-stat-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="3" r="1.8"/><circle cx="6" cy="15" r="1.8"/><circle cx="18" cy="6" r="1.8"/><path d="M18 7.8v.7a3 3 0 0 1-3 3H9a3 3 0 0 0-3 3v.7"/><line x1="6" y1="4.8" x2="6" y2="13.2"/></svg></span><span class="gh-stat-val">%d</span><span class="gh-stat-lbl">forks</span></div>
+  <div class="gh-stat"><span class="gh-stat-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="gh-stat-val">%d</span><span class="gh-stat-lbl">issues</span></div>
 </div>
 <div class="gh-lang"><span class="lang-dot"></span>%s</div>
 <a href="%s" target="_blank" class="star-btn">
@@ -285,56 +307,82 @@ Using git-lrc to AI-review every commit before it lands.
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LiveReview — Active Reviews</title>
+<script>(function(){try{var t=localStorage.getItem('lrc-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+<link rel="stylesheet" href="/static/styles.css">
+<script type="module" src="/static/theme.js"></script>
 <style>
+/* git-lrc Active Reviews landing — themed via the shared design system
+   in styles.css (:root = dark, [data-theme=light] = light). The floating
+   sun/moon toggle is mounted by theme.js. */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#1e1e1e;color:#cccccc;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;font-size:13px;min-height:100vh;}
-.titlebar{background:#323233;border-bottom:1px solid #111;height:35px;display:flex;align-items:center;padding:0 14px;gap:8px;user-select:none;position:fixed;top:0;left:0;right:0;z-index:10;}
-.titlebar-dot{color:#555;}.titlebar-text{color:#cccccc;font-size:12px;}
-.activity{position:fixed;top:35px;left:0;bottom:22px;width:48px;background:#333333;border-right:1px solid #252526;display:flex;flex-direction:column;align-items:center;padding-top:6px;gap:2px;z-index:9;}
-.act-btn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:#858585;cursor:pointer;border:none;background:none;border-radius:4px;}
-.act-btn:hover{color:#cccccc;}
-.act-btn.open{color:#cccccc;box-shadow:inset 2px 0 0 #569cd6;}
-.side-panel{position:fixed;top:35px;left:48px;bottom:22px;width:280px;background:#252526;border-right:1px solid #1a1a1a;display:none;flex-direction:column;z-index:8;overflow:hidden;}
+body{background:var(--ambient,var(--bg-primary));color:var(--text-secondary);font-family:var(--font-sans,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);font-size:13px;min-height:100vh;-webkit-font-smoothing:antialiased;}
+.titlebar{background:var(--surface-glass);backdrop-filter:blur(12px) saturate(140%%);-webkit-backdrop-filter:blur(12px) saturate(140%%);border-bottom:1px solid var(--border-subtle);height:46px;display:flex;align-items:center;padding:0 18px;gap:8px;user-select:none;position:fixed;top:0;left:0;right:0;z-index:10;box-shadow:var(--shadow-sm);}
+.titlebar-dot{color:var(--text-dim);}.titlebar-text{color:var(--text-secondary);font-size:13px;font-weight:600;}
+.activity{position:fixed;top:46px;left:0;bottom:26px;width:54px;background:var(--bg-secondary);border-right:1px solid var(--border-subtle);display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:4px;z-index:9;}
+.act-btn{width:42px;height:42px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);cursor:pointer;border:none;background:none;border-radius:var(--radius-sm);transition:all .15s;}
+.act-btn:hover{color:var(--text-primary);background:var(--bg-hover);}
+.act-btn.open{color:var(--accent-blue);background:rgba(10,111,209,0.12);box-shadow:inset 2px 0 0 var(--accent-blue);}
+.side-panel{position:fixed;top:46px;left:54px;bottom:26px;width:300px;background:var(--bg-secondary);border-right:1px solid var(--border-subtle);display:none;flex-direction:column;z-index:8;overflow:hidden;box-shadow:var(--shadow-md);}
 .side-panel.visible{display:flex;}
-.panel-hdr{padding:9px 12px 8px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#bbbbbb;border-bottom:1px solid #1a1a1a;flex-shrink:0;}
-.panel-body{padding:12px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
-.stat-row{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;border-bottom:1px solid #2d2d2d;}
+.panel-hdr{padding:12px 14px 12px 16px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;}
+.panel-collapse{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--radius-sm);border:1px solid var(--border-subtle);background:var(--bg-tertiary);color:var(--text-muted);cursor:pointer;transition:all .15s;}
+.panel-collapse:hover{color:var(--text-primary);border-color:var(--accent-blue);background:var(--bg-hover);}
+.panel-body{padding:14px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border-subtle);}
 .stat-row:last-child{border-bottom:none;}
-.stat-label{color:#9a9a9a;font-size:12px;}.stat-val{color:#9cdcfe;font-size:12px;font-family:monospace;font-weight:600;}
-.share-textarea{width:100%%;height:200px;background:#1e1e1e;border:1px solid #3c3c3c;border-radius:3px;color:#cccccc;font-size:11px;font-family:"Segoe UI",system-ui,sans-serif;line-height:1.6;padding:10px;resize:vertical;outline:none;}
-.share-textarea:focus{border-color:#569cd6;}
-.copy-btn{width:100%%;padding:6px 0;background:#0e639c;border:none;border-radius:3px;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s;flex-shrink:0;}
-.copy-btn:hover{background:#1177bb;}.copy-btn.copied{background:#16825d;}.copy-btn.failed{background:#c62828;}
+.stat-label{color:var(--text-muted);font-size:12px;}.stat-val{color:var(--accent-blue-light);font-size:13px;font-family:ui-monospace,SFMono-Regular,monospace;font-weight:700;}
+.share-textarea{width:100%%;height:200px;background:var(--bg-tertiary);border:1px solid var(--border-medium);border-radius:var(--radius-sm);color:var(--text-secondary);font-size:11px;line-height:1.6;padding:10px;resize:vertical;outline:none;}
+.share-textarea:focus{border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(10,111,209,0.18);}
+.copy-btn{width:100%%;padding:9px 0;background:var(--accent-gradient);border:none;border-radius:var(--radius-sm);color:#fff;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:filter .15s;flex-shrink:0;box-shadow:var(--shadow-sm);}
+.copy-btn:hover{filter:brightness(1.06);}.copy-btn.copied{background:var(--accent-green);}.copy-btn.failed{background:var(--accent-red);}
 .gh-name{display:flex;align-items:center;gap:7px;}
-.gh-link{color:#9cdcfe;text-decoration:none;font-size:13px;font-weight:600;}.gh-link:hover{text-decoration:underline;}
-.gh-desc{color:#9a9a9a;font-size:11px;line-height:1.5;}
-.gh-stats{display:flex;gap:14px;}
+.gh-name svg{color:var(--text-primary)!important;}
+.gh-link{color:var(--accent-blue-light);text-decoration:none;font-size:14px;font-weight:700;}.gh-link:hover{text-decoration:underline;}
+.gh-desc{color:var(--text-muted);font-size:12px;line-height:1.5;}
+.gh-stats{display:flex;gap:16px;}
 .gh-stat{display:flex;align-items:center;gap:4px;}
-.gh-stat-icon{font-size:13px;color:#e3b341;}
-.gh-stat-val{color:#cccccc;font-size:12px;font-weight:600;}
-.gh-stat-lbl{color:#6a6a6a;font-size:11px;}
-.gh-lang{display:flex;align-items:center;gap:5px;color:#9a9a9a;font-size:11px;}
+.gh-stat-icon{font-size:13px;color:var(--accent-yellow);}
+.gh-stat-val{color:var(--text-primary);font-size:13px;font-weight:700;}
+.gh-stat-lbl{color:var(--text-dim);font-size:11px;}
+.gh-lang{display:flex;align-items:center;gap:5px;color:var(--text-muted);font-size:11px;}
 .lang-dot{width:10px;height:10px;border-radius:50%%;background:#00add8;flex-shrink:0;}
-.star-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:7px 0;background:#238636;border:none;border-radius:3px;color:#fff;font-size:12px;cursor:pointer;text-decoration:none;transition:background .15s;width:100%%;}
-.star-btn:hover{background:#2ea043;}
-.gh-cta{color:#9a9a9a;font-size:12px;line-height:1.6;}
-.gh-cta a{color:#569cd6;text-decoration:none;}.gh-cta a:hover{text-decoration:underline;}
-.main{margin-left:48px;margin-top:35px;padding:24px 28px;overflow-y:auto;height:calc(100vh - 57px);transition:margin-left .15s;}
-.main.shifted{margin-left:328px;}
-.sec-hdr{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#bbbbbb;margin-bottom:12px;display:flex;align-items:center;gap:7px;}
-.badge{background:#0e639c;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;letter-spacing:0;text-transform:none;}
-table{width:100%%;border-collapse:collapse;}
-thead tr{border-bottom:1px solid #3c3c3c;}
-th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#858585;padding:0 12px 8px;}
-th:first-child{padding-left:4px;}
-.trow{cursor:pointer;border-bottom:1px solid #2a2a2a;transition:background .1s;}
-.trow:hover{background:#2a2d2e;}.trow:last-child{border-bottom:none;}
-td{padding:10px 12px;vertical-align:middle;}td:first-child{padding-left:4px;}
-.td-name{display:flex;align-items:center;gap:7px;white-space:nowrap;}
-.name-link{color:#9cdcfe;text-decoration:none;font-size:13px;}.name-link:hover{text-decoration:underline;}
-.td-repo{color:#ce9178;font-size:12px;white-space:nowrap;}
-.td-id,.td-port,.td-started{color:#9a9a9a;font-size:12px;white-space:nowrap;}
-.statusbar{position:fixed;bottom:0;left:0;right:0;height:22px;background:#007acc;display:flex;align-items:center;padding:0 10px;gap:14px;font-size:11px;color:#fff;}
+.star-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 0;background:var(--accent-green);border:none;border-radius:var(--radius-sm);color:#fff;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;transition:filter .15s;width:100%%;box-shadow:var(--shadow-sm);}
+.star-btn:hover{filter:brightness(1.08);}
+.gh-cta{color:var(--text-muted);font-size:12px;line-height:1.6;}
+.gh-cta a{color:var(--accent-blue-light);text-decoration:none;}.gh-cta a:hover{text-decoration:underline;}
+.main{margin-left:54px;margin-top:46px;padding:28px 32px;overflow-y:auto;height:calc(100vh - 72px);transition:margin-left .15s;}
+.main.shifted{margin-left:354px;}
+.page-hero{margin-bottom:22px;}
+.page-hero h1{font-size:23px;font-weight:800;letter-spacing:-0.5px;color:var(--text-primary);margin-bottom:4px;}
+.page-hero p{color:var(--text-muted);font-size:13px;}
+.stat-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:28px;}
+.stat-card{background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:18px;box-shadow:var(--shadow-md),var(--ring-inset-top);transition:transform .2s,box-shadow .2s;}
+.stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);}
+.stat-card-top{display:flex;align-items:center;gap:9px;margin-bottom:13px;}
+.stat-card-icon{width:36px;height:36px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+.stat-card-label{font-size:12px;font-weight:600;color:var(--text-muted);}
+.stat-card-value{font-size:30px;font-weight:800;letter-spacing:-0.6px;color:var(--text-primary);font-variant-numeric:tabular-nums;line-height:1;}
+.sc-blue .stat-card-icon{background:rgba(10,111,209,0.14);color:var(--accent-blue);}
+.sc-green .stat-card-icon{background:rgba(34,197,94,0.16);color:var(--accent-green);}
+.sc-red .stat-card-icon{background:rgba(239,68,68,0.15);color:var(--accent-red);}
+.sc-amber .stat-card-icon{background:rgba(245,158,11,0.18);color:var(--accent-yellow);}
+.sec-hdr{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.badge{background:var(--accent-blue);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:var(--radius-pill);letter-spacing:0;text-transform:none;}
+table{width:100%%;border-collapse:separate;border-spacing:0 8px;}
+th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);padding:0 14px 4px;}
+.trow{cursor:pointer;transition:transform .12s,box-shadow .15s;}
+.trow td{background:var(--surface-card);border-top:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);box-shadow:var(--shadow-xs);}
+.trow td:first-child{border-left:1px solid var(--border-subtle);border-top-left-radius:var(--radius-md);border-bottom-left-radius:var(--radius-md);}
+.trow td:last-child{border-right:1px solid var(--border-subtle);border-top-right-radius:var(--radius-md);border-bottom-right-radius:var(--radius-md);}
+.trow:hover td{border-color:var(--accent-blue);}
+td{padding:13px 14px;vertical-align:middle;}
+.td-name{display:flex;align-items:center;gap:8px;white-space:nowrap;}
+.td-name svg{color:var(--accent-blue)!important;}
+.name-link{color:var(--text-primary);text-decoration:none;font-size:13px;font-weight:600;}.name-link:hover{color:var(--accent-blue-light);}
+.td-repo{color:var(--accent-teal,#0e7c66);font-size:12px;white-space:nowrap;font-family:ui-monospace,monospace;}
+.td-id,.td-port,.td-started{color:var(--text-muted);font-size:12px;white-space:nowrap;}
+.statusbar{position:fixed;bottom:0;left:0;right:0;height:26px;background:var(--accent-gradient);display:flex;align-items:center;padding:0 12px;gap:14px;font-size:11px;color:#fff;}
+.lrc-theme-toggle{left:66px!important;bottom:36px!important;}
 </style>
 </head>
 <body>
@@ -345,7 +393,7 @@ td{padding:10px 12px;vertical-align:middle;}td:first-child{padding-left:4px;}
   <span class="titlebar-text">Active Reviews</span>
 </div>
 <div class="activity">
-  <button class="act-btn" id="statsBtn" title="Impact stats" onclick="toggle('stats')">
+  <button class="act-btn open" id="statsBtn" title="Impact stats" onclick="toggle('stats')">
     <svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
   </button>
   <button class="act-btn" id="shareBtn" title="Share impact" onclick="toggle('share')">
@@ -356,13 +404,13 @@ td{padding:10px 12px;vertical-align:middle;}td:first-child{padding-left:4px;}
   </button>
 </div>
 
-<div class="side-panel" id="statsPanel">
-  <div class="panel-hdr">Impact Stats</div>
+<div class="side-panel visible" id="statsPanel">
+  <div class="panel-hdr">Impact Stats<button class="panel-collapse" onclick="toggle('stats')" title="Collapse panel" aria-label="Collapse panel"><svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button></div>
   <div class="panel-body">%s</div>
 </div>
 
 <div class="side-panel" id="sharePanel">
-  <div class="panel-hdr">Share Impact</div>
+  <div class="panel-hdr">Share Impact<button class="panel-collapse" onclick="toggle('share')" title="Collapse panel" aria-label="Collapse panel"><svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button></div>
   <div class="panel-body">
     <textarea class="share-textarea" id="shareText">%s</textarea>
     <button class="copy-btn" id="copyBtn" onclick="copyShare()">
@@ -373,15 +421,20 @@ td{padding:10px 12px;vertical-align:middle;}td:first-child{padding-left:4px;}
 </div>
 
 <div class="side-panel" id="infoPanel">
-  <div class="panel-hdr">About git-lrc</div>
+  <div class="panel-hdr">About git-lrc<button class="panel-collapse" onclick="toggle('info')" title="Collapse panel" aria-label="Collapse panel"><svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button></div>
   <div class="panel-body">
     <p class="gh-cta">Is it being useful? If you haven't starred, <a href="https://github.com/HexmosTech/git-lrc" target="_blank">star us on GitHub</a> — it really helps!</p>
     %s
   </div>
 </div>
 
-<div class="main" id="main">
-  <div class="sec-hdr">Active <span class="badge">%d</span></div>
+<div class="main shifted" id="main">
+  <div class="page-hero">
+    <h1>Dashboard</h1>
+    <p>Your AI code-review impact and live review sessions.</p>
+  </div>
+  %s
+  <div class="sec-hdr">Active Reviews <span class="badge">%d</span></div>
   <table>
     <thead><tr><th>Name</th><th>Repository</th><th>ID</th><th>Port</th><th>Started</th></tr></thead>
     <tbody>%s</tbody>
@@ -390,7 +443,7 @@ td{padding:10px 12px;vertical-align:middle;}td:first-child{padding-left:4px;}
 <div class="statusbar"><a href="https://hexmos.com/livereview/" target="_blank" style="color:#fff;text-decoration:none;">LiveReview</a><span>git-lrc</span></div>
 <script>
 const COPY_SVG = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy message';
-let openPanel = null;
+let openPanel = 'stats';
 const PANELS = ['stats','share','info'];
 function toggle(which) {
   const main = document.getElementById('main');
@@ -431,7 +484,7 @@ function copyShare() {
 }
 </script>
 </body>
-</html>`, statsRows, shareText, ghPanel, len(reviews), tableRows)
+</html>`, statsRows, shareText, ghPanel, statCards, len(reviews), tableRows)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, page)

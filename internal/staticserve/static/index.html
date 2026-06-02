@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LiveReview Results</title>
+
+    <!-- Theme bootstrap: set data-theme before first paint (no flash).
+         Stored choice wins; otherwise follow the OS preference. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('lrc-theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     
     <!-- Favicon -->
     <!-- Safe: integrity is for externally fetched subresources; this favicon is an inline data URI. -->
@@ -25,6 +41,9 @@
     
     <!-- Markdown parser (vendored local copy) -->
     <script src="/static/vendor/marked.min.js"></script>
+
+    <!-- Global light/dark theme controller + floating toggle -->
+    <script type="module" src="/static/theme.js"></script>
 </head>
 <body>
     <div id="app">
