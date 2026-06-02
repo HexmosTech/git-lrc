@@ -173,11 +173,61 @@ func TestGenerateEditorWrapperScriptUsesMarkerAndBackup(t *testing.T) {
 		"OVERRIDE_FILE=\"$TARGET_DIR/" + commitMessageFile + "\"",
 		"OVERRIDE_STATE=\"$TARGET_DIR/livereview_editor_override\"",
 		"if [ -f \"$OVERRIDE_STATE\" ]; then",
+		"if editor_command_exists \"$BACKUP_EDITOR\"; then",
 		"run_editor_command \"$BACKUP_EDITOR\" \"$@\"",
 	}
 	for _, want := range checks {
 		if !strings.Contains(script, want) {
 			t.Fatalf("wrapper script missing %q", want)
 		}
+	}
+}
+
+func TestShouldPersistEditorBackup(t *testing.T) {
+	tests := []struct {
+		name        string
+		current     string
+		wrapperPath string
+		want        bool
+	}{
+		{
+			name:        "empty editor",
+			current:     "",
+			wrapperPath: "/home/user/.git-hooks/lrc/lrc_editor.sh",
+			want:        false,
+		},
+		{
+			name:        "same wrapper path",
+			current:     "/home/user/.git-hooks/lrc/lrc_editor.sh",
+			wrapperPath: "/home/user/.git-hooks/lrc/lrc_editor.sh",
+			want:        false,
+		},
+		{
+			name:        "lrc wrapper command from another path",
+			current:     "/tmp/lrc-test-hooks.ABCD/lrc/lrc_editor.sh",
+			wrapperPath: "/home/user/.git-hooks/lrc/lrc_editor.sh",
+			want:        false,
+		},
+		{
+			name:        "tmp test hooks path",
+			current:     "/tmp/lrc-test-hooks.QGAqgJ/lrc/lrc_editor.sh",
+			wrapperPath: "/home/user/.git-hooks/lrc/lrc_editor.sh",
+			want:        false,
+		},
+		{
+			name:        "valid editor command",
+			current:     "code --wait",
+			wrapperPath: "/home/user/.git-hooks/lrc/lrc_editor.sh",
+			want:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldPersistEditorBackup(tt.current, tt.wrapperPath)
+			if got != tt.want {
+				t.Fatalf("shouldPersistEditorBackup(%q, %q) = %v, want %v", tt.current, tt.wrapperPath, got, tt.want)
+			}
+		})
 	}
 }

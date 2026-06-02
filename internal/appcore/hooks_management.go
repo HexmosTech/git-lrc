@@ -740,7 +740,7 @@ func installEditorWrapper(gitDir string) error {
 	backupPath := filepath.Join(gitDir, editorBackupFile)
 
 	currentEditor, _ := readGitConfig(repoRoot, "core.editor")
-	if currentEditor != "" && currentEditor != scriptPath {
+	if shouldPersistEditorBackup(currentEditor, scriptPath) {
 		_ = storage.WriteFile(backupPath, []byte(currentEditor), 0600)
 	}
 
@@ -766,7 +766,7 @@ func installGlobalEditorWrapper(managedDir string) error {
 	backupPath := filepath.Join(managedDir, editorBackupFile)
 
 	currentEditor, _ := readGlobalGitConfig("core.editor")
-	if currentEditor != "" && currentEditor != scriptPath {
+	if shouldPersistEditorBackup(currentEditor, scriptPath) {
 		_ = storage.WriteFile(backupPath, []byte(currentEditor), 0600)
 	}
 
@@ -837,6 +837,15 @@ run_editor_command() {
 	exec sh -c 'editor_cmd="$1"; shift; exec $editor_cmd "$@"' sh "$editor_cmd" "$@"
 }
 
+editor_command_exists() {
+	editor_cmd="$1"
+	editor_bin="${editor_cmd%% *}"
+	if [ -z "$editor_bin" ]; then
+		return 1
+	fi
+	command -v "$editor_bin" >/dev/null 2>&1
+}
+
 if [ $# -gt 0 ] && [ -n "$1" ]; then
 	TARGET_FILE="$1"
 	TARGET_DIR="$(dirname "$TARGET_FILE")"
@@ -854,7 +863,9 @@ fi
 if [ -f "$BACKUP_FILE" ] && [ -s "$BACKUP_FILE" ]; then
 	BACKUP_EDITOR="$(cat "$BACKUP_FILE" 2>/dev/null || true)"
 	if [ -n "$BACKUP_EDITOR" ]; then
-		run_editor_command "$BACKUP_EDITOR" "$@"
+		if editor_command_exists "$BACKUP_EDITOR"; then
+			run_editor_command "$BACKUP_EDITOR" "$@"
+		fi
 	fi
 fi
 
@@ -872,6 +883,33 @@ fi
 
 exec vi "$@"
 `, backupPath, commitMessageFile)
+}
+
+func shouldPersistEditorBackup(currentEditor, wrapperPath string) bool {
+	trimmed := strings.TrimSpace(currentEditor)
+	if trimmed == "" {
+		return false
+	}
+
+	if trimmed == wrapperPath {
+		return false
+	}
+
+	parts := strings.Fields(trimmed)
+	if len(parts) == 0 {
+		return false
+	}
+
+	editorCmd := parts[0]
+	if filepath.Base(editorCmd) == editorWrapperScript {
+		return false
+	}
+
+	if strings.Contains(editorCmd, string(filepath.Separator)+"tmp"+string(filepath.Separator)+"lrc-test-hooks.") {
+		return false
+	}
+
+	return true
 }
 
 // readGitConfig reads a single git config key from the repository root.
