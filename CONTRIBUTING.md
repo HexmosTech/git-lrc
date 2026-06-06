@@ -61,7 +61,7 @@ This keeps the project focused and avoids PRs that arrive before the problem has
 
 ## Getting Started Locally
 
-Use the Go version declared in [go.mod](./go.mod). At the time of writing, that is Go 1.25.10.
+Use the Go version declared in [go.mod](./go.mod).
 
 Build and install git-lrc locally with:
 
