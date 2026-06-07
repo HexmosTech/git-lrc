@@ -263,6 +263,12 @@ if [ "$RELEASE_CHANNEL" = "internal" ]; then
 fi
 
 # Install location (user-writable, no sudo needed)
+# Install location (user-writable, no sudo needed)
+if [ "$(id -u)" -eq 0 ]; then
+    echo -e "${RED}Error: Do not run this installer with sudo. Run as your normal user:${NC}"
+    echo "  curl -fsSL https://hexmos.com/lrc-install.sh | bash"
+    exit 1
+fi
 INSTALL_DIR="$HOME/.local/bin"
 INSTALL_PATH="$INSTALL_DIR/lrc"
 GIT_INSTALL_PATH="$INSTALL_DIR/git-lrc"
