@@ -174,17 +174,17 @@ export async function createFeedbackPopup() {
     const buttonColor = () => {
       if (isActive && type === "up") return "#22c55e";
       if (isActive && type === "down") return "#ef4444";
-      return "rgba(255,255,255,0.65)";
+      return "var(--text-muted)";
     };
     const buttonBorder = () => {
       if (isActive && type === "up") return "1px solid #22c55e";
       if (isActive && type === "down") return "1px solid #ef4444";
-      return "1px solid rgba(255,255,255,0.18)";
+      return "1px solid var(--border-medium)";
     };
     const buttonBg = () => {
       if (isActive && type === "up") return "rgba(34,197,94,0.15)";
       if (isActive && type === "down") return "rgba(239,68,68,0.15)";
-      return "rgba(255,255,255,0.07)";
+      return "var(--bg-tertiary)";
     };
 
     const popupWidth = () => 420;

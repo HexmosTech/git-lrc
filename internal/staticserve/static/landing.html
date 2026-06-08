@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>git-lrc — AI code review on every commit</title>
+  <!-- Theme bootstrap (no flash) -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('lrc-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+    })();
+  </script>
+  <!-- nosemgrep: html.security.audit.missing-integrity.missing-integrity -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230078d4' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%230078d4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script type="module" src="/static/theme.js"></script>
+  <style>
+    /* ── git-lrc landing — minimalist, premium (Apple / Stripe / Notion) ── */
+    html, body { height: auto; overflow: auto; }
+    body {
+      background: var(--ambient, var(--bg-primary));
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+    .lp { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    a { color: inherit; }
+
+    /* Nav */
+    .lp-nav {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; gap: 28px;
+      padding: 14px 0;
+      background: color-mix(in srgb, var(--bg-primary) 75%, transparent);
+      backdrop-filter: blur(14px) saturate(140%);
+      -webkit-backdrop-filter: blur(14px) saturate(140%);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .lp-nav-inner { display: flex; align-items: center; gap: 28px; width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .lp-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; color: var(--text-primary); letter-spacing: -0.3px; text-decoration: none; }
+    .lp-brand img { width: 28px; height: 28px; }
+    .lp-nav-links { display: flex; align-items: center; gap: 22px; margin-left: 8px; }
+    .lp-nav-links a { color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 500; transition: color .15s; }
+    .lp-nav-links a:hover { color: var(--text-primary); }
+    .lp-nav-cta { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-weight: 600; font-size: 14px; text-decoration: none; cursor: pointer;
+      padding: 11px 20px; border-radius: var(--radius-pill); border: 1px solid transparent;
+      transition: transform .15s cubic-bezier(.22,1,.36,1), box-shadow .2s, background .15s, border-color .15s, filter .15s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent-gradient); color: #fff; box-shadow: var(--shadow-accent); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--shadow-accent-strong); }
+    .btn-ghost { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-medium); box-shadow: var(--shadow-xs); }
+    .btn-ghost:hover { transform: translateY(-2px); border-color: var(--text-dim); box-shadow: var(--shadow-sm); }
+    .btn-lg { padding: 14px 26px; font-size: 15px; }
+    .btn-link { color: var(--accent-blue-light); font-weight: 600; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-link:hover { gap: 9px; }
+    .btn-link svg { transition: transform .15s; }
+
+    /* Hero */
+    .hero { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center; padding: 84px 0 72px; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
+      color: var(--accent-blue-light);
+      background: rgba(10,111,209,0.08); border: 1px solid rgba(10,111,209,0.20);
+      padding: 6px 12px; border-radius: var(--radius-pill); margin-bottom: 22px;
+    }
+    .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-green); box-shadow: 0 0 0 3px rgba(26,127,55,0.18); }
+    .hero h1 {
+      font-size: clamp(40px, 5.4vw, 66px); font-weight: 800; line-height: 1.02;
+      letter-spacing: -0.035em; color: var(--text-primary); margin: 0 0 22px;
+    }
+    .hero h1 .grad {
+      background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hero p.lead { font-size: 19px; color: var(--text-muted); max-width: 30em; margin: 0 0 32px; }
+    .hero-cta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .hero-meta { margin-top: 26px; display: flex; align-items: center; gap: 18px; color: var(--text-dim); font-size: 13px; flex-wrap: wrap; }
+    .hero-meta .mi { display: inline-flex; align-items: center; gap: 7px; }
+    .hero-meta svg { color: var(--accent-green); }
+
+    /* Product mock */
+    .mock {
+      background: var(--surface-card); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-lg), var(--ring-inset-top);
+      overflow: hidden;
+    }
+    .mock-bar { display: flex; align-items: center; gap: 7px; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); }
+    .mock-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .mock-dot.r { background: #ff5f57; } .mock-dot.y { background: #febc2e; } .mock-dot.g { background: #28c840; }
+    .mock-title { margin-left: 8px; font-size: 12px; color: var(--text-dim); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .mock-body { padding: 18px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+    .mock-line { padding: 3px 10px; border-radius: 6px; color: var(--text-secondary); white-space: pre; }
+    .mock-line.add { background: rgba(26,127,55,0.12); color: var(--accent-green); }
+    .mock-line.muted { color: var(--text-dim); }
+    .mock-comment {
+      margin-top: 14px; background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 14px;
+      font-family: var(--font-sans);
+    }
+    .mock-comment-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .sev { font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: var(--radius-pill); }
+    .sev-crit { background: var(--status-error-bg); color: var(--status-error-text); border: 1px solid var(--status-error-border); }
+    .mock-comment-hdr .cat { font-weight: 700; color: var(--text-primary); font-size: 13px; }
+    .mock-comment-hdr .when { color: var(--text-dim); font-size: 11px; }
+    .mock-comment-body { color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+
+    /* Section scaffolding */
+    section { padding: 64px 0; }
+    .sec-head { text-align: center; max-width: 640px; margin: 0 auto 48px; }
+    .sec-head .kicker { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-blue-light); margin-bottom: 12px; }
+    .sec-head h2 { font-size: clamp(28px, 3.6vw, 40px); font-weight: 800; letter-spacing: -0.03em; color: var(--text-primary); margin: 0 0 14px; }
+    .sec-head p { font-size: 17px; color: var(--text-muted); margin: 0; }
+
+    /* Feature grid */
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .feature {
+      background: var(--surface-card); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg); padding: 26px; box-shadow: var(--shadow-sm), var(--ring-inset-top);
+      transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .2s, border-color .15s;
+    }
+    .feature:hover { transform: translateY(-3px); box-shadow: var(--shadow-md), var(--ring-inset-top); border-color: var(--border-medium); }
+    .feature-icon { width: 44px; height: 44px; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; background: rgba(10,111,209,0.10); color: var(--accent-blue); }
+    .feature.i-green .feature-icon { background: rgba(26,127,55,0.12); color: var(--accent-green); }
+    .feature.i-purple .feature-icon { background: rgba(130,80,223,0.12); color: #8250df; }
+    .feature.i-amber .feature-icon { background: rgba(245,158,11,0.16); color: var(--accent-yellow); }
+    .feature.i-red .feature-icon { background: var(--status-error-bg); color: var(--accent-red); }
+    .feature h3 { font-size: 17px; font-weight: 700; color: var(--text-primary); margin: 0 0 8px; letter-spacing: -0.01em; }
+    .feature p { font-size: 14px; color: var(--text-muted); margin: 0; line-height: 1.6; }
+
+    /* Steps */
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: step; }
+    .step { position: relative; padding: 26px; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); background: var(--surface-card); box-shadow: var(--shadow-xs); }
+    .step .num { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; background: var(--accent-gradient); box-shadow: var(--shadow-accent); margin-bottom: 14px; }
+    .step h3 { font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px; }
+    .step p { font-size: 14px; color: var(--text-muted); margin: 0; }
+    .step code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 1px 6px; font-size: 12.5px; color: var(--accent-blue-light); }
+
+    /* CTA band */
+    .cta-band {
+      text-align: center; background: var(--surface-card); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg); padding: 56px 32px; box-shadow: var(--shadow-md), var(--ring-inset-top);
+      position: relative; overflow: hidden;
+    }
+    .cta-band::before { content: ""; position: absolute; inset: 0; background: radial-gradient(600px 200px at 50% -20%, rgba(10,111,209,0.10), transparent 70%); pointer-events: none; }
+    .cta-band h2 { font-size: clamp(26px, 3.4vw, 38px); font-weight: 800; letter-spacing: -0.03em; color: var(--text-primary); margin: 0 0 14px; position: relative; }
+    .cta-band p { font-size: 17px; color: var(--text-muted); margin: 0 0 28px; position: relative; }
+    .cta-band .hero-cta { justify-content: center; position: relative; }
+
+    /* Footer */
+    footer { border-top: 1px solid var(--border-subtle); padding: 36px 0 64px; margin-top: 24px; }
+    .foot-inner { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; color: var(--text-dim); font-size: 13px; }
+    .foot-inner a { color: var(--text-muted); text-decoration: none; }
+    .foot-inner a:hover { color: var(--text-primary); }
+    .foot-sep { margin-left: auto; }
+
+    /* Git commit graph (hero visual) */
+    .gitgraph { display: flex; align-items: center; justify-content: center; }
+    .gitgraph svg { width: 100%; max-width: 420px; height: auto; }
+    .gg-guide { stroke: var(--border-medium); stroke-width: 2; }
+    .gg-branch { stroke-width: 2.5; fill: none; stroke-linecap: round; }
+    .gg-node-fill-blue { fill: #dbeafe; } .gg-stroke-blue { stroke: #3b82f6; }
+    .gg-node-fill-purple { fill: #ede9fe; } .gg-stroke-purple { stroke: #8250df; }
+    .gg-node-fill-green { fill: #d1fae5; } .gg-stroke-green { stroke: #22c55e; }
+    .gg-node { stroke-width: 2.5; }
+    .gg-shape-blue { fill: #2563eb; } .gg-shape-purple { fill: #7c3aed; } .gg-shape-green { fill: #16a34a; }
+    .gg-label { fill: var(--text-dim); font-size: 11px; font-weight: 600; font-family: ui-monospace, monospace; }
+
+    /* Browser / window chrome (showcase) */
+    .browser {
+      background: var(--surface-card); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-lg), var(--ring-inset-top); overflow: hidden;
+    }
+    .browser-bar { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-tertiary); }
+    .browser-url { margin-left: 10px; flex: 1; max-width: 340px; font-size: 12px; color: var(--text-dim); background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-pill); padding: 5px 12px; font-family: ui-monospace, monospace; }
+    .browser-body { padding: 22px; }
+
+    /* Dashboard mock */
+    .dash-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+    .dash-head h4 { font-size: 16px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em; }
+    .dash-head span { font-size: 12px; color: var(--text-dim); }
+    .dash-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+    .dash-stat { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px; box-shadow: var(--shadow-xs); }
+    .dash-stat .ds-top { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+    .dash-stat .ds-ic { width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; }
+    .dash-stat .ds-lbl { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+    .dash-stat .ds-val { font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    .ds-blue .ds-ic { background: rgba(10,111,209,0.12); color: var(--accent-blue); }
+    .ds-amber .ds-ic { background: rgba(245,158,11,0.16); color: var(--accent-yellow); }
+    .ds-green .ds-ic { background: rgba(34,197,94,0.16); color: var(--accent-green); }
+    .ds-red .ds-ic { background: var(--status-error-bg); color: var(--accent-red); }
+    .dash-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-secondary); margin-bottom: 8px; box-shadow: var(--shadow-xs); }
+    .dash-row .file { font-family: ui-monospace, monospace; font-size: 13px; color: var(--text-primary); font-weight: 600; }
+    .dash-row .ago { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+    .pill { font-size: 10px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; padding: 3px 9px; border-radius: var(--radius-pill); }
+    .pill-crit { background: var(--status-error-bg); color: var(--status-error-text); border: 1px solid var(--status-error-border); }
+    .pill-warn { background: #fff4d6; color: #9a6700; border: 1px solid #f5d98a; }
+    .pill-info { background: rgba(10,111,209,0.12); color: var(--accent-blue-light); border: 1px solid rgba(10,111,209,0.30); }
+
+    /* Showcase layout */
+    .showcase { display: grid; grid-template-columns: 1.25fr 0.75fr; gap: 22px; align-items: stretch; }
+    .showcase .terminal-wrap { display: flex; }
+    .showcase .browser, .showcase .mock { width: 100%; }
+
+    @media (max-width: 880px) {
+      .hero { grid-template-columns: 1fr; gap: 40px; padding: 56px 0 48px; }
+      .features, .steps { grid-template-columns: 1fr; }
+      .lp-nav-links { display: none; }
+      .showcase { grid-template-columns: 1fr; }
+      .dash-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Nav -->
+  <nav class="lp-nav">
+    <div class="lp-nav-inner">
+      <a class="lp-brand" href="#top">
+        <img alt="git-lrc" src="https://hexmos.com/freedevtools/public/lr_logo.svg" onerror="this.style.display='none'" />
+        git-lrc
+      </a>
+      <div class="lp-nav-links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="https://hexmos.com/livereview/git-lrc/" target="_blank" rel="noopener noreferrer">Docs</a>
+        <a href="https://github.com/HexmosTech/git-lrc/discussions" target="_blank" rel="noopener noreferrer">Community</a>
+      </div>
+      <div class="lp-nav-cta">
+        <a class="btn-link" href="https://github.com/HexmosTech/git-lrc" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a class="btn btn-primary" href="/static/ui-connectors.html#/home">Open dashboard</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="lp" id="top">
+    <!-- Hero -->
+    <header class="hero">
+      <div>
+        <span class="eyebrow"><span class="dot"></span> Free · runs on every commit</span>
+        <h1>AI code review,<br /><span class="grad">before it lands.</span></h1>
+        <p class="lead">
+          git-lrc hooks into <code style="font-family:ui-monospace,monospace">git commit</code> and reviews every diff
+          the moment you write it — catching silently removed logic, behavior changes and bugs before they reach production.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href="https://hexmos.com/livereview/git-lrc/" target="_blank" rel="noopener noreferrer">
+            Get started
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+          <a class="btn btn-ghost btn-lg" href="https://github.com/HexmosTech/git-lrc" target="_blank" rel="noopener noreferrer">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+            Star on GitHub
+          </a>
+        </div>
+        <div class="hero-meta">
+          <span class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> 60-second setup</span>
+          <span class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Runs locally by default</span>
+          <span class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> No cost</span>
+        </div>
+      </div>
+
+      <!-- Git commit graph illustration -->
+      <div class="gitgraph" aria-hidden="true">
+        <svg viewBox="0 0 360 460" xmlns="http://www.w3.org/2000/svg">
+          <!-- guide lines -->
+          <line class="gg-guide" x1="96" y1="40" x2="96" y2="420" />
+          <line class="gg-guide" x1="200" y1="150" x2="200" y2="330" />
+          <!-- branch curves -->
+          <path class="gg-branch gg-stroke-purple" d="M96 150 C 150 150, 200 160, 200 200" />
+          <path class="gg-branch gg-stroke-purple" d="M200 280 C 200 320, 150 320, 96 320" />
+          <path class="gg-branch gg-stroke-green" d="M200 240 C 250 240, 280 230, 280 196" />
+          <!-- nodes -->
+          <!-- diamond (blue) -->
+          <circle class="gg-node gg-node-fill-blue gg-stroke-blue" cx="96" cy="70" r="19" />
+          <rect class="gg-shape-blue" x="88" y="62" width="16" height="16" rx="2" transform="rotate(45 96 70)" />
+          <!-- square (purple) — branch point -->
+          <circle class="gg-node gg-node-fill-purple gg-stroke-purple" cx="96" cy="150" r="19" />
+          <rect class="gg-shape-purple" x="89" y="143" width="14" height="14" rx="2" />
+          <!-- triangle (green) on branch -->
+          <circle class="gg-node gg-node-fill-green gg-stroke-green" cx="200" cy="200" r="19" />
+          <polygon class="gg-shape-green" points="200,191 208,206 192,206" />
+          <!-- ring (purple) on branch -->
+          <circle class="gg-node gg-node-fill-purple gg-stroke-purple" cx="200" cy="280" r="19" />
+          <circle class="gg-shape-purple" cx="200" cy="280" r="5" fill="none" stroke="#7c3aed" stroke-width="3.5" />
+          <!-- diamond (green) far branch -->
+          <circle class="gg-node gg-node-fill-green gg-stroke-green" cx="280" cy="196" r="17" />
+          <rect class="gg-shape-green" x="273" y="189" width="14" height="14" rx="2" transform="rotate(45 280 196)" />
+          <!-- circle (blue) merge -->
+          <circle class="gg-node gg-node-fill-blue gg-stroke-blue" cx="96" cy="320" r="19" />
+          <circle class="gg-shape-blue" cx="96" cy="320" r="6" />
+          <!-- square (blue) bottom -->
+          <circle class="gg-node gg-node-fill-blue gg-stroke-blue" cx="96" cy="400" r="19" />
+          <rect class="gg-shape-blue" x="89" y="393" width="14" height="14" rx="2" />
+          <!-- labels -->
+          <text class="gg-label" x="124" y="74">main</text>
+          <text class="gg-label" x="228" y="204">review</text>
+          <text class="gg-label" x="124" y="404">shipped</text>
+        </svg>
+      </div>
+    </header>
+
+    <!-- Showcase: terminal + dashboard -->
+    <section id="showcase">
+      <div class="sec-head">
+        <div class="kicker">See it in action</div>
+        <h2>From commit to caught — in seconds</h2>
+        <p>git-lrc reviews the diff the moment you commit, then opens a clean dashboard with every finding.</p>
+      </div>
+      <div class="showcase">
+        <!-- Terminal -->
+        <div class="terminal-wrap">
+          <div class="mock" aria-hidden="true">
+            <div class="mock-bar">
+              <span class="mock-dot r"></span><span class="mock-dot y"></span><span class="mock-dot g"></span>
+              <span class="mock-title">zsh — git-lrc</span>
+            </div>
+            <div class="mock-body">
+              <div class="mock-line muted">$ git commit -m "refactor auth session"</div>
+              <div class="mock-line">→ git-lrc reviewing staged diff…</div>
+              <div class="mock-line muted">  src/auth/session.go</div>
+              <div class="mock-line add">+   if token == "" { return nil }</div>
+              <div class="mock-comment">
+                <div class="mock-comment-hdr">
+                  <span class="sev sev-crit">Critical</span>
+                  <span class="cat">Logic</span>
+                  <span class="when">caught in 0.8s</span>
+                </div>
+                <div class="mock-comment-body">
+                  Early-return on an empty token skips <b>validateSession</b> — unauthenticated requests would pass. Gate this before committing.
+                </div>
+              </div>
+              <div class="mock-line muted" style="margin-top:10px;">  1 critical · 2 warnings · review at localhost:8000</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard browser mock -->
+        <div class="browser" aria-hidden="true">
+          <div class="browser-bar">
+            <span class="mock-dot r"></span><span class="mock-dot y"></span><span class="mock-dot g"></span>
+            <span class="browser-url">localhost:8000 · git-lrc dashboard</span>
+          </div>
+          <div class="browser-body">
+            <div class="dash-head"><h4>Review impact</h4><span>last 30 days</span></div>
+            <div class="dash-stats">
+              <div class="dash-stat ds-blue">
+                <div class="ds-top"><span class="ds-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span><span class="ds-lbl">Reviews</span></div>
+                <div class="ds-val">1,284</div>
+              </div>
+              <div class="dash-stat ds-amber">
+                <div class="ds-top"><span class="ds-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><span class="ds-lbl">Issues</span></div>
+                <div class="ds-val">3,907</div>
+              </div>
+              <div class="dash-stat ds-green">
+                <div class="ds-top"><span class="ds-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="ds-lbl">Bugs caught</span></div>
+                <div class="ds-val">612</div>
+              </div>
+              <div class="dash-stat ds-red">
+                <div class="ds-top"><span class="ds-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="ds-lbl">Critical</span></div>
+                <div class="ds-val">48</div>
+              </div>
+            </div>
+            <div class="dash-row"><span class="file">src/auth/session.go</span><span class="pill pill-crit">Critical</span><span class="ago">2m ago</span></div>
+            <div class="dash-row"><span class="file">api/handlers.go</span><span class="pill pill-warn">Warning</span><span class="ago">14m ago</span></div>
+            <div class="dash-row"><span class="file">README.md</span><span class="pill pill-info">Info</span><span class="ago">1h ago</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features">
+      <div class="sec-head">
+        <div class="kicker">Why git-lrc</div>
+        <h2>Reviews that catch what you miss</h2>
+        <p>AI agents write code fast — and silently remove logic, change behavior and introduce bugs. git-lrc reviews every diff before it lands.</p>
+      </div>
+      <div class="features">
+        <div class="feature i-blue">
+          <span class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12" opacity="0"/><circle cx="12" cy="12" r="3"/><path d="M6 3v6a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="6" y1="21" x2="6" y2="15"/></svg></span>
+          <h3>Runs on commit</h3>
+          <p>Hooks into <code style="font-family:ui-monospace,monospace">git commit</code> and reviews the staged diff automatically — no extra step, no context switch.</p>
+        </div>
+        <div class="feature i-green">
+          <span class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          <h3>Completely free</h3>
+          <p>Unlimited AI reviews at no cost. Set it up once and review every commit, forever.</p>
+        </div>
+        <div class="feature i-purple">
+          <span class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <h3>Runs locally</h3>
+          <p>git-lrc runs as a local CLI by default — your code stays on your machine unless you submit a review.</p>
+        </div>
+        <div class="feature i-amber">
+          <span class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>
+          <h3>Any AI provider</h3>
+          <p>Bring your own connector — Gemini, Claude, OpenAI, DeepSeek and more, prioritized exactly how you want.</p>
+        </div>
+        <div class="feature i-red">
+          <span class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+          <h3>Severity-ranked findings</h3>
+          <p>Issues are graded Critical, Error, Warning and Info, so you fix what matters before you ship.</p>
+        </div>
+        <div class="feature i-blue">
+          <span class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <h3>Beautiful review UI</h3>
+          <p>A clean local viewer with inline diffs, comments and a one-click hand-off to your coding agent.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section id="how">
+      <div class="sec-head">
+        <div class="kicker">How it works</div>
+        <h2>Set up once. Review every commit.</h2>
+        <p>From install to your first review in under a minute.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <span class="num">1</span>
+          <h3>Install</h3>
+          <p>Build locally and install the git hook with <code>lrc hooks install</code>.</p>
+        </div>
+        <div class="step">
+          <span class="num">2</span>
+          <h3>Commit</h3>
+          <p>Run <code>git commit</code> like always — git-lrc reviews the diff before it lands.</p>
+        </div>
+        <div class="step">
+          <span class="num">3</span>
+          <h3>Ship with confidence</h3>
+          <p>Read the findings, fix what matters, and push knowing the diff was checked.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section>
+      <div class="cta-band">
+        <h2>Catch the bug before your users do.</h2>
+        <p>Free, unlimited AI code reviews that run on every commit. 60-second setup.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href="https://hexmos.com/livereview/git-lrc/" target="_blank" rel="noopener noreferrer">Get started</a>
+          <a class="btn btn-ghost btn-lg" href="/static/ui-connectors.html#/home">Open dashboard</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="lp">
+      <div class="foot-inner">
+        <a class="lp-brand" href="#top" style="font-size:15px;">
+          <img alt="" src="https://hexmos.com/freedevtools/public/lr_logo.svg" style="width:22px;height:22px;" onerror="this.style.display='none'" />
+          git-lrc
+        </a>
+        <a href="https://github.com/HexmosTech/git-lrc" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://hexmos.com/livereview/git-lrc/" target="_blank" rel="noopener noreferrer">Docs</a>
+        <a href="https://discord.gg/sGdnKwB3qq" target="_blank" rel="noopener noreferrer">Discord</a>
+        <span class="foot-sep">© Hexmos · LiveReview</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

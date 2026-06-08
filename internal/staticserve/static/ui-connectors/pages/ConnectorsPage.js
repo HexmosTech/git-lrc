@@ -1,4 +1,37 @@
+import { Icon } from '/static/ui-connectors/components/Icons.js';
+
 const { html, useEffect, useState } = window.preact;
+
+// Brand-ish accent per provider, used for the identity avatar. Falls back to
+// the app accent for anything unrecognised.
+const PROVIDER_COLORS = {
+  gemini: '#3b82f6',
+  google: '#3b82f6',
+  claude: '#d97757',
+  anthropic: '#d97757',
+  openai: '#10a37f',
+  deepseek: '#4d6bfe',
+  mistral: '#fa520f',
+  groq: '#f55036',
+  cohere: '#39594d',
+  azure: '#0078d4',
+  xai: '#111827',
+  grok: '#111827',
+};
+
+function providerColor(name) {
+  const key = String(name || '').toLowerCase();
+  if (PROVIDER_COLORS[key]) return PROVIDER_COLORS[key];
+  for (const k of Object.keys(PROVIDER_COLORS)) {
+    if (key.includes(k)) return PROVIDER_COLORS[k];
+  }
+  return 'var(--accent-blue)';
+}
+
+function providerInitial(name) {
+  const s = String(name || '').trim();
+  return s ? s.charAt(0).toUpperCase() : '•';
+}
 
 function formatTimestamp(value) {
   if (!value) return '';
@@ -133,15 +166,15 @@ export function ConnectorsPage({
           <div class="toolbar connectors-toolbar">
             <div class="btn-group btn-group-compact">
               <button class="secondary" onClick=${onRefresh} disabled=${loading}>
-                <span class="btn-icon" aria-hidden="true">↻</span>${loading ? 'Refreshing...' : 'Refresh'}
+                <span class="btn-icon" aria-hidden="true"><${Icon} name="refresh" /></span>${loading ? 'Refreshing...' : 'Refresh'}
               </button>
               <button class=${`${hasOrderChanges ? '' : 'secondary'} ${pulseSave ? 'pulse-attention' : ''}`.trim()} onClick=${onSaveOrder} disabled=${orderedConnectors.length < 2 || !hasOrderChanges}>
-                <span class="btn-icon" aria-hidden="true">⇅</span>Save Priority
+                <span class="btn-icon" aria-hidden="true"><${Icon} name="priority" /></span>Save Priority
               </button>
             </div>
             <div class="btn-group">
               <button onClick=${onAdd}>
-                <span class="btn-icon" aria-hidden="true">＋</span>Add Connector
+                <span class="btn-icon" aria-hidden="true"><${Icon} name="plus" /></span>Add Connector
               </button>
             </div>
           </div>
@@ -157,9 +190,14 @@ export function ConnectorsPage({
                   >
                     <div class="connector-row">
                       <div class="connector-main">
-                        <span class="item-title">${connector.connector_name || 'Connector'}</span>
-                        <span class="badge badge-id">#${connector.id}</span>
-                        <span class="badge">${connector.provider_name}</span>
+                        <span class="provider-avatar" style=${`--provider-color: ${providerColor(connector.provider_name)}`} aria-hidden="true">${providerInitial(connector.provider_name)}</span>
+                        <div class="connector-id-block">
+                          <span class="item-title">${connector.connector_name || 'Connector'}</span>
+                          <div class="connector-tags">
+                            <span class="badge badge-id">#${connector.id}</span>
+                            <span class="badge badge-provider">${connector.provider_name}</span>
+                          </div>
+                        </div>
                       </div>
                       <div class="row connector-actions">
                         <button
@@ -169,24 +207,29 @@ export function ConnectorsPage({
                           onDragStart=${(event) => handleDragStart(event, connector.id)}
                           onDragEnd=${handleDragEnd}
                         >
-                          <span class="btn-icon" aria-hidden="true">⋮⋮</span>
+                          <span class="btn-icon" aria-hidden="true"><${Icon} name="grip" size=${17} /></span>
                         </button>
                         <button class="secondary icon-only" title="Move up" disabled=${index === 0} onClick=${() => onMove(String(connector.id), 'up')}>
-                          <span class="btn-icon" aria-hidden="true">↑</span>
+                          <span class="btn-icon" aria-hidden="true"><${Icon} name="arrow-up" /></span>
                         </button>
                         <button class="secondary icon-only" title="Move down" disabled=${index === orderedConnectors.length - 1} onClick=${() => onMove(String(connector.id), 'down')}>
-                          <span class="btn-icon" aria-hidden="true">↓</span>
+                          <span class="btn-icon" aria-hidden="true"><${Icon} name="arrow-down" /></span>
                         </button>
                         <button class="secondary" onClick=${() => onEdit(connector)}>
-                          <span class="btn-icon" aria-hidden="true">✎</span>Edit
+                          <span class="btn-icon" aria-hidden="true"><${Icon} name="edit" /></span>Edit
                         </button>
                         <button class="tertiary-danger" onClick=${() => onDelete(connector.id)}>
-                          <span class="btn-icon" aria-hidden="true">🗑</span>Delete
+                          <span class="btn-icon" aria-hidden="true"><${Icon} name="trash" /></span>Delete
                         </button>
                       </div>
                     </div>
                     <div class="connector-foot">
-                      <div class="muted">Priority #${index + 1}${connector.selected_model ? ` · model: ${connector.selected_model}` : ''}</div>
+                      <div class="connector-meta-left">
+                        <span class=${`rank-chip ${index === 0 ? 'rank-top' : ''}`.trim()} title="Priority order">Priority #${index + 1}</span>
+                        ${connector.selected_model
+                          ? html`<span class="model-chip" title="Selected model"><span class="btn-icon" aria-hidden="true"><${Icon} name="cpu" size=${13} /></span>${connector.selected_model}</span>`
+                          : html`<span class="muted model-chip model-chip-empty">No model selected</span>`}
+                      </div>
                       <div
                         class="muted muted-meta muted-meta-right"
                         title=${(() => {

@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+/* Toggle dark mode with a `.dark` class on <html> (set by ThemeToggle). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+
+  /* Brand accent ramp */
+  --color-brand-400: #3a97f5;
+  --color-brand-500: #1f86e8;
+  --color-brand-600: #0a6fd1;
+  --color-brand-700: #0b5cb0;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

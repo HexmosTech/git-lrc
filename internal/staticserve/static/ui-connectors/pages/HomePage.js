@@ -1,4 +1,5 @@
 import { fetchGitHubReleases } from '/static/ui-connectors/api.js';
+import { Icon } from '/static/ui-connectors/components/Icons.js';
 
 const { html, useEffect, useState } = window.preact;
 
@@ -50,18 +51,24 @@ export function HomePage() {
 
         <div class="home-grid">
           <div class="home-card">
-            <h3>GitHub Repository</h3>
-            <p>Give the project a ⭐ if it helps your workflow.</p>
-            <a class="home-link" href="https://github.com/HexmosTech/git-lrc" target="_blank" rel="noopener noreferrer">
-              Open github.com/HexmosTech/git-lrc
+            <div class="home-card-head">
+              <span class="home-card-icon home-card-icon-dark" aria-hidden="true"><${Icon} name="github" size=${18} /></span>
+              <h3>GitHub Repository</h3>
+            </div>
+            <p>Star the project a <${Icon} name="star" size=${13} class="inline-star" /> if it helps your workflow, file issues, or open a discussion.</p>
+            <a class="home-link home-cta" href="https://github.com/HexmosTech/git-lrc" target="_blank" rel="noopener noreferrer">
+              github.com/HexmosTech/git-lrc<${Icon} name="external" size=${13} class="link-ext" />
             </a>
           </div>
 
           <div class="home-card">
-            <h3>Learn More</h3>
-            <p>Get latest product information and usage details.</p>
-            <a class="home-link" href="https://hexmos.com/livereview/git-lrc/" target="_blank" rel="noopener noreferrer">
-              Open hexmos.com/livereview/git-lrc/
+            <div class="home-card-head">
+              <span class="home-card-icon home-card-icon-accent" aria-hidden="true"><${Icon} name="book" size=${18} /></span>
+              <h3>Learn More</h3>
+            </div>
+            <p>Read the docs for setup, configuration and the latest product details.</p>
+            <a class="home-link home-cta" href="https://hexmos.com/livereview/git-lrc/" target="_blank" rel="noopener noreferrer">
+              hexmos.com/livereview/git-lrc<${Icon} name="external" size=${13} class="link-ext" />
             </a>
           </div>
         </div>
