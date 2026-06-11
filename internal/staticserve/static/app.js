@@ -584,6 +584,30 @@ async function initApp() {
             handleFileClick(fileId, lineNumber);
             return true;
         }, [handleFileClick, resolveSlideFileId]);
+
+        const getVisibleTopContentOffset = useCallback((mainContent) => {
+            if (!mainContent) {
+                return 0;
+            }
+
+            const mainContentRect = mainContent.getBoundingClientRect();
+            const topAnchors = ['.header', '.issue-filter-bar'];
+
+            return topAnchors.reduce((maxOffset, selector) => {
+                const element = document.querySelector(selector);
+                if (!element) {
+                    return maxOffset;
+                }
+
+                const rect = element.getBoundingClientRect();
+                const overlapsViewport = rect.bottom > mainContentRect.top && rect.top < mainContentRect.bottom;
+                if (!overlapsViewport) {
+                    return maxOffset;
+                }
+
+                return Math.max(maxOffset, rect.bottom - mainContentRect.top);
+            }, 0);
+        }, []);
         
         // Navigate to comment
         const navigateToComment = useCallback((commentId, fileId) => {
@@ -601,18 +625,23 @@ async function initApp() {
                 const comment = document.getElementById(commentId);
                 if (comment) {
                     const mainContent = document.querySelector('.main-content');
-                    const header = document.querySelector('.header');
-                    const headerHeight = header ? header.offsetHeight : 60;
-                    const commentRect = comment.getBoundingClientRect();
+                    if (!mainContent) {
+                        return;
+                    }
+
+                    const commentBox = comment.querySelector('.comment-container, .comment-hidden-placeholder') || comment;
+                    const commentRect = commentBox.getBoundingClientRect();
                     const mainContentRect = mainContent.getBoundingClientRect();
-                    const scrollTarget = mainContent.scrollTop + commentRect.top - mainContentRect.top - headerHeight - 20;
+                    const topOffset = getVisibleTopContentOffset(mainContent);
+                    const readableGapPx = 18;
+                    const scrollTarget = mainContent.scrollTop + commentRect.top - mainContentRect.top - topOffset - readableGapPx;
                     mainContent.scrollTo({ top: scrollTarget, behavior: 'smooth' });
                     
                     comment.classList.add('highlight');
                     setTimeout(() => comment.classList.remove('highlight'), 1500);
                 }
             }, 100);
-        }, []);
+        }, [getVisibleTopContentOffset]);
         
         // Tab change
         const handleTabChange = useCallback((tab) => {
