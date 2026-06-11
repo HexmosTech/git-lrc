@@ -667,7 +667,7 @@ function App() {
       return true;
     }
 
-    if (provider.id === 'openrouter' && !selectedModel) {
+    if ((provider.id === 'openrouter' || provider.id === 'atlas') && !selectedModel) {
       return true;
     }
 
