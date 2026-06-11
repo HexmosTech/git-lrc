@@ -56,8 +56,14 @@ export const providers = [
       'claude-3-5-haiku-20241022',
       'claude-3-opus-20240229',
       'claude-3-haiku-20240307',
-    ],
+    ]
   },
+  {
+    id: 'atlas',
+    name: 'Atlas Cloud',
+    apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    baseURLPlaceholder: 'https://api.atlascloud.ai/v1',
+  }
 ];
 
 export function defaultForm() {

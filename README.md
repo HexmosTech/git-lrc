@@ -224,6 +224,7 @@ In addition to the default Gemini setup, you can bring your own API keys for:
 - Claude
 - DeepSeek
 - OpenRouter
+- Atlas Cloud
 
 Use:
 
@@ -253,6 +254,13 @@ To configure:
 - Select the Claude model to use for reviews.
 
 > Setup guide: [Using ClaudeAPI with git-lrc](https://claudeapi.com/en/blog/tools/git-lrc-claudeapi-setup-guide/?utm_source=git-lrc)
+
+### Atlas Cloud Support
+
+To configure:
+- Select the option `Atlas Cloud` connector from the UI.
+- Enter your Atlas Cloud API key.
+- Select the model to use for reviews (e.g., `deepseek-ai/deepseek-v4-flash`).
 
 ## Security You Can Trust
 
