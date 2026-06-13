@@ -28,6 +28,8 @@ type ConnectorRemote struct {
 	ConnectorName string `json:"connector_name"`
 	APIKey        string `json:"api_key"`
 	BaseURL       string `json:"base_url"`
+	GCPProjectID  string `json:"gcp_project_id"`
+	GCPLocation   string `json:"gcp_location"`
 	SelectedModel string `json:"selected_model"`
 	DisplayOrder  int    `json:"display_order"`
 	CreatedAt     string `json:"created_at"`

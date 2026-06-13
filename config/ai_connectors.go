@@ -106,6 +106,16 @@ func RenderManagedAIConnectorsSection(connectors []uicfg.ConnectorRemote, sectio
 			builder.WriteString(strconv.Quote(connector.BaseURL))
 			builder.WriteString("\n")
 		}
+		if connector.GCPProjectID != "" {
+			builder.WriteString("gcp_project_id = ")
+			builder.WriteString(strconv.Quote(connector.GCPProjectID))
+			builder.WriteString("\n")
+		}
+		if connector.GCPLocation != "" {
+			builder.WriteString("gcp_location = ")
+			builder.WriteString(strconv.Quote(connector.GCPLocation))
+			builder.WriteString("\n")
+		}
 		if connector.SelectedModel != "" {
 			builder.WriteString("selected_model = ")
 			builder.WriteString(strconv.Quote(connector.SelectedModel))

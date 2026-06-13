@@ -63,6 +63,11 @@ export const providers = [
     name: 'Atlas Cloud',
     apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     baseURLPlaceholder: 'https://api.atlascloud.ai/v1',
+  },
+  {
+    id: 'gemini-enterprise',
+    name: 'Gemini Enterprise',
+    apiKeyPlaceholder: 'Google Cloud Service Account JSON',
   }
 ];
 
@@ -75,5 +80,7 @@ export function defaultForm() {
     api_key: '',
     base_url: '',
     selected_model: '',
+    gcp_project_id: '',
+    gcp_location: '',
   };
 }

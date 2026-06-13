@@ -372,6 +372,8 @@ function App() {
           api_key: connector.api_key || '',
           base_url: connector.base_url || '',
           selected_model: connector.selected_model || '',
+          gcp_project_id: connector.gcp_project_id || '',
+          gcp_location: connector.gcp_location || '',
         });
         setStatus(`Editing connector #${connector.id}`);
       }
@@ -398,6 +400,8 @@ function App() {
       base_url: provider.requiresBaseURL
         ? (provider.baseURLPresets?.length ? provider.baseURLPresets[0].value : '')
         : '',
+      gcp_project_id: '',
+      gcp_location: '',
     }));
     if (provider.id !== 'ollama') {
       setOllamaModels([]);
@@ -426,6 +430,8 @@ function App() {
       api_key: connector.api_key || '',
       base_url: connector.base_url || '',
       selected_model: connector.selected_model || '',
+      gcp_project_id: connector.gcp_project_id || '',
+      gcp_location: connector.gcp_location || '',
     });
     setStatus(`Editing connector #${connector.id}`);
     navigate(`/connectors/edit/${connector.id}`);
@@ -531,6 +537,8 @@ function App() {
             api_key: apiKey,
             base_url: baseURL || undefined,
             model: selectedModel || apiDefaultModel || undefined,
+            gcp_project_id: (form.gcp_project_id || '').trim() || undefined,
+            gcp_location: (form.gcp_location || '').trim() || undefined,
           }),
         });
 
@@ -547,6 +555,8 @@ function App() {
         connector_name: connectorName,
         base_url: baseURL || undefined,
         selected_model: selectedModel || apiDefaultModel || undefined,
+        gcp_project_id: (form.gcp_project_id || '').trim() || undefined,
+        gcp_location: (form.gcp_location || '').trim() || undefined,
         display_order: 0,
       };
 
@@ -661,6 +671,12 @@ function App() {
 
     if (provider.id === 'ollama') {
       return !baseURL || !selectedModel;
+    }
+
+    if (provider.id === 'gemini-enterprise') {
+      const gcpProjectID = (form.gcp_project_id || '').trim();
+      const gcpLocation = (form.gcp_location || '').trim();
+      return !apiKey || !gcpProjectID || !gcpLocation;
     }
 
     if (!apiKey) {
