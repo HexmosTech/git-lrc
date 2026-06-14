@@ -89,7 +89,7 @@ func TestBuildRulesBundleMissingRulesDir(t *testing.T) {
 	}
 
 	text, charCount, issues := BuildRulesBundle(lrcDir)
-	if text != "" || charCount != 0 || issues != nil {
+	if text != "" || charCount != 0 || len(issues) != 0 {
 		t.Fatalf("expected empty result when rules/ is missing, got text=%q charCount=%d issues=%v", text, charCount, issues)
 	}
 }
@@ -274,11 +274,11 @@ func TestCollectZipExtrasNoLRC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if extras != nil {
-		t.Fatalf("expected nil extras when .lrc/ is absent, got %v", extras)
+	if len(extras) != 0 {
+		t.Fatalf("expected no extras when .lrc/ is absent, got %v", extras)
 	}
-	if warnings != nil {
-		t.Fatalf("expected nil warnings when .lrc/ is absent, got %v", warnings)
+	if len(warnings) != 0 {
+		t.Fatalf("expected no warnings when .lrc/ is absent, got %v", warnings)
 	}
 }
 

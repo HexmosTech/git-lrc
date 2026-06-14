@@ -10,7 +10,9 @@
 package lrcrules
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,8 +21,11 @@ import (
 	"github.com/HexmosTech/git-lrc/storage"
 )
 
-// CharLimit is the maximum size (in characters) of the concatenated rules
-// bundle that LiveReview will accept without truncating.
+// CharLimit is the maximum size, in bytes (UTF-8), of the concatenated rules
+// bundle that LiveReview will accept without truncating. It is measured via
+// len() on the bundle text, matching the server-side truncation in
+// LiveReview's internal/lrcconfig, so multi-byte characters count for more
+// than one toward the limit.
 const CharLimit = 3000
 
 // Issue describes a problem found while validating .lrc/.
@@ -36,6 +41,9 @@ const rulesInstructionsName = "INSTRUCTIONS.md"
 // Load returns the .lrc/ directory path under repoRoot. ok=false (with no
 // error) when .lrc/ does not exist.
 func Load(repoRoot string) (lrcDir string, ok bool, err error) {
+	if abs, absErr := filepath.Abs(repoRoot); absErr == nil {
+		repoRoot = abs
+	}
 	dir := filepath.Join(repoRoot, ".lrc")
 	info, statErr := os.Stat(dir)
 	if statErr != nil {
@@ -150,7 +158,10 @@ func ValidateStructure(lrcDir string) []Issue {
 func CheckIgnoreSyntax(lrcDir string) []Issue {
 	data, err := storage.ReadFile(filepath.Join(lrcDir, "ignore"))
 	if err != nil {
-		return nil
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return []Issue{{Level: "error", Path: "ignore", Message: fmt.Sprintf("failed to read file: %v", err)}}
 	}
 
 	var issues []Issue

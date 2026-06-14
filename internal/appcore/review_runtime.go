@@ -1999,11 +1999,12 @@ func loadConfigValues(apiKeyOverride, apiURLOverride string, verbose bool) (*Con
 }
 
 // zipEntryNames lists the file names contained in a zip archive, falling
-// back to "diff.txt" if the archive can't be read.
+// back to a placeholder describing the read error if the archive can't be
+// read.
 func zipEntryNames(zipData []byte) []string {
 	reader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
-		return []string{"diff.txt"}
+		return []string{fmt.Sprintf("(failed to read zip: %v)", err)}
 	}
 
 	names := make([]string, 0, len(reader.File))

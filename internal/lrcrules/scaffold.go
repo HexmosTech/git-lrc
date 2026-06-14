@@ -1,6 +1,7 @@
 package lrcrules
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -37,7 +38,7 @@ skipped entirely.
 first — use it as the entry point for the most important guidance. Every
 other ` + "`*.md`" + ` file follows after it, in lexicographic order.
 
-The combined bundle is limited to ` + "`CharLimit`" + ` (3000) characters;
+The combined bundle is limited to ` + "`CharLimit`" + ` (%d characters);
 anything over the limit is truncated. Run ` + "`lrc config check`" + ` to
 verify you're within the limit and ` + "`lrc config preview`" + ` to see the
 exact bundle that will be sent.
@@ -82,7 +83,7 @@ type scaffoldFile struct {
 
 func scaffoldFiles() []scaffoldFile {
 	return []scaffoldFile{
-		{"README.md", rootReadmeContent},
+		{"README.md", fmt.Sprintf(rootReadmeContent, CharLimit)},
 		{"ignore", ignoreContent},
 		{"rules/INSTRUCTIONS.md", ""},
 		{"rules/design.md", ""},
@@ -98,6 +99,16 @@ func scaffoldFiles() []scaffoldFile {
 func Init(repoRoot string) ([]string, error) {
 	lrcDir := filepath.Join(repoRoot, ".lrc")
 	var created []string
+
+	// Pre-create .lrc/ and its subdirectories with 0o755 so they're
+	// readable/listable by others, matching the 0o644 files written into
+	// them below. storage.WriteFileAtomically always creates missing parent
+	// directories with 0o700; pre-creating them here makes that a no-op.
+	for _, dir := range []string{lrcDir, filepath.Join(lrcDir, "rules"), filepath.Join(lrcDir, "policy")} {
+		if err := storage.MkdirAll(dir, 0o755); err != nil {
+			return created, err
+		}
+	}
 
 	for _, f := range scaffoldFiles() {
 		fullPath := filepath.Join(lrcDir, f.relPath)

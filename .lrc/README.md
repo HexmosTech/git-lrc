@@ -28,7 +28,7 @@ skipped entirely.
 first — use it as the entry point for the most important guidance. Every
 other `*.md` file follows after it, in lexicographic order.
 
-The combined bundle is limited to `CharLimit` (3000) characters;
+The combined bundle is limited to `CharLimit` (3000 characters);
 anything over the limit is truncated. Run `lrc config check` to
 verify you're within the limit and `lrc config preview` to see the
 exact bundle that will be sent.
