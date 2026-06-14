@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"time"
 )
@@ -40,80 +41,110 @@ func NewClient(timeout time.Duration) *Client {
 	}
 }
 
-func (c *Client) DoJSON(method, url string, payload any, bearerToken, orgContext string, headers map[string]string) (*Response, error) {
-	var bodyReader io.Reader
-	if payload != nil {
-		bodyJSON, err := json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request: %w", err)
+const maxRetries = 3
+
+// doWithRetry encapsulates the core HTTP execution with exponential backoff and jitter.
+func (c *Client) doWithRetry(reqBody []byte, reqBuilder func(io.Reader) (*http.Request, error)) (*Response, error) {
+	var resp *http.Response
+	var err error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		var bodyReader io.Reader
+		if reqBody != nil {
+			bodyReader = bytes.NewReader(reqBody)
 		}
-		bodyReader = bytes.NewReader(bodyJSON)
+
+		req, reqErr := reqBuilder(bodyReader)
+		if reqErr != nil {
+			return nil, reqErr
+		}
+
+		resp, err = c.httpClient.Do(req)
+
+		// Determine if the failure is transient
+		shouldRetry := false
+		if err != nil {
+			shouldRetry = true
+		} else if resp.StatusCode >= 500 || resp.StatusCode == 429 {
+			shouldRetry = true
+		}
+
+		if !shouldRetry || attempt == maxRetries {
+			break
+		}
+
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+
+		// Calculate backoff: wait = base * 2^attempt + jitter
+		baseWait := time.Duration(500*(1<<attempt)) * time.Millisecond
+		jitter := time.Duration(rand.Intn(200)) * time.Millisecond
+		time.Sleep(baseWait + jitter)
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
-	if err != nil {
-		return nil, err
-	}
-
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if bearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+bearerToken)
-	}
-	if orgContext != "" {
-		req.Header.Set("X-Org-Context", orgContext)
-	}
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-
-	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+	bodyBytes, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", readErr)
 	}
 
 	return &Response{
 		StatusCode: resp.StatusCode,
-		Body:       body,
+		Body:       bodyBytes,
 		Header:     resp.Header,
 	}, nil
 }
 
+func (c *Client) DoJSON(method, url string, payload any, bearerToken, orgContext string, headers map[string]string) (*Response, error) {
+	var bodyJSON []byte
+	var err error
+	if payload != nil {
+		bodyJSON, err = json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
+		}
+	}
+
+	builder := func(bodyReader io.Reader) (*http.Request, error) {
+		req, err := http.NewRequest(method, url, bodyReader)
+		if err != nil {
+			return nil, err
+		}
+
+		if payload != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if bearerToken != "" {
+			req.Header.Set("Authorization", "Bearer "+bearerToken)
+		}
+		if orgContext != "" {
+			req.Header.Set("X-Org-Context", orgContext)
+		}
+		for key, value := range headers {
+			req.Header.Set(key, value)
+		}
+		return req, nil
+	}
+
+	return c.doWithRetry(bodyJSON, builder)
+}
+
 func (c *Client) Do(method, url string, body []byte, headers map[string]string) (*Response, error) {
-	var bodyReader io.Reader
-	if body != nil {
-		bodyReader = bytes.NewReader(body)
+	builder := func(bodyReader io.Reader) (*http.Request, error) {
+		req, err := http.NewRequest(method, url, bodyReader)
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range headers {
+			req.Header.Set(key, value)
+		}
+		return req, nil
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
-	if err != nil {
-		return nil, err
-	}
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	return &Response{
-		StatusCode: resp.StatusCode,
-		Body:       respBody,
-		Header:     resp.Header,
-	}, nil
+	return c.doWithRetry(body, builder)
 }
