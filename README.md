@@ -229,6 +229,19 @@ git lrc review --skip
 
 No AI review. No personal attestation. The git log will record `skipped`.
 
+## Summary Deck
+
+Every completed review also generates a short slide deck — a 60-second summary of what changed, why, and what risks were flagged, without anyone having to write it.
+
+![Summary Deck: a 60-second slide summary of what changed and why](./gfx/summary-deck.gif)
+
+- **What was implemented, in plain English** — a short narrative of the change, not just a diff.
+- **Risks called out up front** — security, cost, and reliability issues get their own highlighted slides, in red when they matter.
+- **Technical highlights, isolated** — new config, new endpoints, new data flows — the things a reviewer (or future-you) actually needs to know about.
+- **Pairs with [Git Log Tracking](#git-log-tracking)** — between the iteration/coverage history in your git log and the summary deck for each review, your team gets institutional memory of every change without anyone maintaining a changelog.
+
+For onboarding new engineers, post-incident reviews, or just remembering why a change was made six months ago, this is the fastest way to get oriented — without re-reading the diff.
+
 ## Git Log Tracking
 
 Every commit gets a **review status line** appended to its git log message:
@@ -550,6 +563,18 @@ Every review is checked against **10 risk categories** and **100+ specific failu
 </details>
 
 </details>
+
+## Issue Navigator
+
+A wall of inline comments is hard to triage. The Issue Navigator turns every review into a structured, filterable view across the same [10 risk categories and 100+ patterns](#what-git-lrc-checks-for) above — so you can see exactly what's wrong, ranked by how much it can hurt you.
+
+![Issue Navigator: browse review comments by risk category, severity, and area](./gfx/issue-navigator.gif)
+
+- **Filter by severity** — Critical, Warning, Info — fix what matters first instead of scrolling through everything.
+- **Drill into categories and subcategories** — Security → Secrets Management, Reliability → Error Handling, and 100+ more, each with a live count of how many issues were found.
+- **Slice by type and area** — Bug, Code Smell, Reliability, Security — to see exactly where risk is concentrated in a diff.
+- **Send straight to your AI agent** — copy the visible issues or "Send to Claude" and feed them back into the fix loop without retyping anything.
+- **Feedback loop built in** — thumbs up/down on each finding tunes future reviews, so signal-to-noise improves the more your team uses it.
 
 ## FAQ
 
