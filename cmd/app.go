@@ -390,11 +390,18 @@ EXAMPLES
 
    # Save and reuse your own query
    lrc query --add "SELECT date, subject FROM review_log WHERE action='skipped'" --name skipped
-   lrc query skipped --json`,
+   lrc query skipped --json
+
+   # Bound the scan on huge repos (Linux kernel = ~1.5M commits)
+   lrc query stats --from "2024-01-01" --to "2024-12-31"
+   lrc query stats --range main...feature   # just this PR's commits`,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "json", Usage: "output machine-readable JSON"},
 					&cli.StringFlag{Name: "add", Usage: "save the given SQL as an alias (requires --name)"},
 					&cli.StringFlag{Name: "name", Usage: "alias name to save with --add"},
+					&cli.StringFlag{Name: "from", Usage: "only scan commits since this git date (e.g. 2024-01-01, '2 weeks ago') — bounds large repos"},
+					&cli.StringFlag{Name: "to", Usage: "only scan commits until this git date"},
+					&cli.StringFlag{Name: "range", Usage: "only scan a ref range, e.g. main...feature (per-PR stats)"},
 				},
 				Action: h.RunQuery,
 				Subcommands: []*cli.Command{

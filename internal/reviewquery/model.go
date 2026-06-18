@@ -21,15 +21,17 @@ type ReviewRecord struct {
 	CoveragePct int       // coverage percent (0 if absent)
 }
 
-// Filter narrows which commits are extracted. Phase 1 uses Range/Since; the
-// rest are wired in Phase 2.
+// Filter narrows (and bounds) which commits are scanned. From/To/Range bound the
+// git log so huge repos (e.g. the Linux kernel, ~1.5M commits) don't get walked
+// in full. From/To are passed straight to git, so they accept any git date
+// (e.g. "2024-01-01", "2 weeks ago").
 type Filter struct {
-	Range      string    // e.g. "main...feature" (PR diff); empty = full history
-	Since      time.Time // zero = no lower bound
-	Until      time.Time // zero = no upper bound
-	Author     string    // substring match on author/email
-	PathPrefix string    // limit to commits touching this path
-	Action     string    // limit to one action
+	Range      string // e.g. "main...feature" (PR diff); empty = full history
+	From       string // git --since bound (lower); empty = no lower bound
+	To         string // git --until bound (upper); empty = no upper bound
+	Author     string // substring match on author/email
+	PathPrefix string // limit to commits touching this path
+	Action     string // limit to one action
 }
 
 // Alias is a saved, named SQL query stored in ~/.lrc/queries.toml.

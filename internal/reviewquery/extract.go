@@ -97,11 +97,11 @@ func Extract(f Filter) ([]ReviewRecord, error) {
 	if f.Author != "" {
 		args = append(args, "--author="+f.Author)
 	}
-	if !f.Since.IsZero() {
-		args = append(args, "--since="+f.Since.Format(time.RFC3339))
+	if f.From != "" {
+		args = append(args, "--since="+f.From)
 	}
-	if !f.Until.IsZero() {
-		args = append(args, "--until="+f.Until.Format(time.RFC3339))
+	if f.To != "" {
+		args = append(args, "--until="+f.To)
 	}
 	if f.Range != "" {
 		args = append(args, f.Range)

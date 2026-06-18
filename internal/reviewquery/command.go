@@ -22,18 +22,13 @@ func RunQuery(c *cli.Context) error {
 		return nil
 	}
 
-	// urfave/cli stops parsing flags at the first positional arg, so support a
-	// trailing --json too (e.g. `lrc query stats --json`).
+	// Seed from flags placed BEFORE the positional arg (cli parses those).
 	jsonOut := c.Bool("json")
-	positionals := make([]string, 0, c.NArg())
-	for _, a := range c.Args().Slice() {
-		switch a {
-		case "--json", "-json", "-j":
-			jsonOut = true
-		default:
-			positionals = append(positionals, a)
-		}
-	}
+	filter := Filter{From: c.String("from"), To: c.String("to"), Range: c.String("range")}
+
+	// urfave/cli stops parsing flags at the first positional arg, so also scan
+	// the remaining args for trailing flags (e.g. `lrc query stats --from 2024-01-01`).
+	positionals := parseTrailingFlags(c.Args().Slice(), &jsonOut, &filter)
 
 	arg := "stats" // default alias
 	if len(positionals) > 0 && strings.TrimSpace(positionals[0]) != "" {
@@ -49,7 +44,7 @@ func RunQuery(c *cli.Context) error {
 		sqlText = strings.Join(positionals, " ")
 	}
 
-	res, err := Run(Filter{}, sqlText)
+	res, err := Run(filter, sqlText)
 	if err != nil {
 		return err
 	}
@@ -64,6 +59,50 @@ func RunQuery(c *cli.Context) error {
 	}
 	fmt.Print(FormatTable(res))
 	return nil
+}
+
+// parseTrailingFlags pulls flags out of args that cli left unparsed (anything
+// after the first positional). Supports `--flag value` and `--flag=value`.
+// Returns the remaining positional args; sets jsonOut/filter via pointers.
+func parseTrailingFlags(args []string, jsonOut *bool, filter *Filter) []string {
+	positionals := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		// flag=value form
+		switch {
+		case a == "--json" || a == "-j":
+			*jsonOut = true
+			continue
+		case strings.HasPrefix(a, "--from="):
+			filter.From = strings.TrimPrefix(a, "--from=")
+			continue
+		case strings.HasPrefix(a, "--to="):
+			filter.To = strings.TrimPrefix(a, "--to=")
+			continue
+		case strings.HasPrefix(a, "--range="):
+			filter.Range = strings.TrimPrefix(a, "--range=")
+			continue
+		}
+		// flag value form (consume next arg)
+		if i+1 < len(args) {
+			switch a {
+			case "--from":
+				filter.From = args[i+1]
+				i++
+				continue
+			case "--to":
+				filter.To = args[i+1]
+				i++
+				continue
+			case "--range":
+				filter.Range = args[i+1]
+				i++
+				continue
+			}
+		}
+		positionals = append(positionals, a)
+	}
+	return positionals
 }
 
 // RunQueryList prints every alias and its source.
