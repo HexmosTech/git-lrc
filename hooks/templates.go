@@ -76,6 +76,14 @@ func GeneratePostCommitHook(cfg TemplateConfig) string {
 	})
 }
 
+func GeneratePrePushHook(cfg TemplateConfig) string {
+	return mustRenderTemplate("pre-push.sh", map[string]string{
+		hookMarkerBeginPlaceholder: cfg.MarkerBegin,
+		hookMarkerEndPlaceholder:   cfg.MarkerEnd,
+		hookVersionPlaceholder:     cfg.Version,
+	})
+}
+
 func GenerateDispatcherHook(hookName string, cfg TemplateConfig) string {
 	return mustRenderTemplate("dispatcher.sh", map[string]string{
 		hookMarkerBeginPlaceholder: cfg.MarkerBegin,

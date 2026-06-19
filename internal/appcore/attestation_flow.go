@@ -22,6 +22,42 @@ type attestationPayload struct {
 	PriorReviewCount int     `json:"prior_review_count"`
 }
 
+// pushAttestationTip, when set, redirects attestation reads/writes for the current
+// process to a push attestation (keyed by the push's tip commit SHA, stored under
+// lrc/push_attestations/) instead of the default tree-hash attestation used for
+// staged-change commit gating. Set once via setPushAttestationTip at the start of a
+// --push-range review; a single CLI invocation never reviews more than one tip.
+var pushAttestationTip string
+
+func setPushAttestationTip(tip string) {
+	pushAttestationTip = tip
+}
+
+// attestationKeyAndDir resolves the identifier and directory used for the current
+// attestation: the push tip SHA under lrc/push_attestations/ in push mode, or the
+// staged tree hash under lrc/attestations/ otherwise.
+func attestationKeyAndDir() (key, dir string, err error) {
+	gitDir, err := reviewapi.ResolveGitDir()
+	if err != nil {
+		return "", "", err
+	}
+	if !filepath.IsAbs(gitDir) {
+		if abs, absErr := filepath.Abs(gitDir); absErr == nil {
+			gitDir = abs
+		}
+	}
+
+	if pushAttestationTip != "" {
+		return pushAttestationTip, filepath.Join(gitDir, "lrc", "push_attestations"), nil
+	}
+
+	treeHash, err := reviewapi.CurrentTreeHash()
+	if err != nil {
+		return "", "", err
+	}
+	return treeHash, filepath.Join(gitDir, "lrc", "attestations"), nil
+}
+
 func ensureAttestation(action string, verbose bool, written *bool) error {
 	return ensureAttestationFull(attestationPayload{Action: action}, verbose, written)
 }
@@ -70,22 +106,18 @@ func ensureAttestationFull(payload attestationPayload, verbose bool, written *bo
 	return nil
 }
 
-// existingAttestationAction returns the attestation action for the current tree, if present.
+// existingAttestationAction returns the attestation action for the current tree (or push
+// tip, in push mode), if present.
 func existingAttestationAction() (string, error) {
-	treeHash, err := reviewapi.CurrentTreeHash()
+	key, dir, err := attestationKeyAndDir()
 	if err != nil {
 		return "", err
 	}
-	if treeHash == "" {
+	if key == "" {
 		return "", nil
 	}
 
-	gitDir, err := reviewapi.ResolveGitDir()
-	if err != nil {
-		return "", err
-	}
-
-	attestPath := filepath.Join(gitDir, "lrc", "attestations", fmt.Sprintf("%s.json", treeHash))
+	attestPath := filepath.Join(dir, fmt.Sprintf("%s.json", key))
 	data, err := storage.ReadAttestationFile(attestPath)
 	if err != nil {
 		return "", nil
@@ -99,22 +131,18 @@ func existingAttestationAction() (string, error) {
 	return strings.TrimSpace(payload.Action), nil
 }
 
-// readCurrentAttestation reads and parses the full attestation payload for the current tree.
+// readCurrentAttestation reads and parses the full attestation payload for the current
+// tree (or push tip, in push mode).
 func readCurrentAttestation() (*attestationPayload, error) {
-	treeHash, err := reviewapi.CurrentTreeHash()
+	key, dir, err := attestationKeyAndDir()
 	if err != nil {
 		return nil, err
 	}
-	if treeHash == "" {
+	if key == "" {
 		return nil, nil
 	}
 
-	gitDir, err := reviewapi.ResolveGitDir()
-	if err != nil {
-		return nil, err
-	}
-
-	attestPath := filepath.Join(gitDir, "lrc", "attestations", fmt.Sprintf("%s.json", treeHash))
+	attestPath := filepath.Join(dir, fmt.Sprintf("%s.json", key))
 	data, err := storage.ReadAttestationFile(attestPath)
 	if err != nil {
 		return nil, nil
@@ -170,26 +198,14 @@ func writeAttestationFullForCurrentTree(payload attestationPayload) (string, err
 		return "", fmt.Errorf("attestation action cannot be empty")
 	}
 
-	treeHash, err := reviewapi.CurrentTreeHash()
+	key, attestDir, err := attestationKeyAndDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to compute tree hash: %w", err)
+		return "", fmt.Errorf("failed to resolve attestation key: %w", err)
 	}
-	if treeHash == "" {
-		return "", fmt.Errorf("empty tree hash")
+	if key == "" {
+		return "", fmt.Errorf("empty attestation key")
 	}
 
-	gitDir, err := reviewapi.ResolveGitDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve git dir: %w", err)
-	}
-	if !filepath.IsAbs(gitDir) {
-		gitDir, err = filepath.Abs(gitDir)
-		if err != nil {
-			return "", fmt.Errorf("failed to absolutize git dir: %w", err)
-		}
-	}
-
-	attestDir := filepath.Join(gitDir, "lrc", "attestations")
 	if err := storage.EnsureAttestationOutputDir(attestDir); err != nil {
 		return "", fmt.Errorf("failed to create attestation directory: %w", err)
 	}
@@ -199,7 +215,7 @@ func writeAttestationFullForCurrentTree(payload attestationPayload) (string, err
 		return "", fmt.Errorf("failed to marshal attestation: %w", err)
 	}
 
-	target := filepath.Join(attestDir, fmt.Sprintf("%s.json", treeHash))
+	target := filepath.Join(attestDir, fmt.Sprintf("%s.json", key))
 	if err := storage.WriteFileAtomically(target, data, 0644); err != nil {
 		return "", fmt.Errorf("failed to write attestation: %w", err)
 	}
@@ -225,20 +241,15 @@ func RunRemoveAttestation(c *cli.Context) error {
 }
 
 func deleteAttestationForCurrentTree() error {
-	treeHash, err := reviewapi.CurrentTreeHash()
+	key, dir, err := attestationKeyAndDir()
 	if err != nil {
-		return fmt.Errorf("failed to compute tree hash: %w", err)
+		return fmt.Errorf("failed to resolve attestation key: %w", err)
 	}
-	if treeHash == "" {
+	if key == "" {
 		return nil
 	}
 
-	gitDir, err := reviewapi.ResolveGitDir()
-	if err != nil {
-		return fmt.Errorf("failed to resolve git dir: %w", err)
-	}
-
-	attestPath := filepath.Join(gitDir, "lrc", "attestations", fmt.Sprintf("%s.json", treeHash))
+	attestPath := filepath.Join(dir, fmt.Sprintf("%s.json", key))
 	if err := storage.RemoveAttestationFile(attestPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("failed to delete attestation %s: %w", attestPath, err)
 	}

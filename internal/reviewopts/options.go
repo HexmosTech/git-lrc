@@ -22,6 +22,7 @@ type Options struct {
 	RepoName              string
 	DiffSource            string
 	RangeVal              string
+	PushRangeVal          string
 	CommitVal             string
 	DiffFile              string
 	APIURL                string
@@ -58,6 +59,7 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 	opts := Options{
 		RepoName:              c.String("repo-name"),
 		RangeVal:              c.String("range"),
+		PushRangeVal:          c.String("push-range"),
 		CommitVal:             c.String("commit"),
 		DiffFile:              c.String("diff-file"),
 		APIURL:                c.String("api-url"),
@@ -104,6 +106,11 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 
 	if opts.DiffFile != "" {
 		diffSource = "file"
+	} else if opts.PushRangeVal != "" {
+		if opts.BlockingReview {
+			return Options{}, fmt.Errorf("cannot use --blocking-review with --push-range reviews")
+		}
+		diffSource = "push-range"
 	} else if opts.CommitVal != "" {
 		if opts.BlockingReview {
 			return Options{}, fmt.Errorf("cannot use --blocking-review with --commit reviews")

@@ -27,6 +27,7 @@ var baseFlags = []cli.Flag{
 	&cli.StringFlag{Name: "repo-name", Usage: "repository name (defaults to current directory basename)", EnvVars: []string{"LRC_REPO_NAME"}},
 	&cli.BoolFlag{Name: "staged", Usage: "use staged changes instead of working tree", EnvVars: []string{"LRC_STAGED"}},
 	&cli.StringFlag{Name: "range", Usage: "review a diff between two refs, e.g. for a PR before merging: 'main...my-feature' (changes on my-feature since it diverged from main). Read-only: skips commit/attestation.", EnvVars: []string{"LRC_RANGE"}},
+	&cli.StringFlag{Name: "push-range", Usage: "review a diff for an in-progress git push, e.g. '<old-sha>..<new-sha>'. Like --staged, but attestation is keyed by the new tip commit instead of the working tree.", EnvVars: []string{"LRC_PUSH_RANGE"}},
 	&cli.StringFlag{Name: "commit", Usage: "review a specific commit or commit range (e.g., HEAD, HEAD~1, HEAD~3..HEAD, abc123)", EnvVars: []string{"LRC_COMMIT"}},
 	&cli.StringFlag{Name: "diff-file", Usage: "path to pre-generated diff file", EnvVars: []string{"LRC_DIFF_FILE"}},
 	&cli.StringFlag{Name: "api-url", Value: reviewopts.DefaultAPIURL, Usage: "LiveReview API base URL", EnvVars: []string{"LRC_API_URL"}},

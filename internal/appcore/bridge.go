@@ -48,6 +48,11 @@ const (
 
 var managedHooks = []string{"pre-commit", "prepare-commit-msg", "commit-msg", "post-commit"}
 
+// pushHooks are installed alongside managedHooks (as inert dispatchers) whenever the git
+// hook surface is installed, but are only active once push review is explicitly enabled
+// via the independent "push" surface (see pushReviewEnabled/setPushReviewEnabled).
+var pushHooks = []string{"pre-push"}
+
 var (
 	version    = "unknown"
 	reviewMode = "prod"

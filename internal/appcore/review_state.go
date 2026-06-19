@@ -38,6 +38,7 @@ type ReviewState struct {
 	// UI Config
 	Interactive        bool   `json:"interactive"`
 	IsPostCommitReview bool   `json:"isPostCommitReview"`
+	IsPushReview       bool   `json:"isPushReview"`
 	InitialMsg         string `json:"initialMsg"`
 
 	// API Config (for frontend to know where to poll events)
@@ -59,7 +60,7 @@ type ReviewStateSnapshot struct {
 }
 
 // NewReviewState creates a new ReviewState with initial values
-func NewReviewState(reviewID string, files []reviewmodel.DiffReviewFileResult, interactive, isPostCommitReview bool, initialMsg, apiURL string) *ReviewState {
+func NewReviewState(reviewID string, files []reviewmodel.DiffReviewFileResult, interactive, isPostCommitReview, isPushReview bool, initialMsg, apiURL string) *ReviewState {
 	return &ReviewState{
 		ReviewID:           reviewID,
 		FriendlyName:       naming.GenerateFriendlyName(),
@@ -70,6 +71,7 @@ func NewReviewState(reviewID string, files []reviewmodel.DiffReviewFileResult, i
 		TotalFiles:         len(files),
 		Interactive:        interactive,
 		IsPostCommitReview: isPostCommitReview,
+		IsPushReview:       isPushReview,
 		InitialMsg:         initialMsg,
 		APIURL:             apiURL,
 	}

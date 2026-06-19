@@ -187,7 +187,7 @@ func installGitHookSurface(c *cli.Context) error {
 		}
 	}
 
-	for _, hookName := range managedHooks {
+	for _, hookName := range append(append([]string{}, managedHooks...), pushHooks...) {
 		hookPath := filepath.Join(absHooksPath, hookName)
 		dispatcher := generateDispatcherHook(hookName)
 		if err := installHook(hookPath, dispatcher, hookName, backupDir, true); err != nil {
@@ -305,7 +305,7 @@ func uninstallGitHookSurface(c *cli.Context) error {
 	}
 
 	removed := 0
-	for _, hookName := range managedHooks {
+	for _, hookName := range append(append([]string{}, managedHooks...), pushHooks...) {
 		hookPath := filepath.Join(absHooksPath, hookName)
 		if err := uninstallHook(hookPath, hookName); err != nil {
 			fmt.Printf("⚠️  Warning: failed to uninstall %s: %v\n", hookName, err)
@@ -410,6 +410,9 @@ const (
 	hookSurfaceAll    hookSurface = "all"
 	hookSurfaceGit    hookSurface = "git"
 	hookSurfaceClaude hookSurface = "claude"
+	// hookSurfacePush is intentionally excluded from hookSurfaceAll: push review is
+	// opt-in and toggled independently of the git/claude commit-time gates.
+	hookSurfacePush hookSurface = "push"
 )
 
 type repoHookSurfaceState struct {
@@ -425,8 +428,10 @@ func parseHookSurface(raw string) (hookSurface, error) {
 		return hookSurfaceGit, nil
 	case string(hookSurfaceClaude):
 		return hookSurfaceClaude, nil
+	case string(hookSurfacePush):
+		return hookSurfacePush, nil
 	default:
-		return "", fmt.Errorf("invalid --surface %q (want all, git, or claude)", raw)
+		return "", fmt.Errorf("invalid --surface %q (want all, git, claude, or push)", raw)
 	}
 }
 
@@ -514,9 +519,40 @@ func hookSurfaceLabel(surface hookSurface) string {
 		return "Git hooks"
 	case hookSurfaceClaude:
 		return "Claude hooks"
+	case hookSurfacePush:
+		return "Push review"
 	default:
 		return "LiveReview hooks"
 	}
+}
+
+// repoPushEnabledMarker is the opt-in marker for push-mode review: unlike the git/claude
+// surfaces (enabled by default, disabled via a marker), push review defaults OFF and is
+// turned on by writing this marker, since it's a new behavior change to git push.
+func repoPushEnabledMarker(lrcDir string) string {
+	return filepath.Join(lrcDir, "push-enabled")
+}
+
+func pushReviewEnabled(gitDir string) bool {
+	return fileExists(repoPushEnabledMarker(repoLRCStateDir(gitDir)))
+}
+
+func setPushReviewEnabled(gitDir string, enabled bool) error {
+	lrcDir := repoLRCStateDir(gitDir)
+	marker := repoPushEnabledMarker(lrcDir)
+	if !enabled {
+		if err := storage.RemoveRepoHooksStateMarker(marker); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	if err := storage.EnsureRepoLRCStateDir(lrcDir); err != nil {
+		return fmt.Errorf("failed to create lrc directory: %w", err)
+	}
+	if err := storage.WriteFile(marker, []byte("enabled\n"), 0644); err != nil {
+		return fmt.Errorf("failed to write push-enabled marker: %w", err)
+	}
+	return nil
 }
 
 func effectiveHookSurfaceDisabled(state repoHookSurfaceState, surface hookSurface) bool {
@@ -558,6 +594,15 @@ func runHooksDisable(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
+	if surface == hookSurfacePush {
+		if err := setPushReviewEnabled(gitDir, false); err != nil {
+			return err
+		}
+		fmt.Println("🔕 Push review disabled for this repository")
+		return nil
+	}
+
 	current := readRepoHookSurfaceState(gitDir)
 	next := updateRepoHookSurfaceState(current, surface, true)
 	if err := writeRepoHookSurfaceState(gitDir, next); err != nil {
@@ -578,6 +623,15 @@ func runHooksEnable(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
+	if surface == hookSurfacePush {
+		if err := setPushReviewEnabled(gitDir, true); err != nil {
+			return err
+		}
+		fmt.Println("🔔 Push review enabled for this repository")
+		return nil
+	}
+
 	current := readRepoHookSurfaceState(gitDir)
 	next := updateRepoHookSurfaceState(current, surface, false)
 	if err := writeRepoHookSurfaceState(gitDir, next); err != nil {
@@ -676,6 +730,17 @@ func runHooksStatus(c *cli.Context) error {
 			} else {
 				fmt.Println("claude status: enabled")
 			}
+			if pushReviewEnabled(gitDir) {
+				fmt.Println("push status: enabled")
+			} else {
+				fmt.Println("push status: disabled (opt-in; run 'lrc hooks enable --surface push')")
+			}
+		case hookSurfacePush:
+			if pushReviewEnabled(gitDir) {
+				fmt.Println("push status: enabled")
+			} else {
+				fmt.Println("push status: disabled (opt-in; run 'lrc hooks enable --surface push')")
+			}
 		default:
 			if effectiveHookSurfaceDisabled(repoState, surface) {
 				fmt.Printf("%s status: disabled via %s\n", strings.ToLower(hookSurfaceLabel(surface)), hookSurfaceStatusMarker(gitDir, surface))
@@ -699,7 +764,7 @@ func runHooksStatus(c *cli.Context) error {
 		}
 	}
 
-	for _, hookName := range managedHooks {
+	for _, hookName := range append(append([]string{}, managedHooks...), pushHooks...) {
 		hookPath := filepath.Join(absHooksPath, hookName)
 		fmt.Printf("%s: ", hookName)
 		if hookHasManagedSection(hookPath) {

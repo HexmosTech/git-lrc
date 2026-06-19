@@ -143,6 +143,19 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	// existing refs (read-only mode) — there's nothing in the working tree to
 	// commit, and no per-tree attestation applies.
 	isPostCommitReview := opts.DiffSource == "commit" || opts.DiffSource == "range"
+
+	// Push-mode review: gates an in-progress `git push` instead of a commit. It reuses
+	// the staged-review interactive flow, but attestation is keyed by the push's tip
+	// commit (set below) instead of the working-tree hash, since there's nothing staged.
+	isPushReview := opts.DiffSource == "push-range"
+	if isPushReview {
+		if _, tip, ok := strings.Cut(opts.PushRangeVal, ".."); ok && tip != "" {
+			setPushAttestationTip(strings.TrimPrefix(tip, "."))
+		} else {
+			return fmt.Errorf("--push-range must be of the form <old-sha>..<new-sha>")
+		}
+	}
+
 	useBlockingReview := opts.BlockingReview && !isPostCommitReview
 	deferCommit := opts.Precommit || useBlockingReview
 
@@ -544,7 +557,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 		// Initialize global review state for API-based UI
 		reviewStateMu.Lock()
-		currentReviewState = NewReviewState(reviewID, filesFromDiff, useDecisionUI, isPostCommitReview, initialMsg, config.APIURL)
+		currentReviewState = NewReviewState(reviewID, filesFromDiff, useDecisionUI, isPostCommitReview, isPushReview, initialMsg, config.APIURL)
 		if submitResp.FriendlyName != "" {
 			currentReviewState.FriendlyName = submitResp.FriendlyName
 		}
@@ -996,8 +1009,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			AllowAbort:             true,
 			AllowSkip:              true,
 			AllowVouch:             true,
-			RequireMessageForSkip:  true,
-			RequireMessageForVouch: true,
+			RequireMessageForSkip:  !isPushReview,
+			RequireMessageForVouch: !isPushReview,
 		}
 		publishTerminalDraft := func(text string) int64 {
 			if runningDraftHub == nil {
@@ -1409,9 +1422,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					InitialText:             initialMsg,
 					FocusMessage:            true,
 					AllowCommit:             true,
-					AllowPush:               true,
+					AllowPush:               !isPushReview,
 					AllowAbort:              true,
-					RequireMessageForCommit: true,
+					RequireMessageForCommit: !isPushReview,
 				}
 				publishTerminalDraft := func(text string) int64 {
 					if runningDraftHub == nil {
@@ -1485,7 +1498,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				})
 			} else {
 				// No progressive loading - use normal serveHTMLInteractive
-				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.Port, nonProgressiveListener, initialMsg, reviewMetadata, false, *config, reviewID, submitResp.FriendlyName, repoName)
+				code, msg, push, err := serveHTMLInteractive(htmlPath, opts.Port, nonProgressiveListener, initialMsg, reviewMetadata, false, *config, reviewID, submitResp.FriendlyName, repoName, isPushReview)
 				if err != nil {
 					return err
 				}
@@ -1638,6 +1651,16 @@ func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 		}
 		return reviewapi.RunGitCommand("diff", rangeVal)
 
+	case "push-range":
+		rangeVal := opts.PushRangeVal
+		if rangeVal == "" {
+			return nil, fmt.Errorf("--push-range is required when diff-source=push-range")
+		}
+		if verbose {
+			log.Printf("Collecting diff for push range: %s", rangeVal)
+		}
+		return reviewapi.RunGitCommand("diff", rangeVal)
+
 	case "file":
 		filePath := opts.DiffFile
 		if filePath == "" {
@@ -1649,7 +1672,7 @@ func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 		return storage.ReadDiffFile(filePath)
 
 	default:
-		return nil, fmt.Errorf("invalid diff-source: %s (must be staged, working, commit, range, or file)", diffSource)
+		return nil, fmt.Errorf("invalid diff-source: %s (must be staged, working, commit, range, push-range, or file)", diffSource)
 	}
 }
 
@@ -2946,7 +2969,7 @@ func buildDecisionMetadata(reviewID, account, title, reviewURL string) []string 
 // serveHTMLInteractive serves HTML and waits for user decision
 // Returns decision details (code: 0 commit, 1 abort, 2 skip-from-terminal, 3 skip-from-HTML)
 // skipBrowserOpen: set to true if browser is already open (e.g., from progressive loading)
-func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, metadata []string, skipBrowserOpen bool, cfg Config, sessionID, friendlyName, repository string) (int, string, bool, error) {
+func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg string, metadata []string, skipBrowserOpen bool, cfg Config, sessionID, friendlyName, repository string, isPushReview bool) (int, string, bool, error) {
 	absPath, err := filepath.Abs(htmlPath)
 	if err != nil {
 		return 1, "", false, fmt.Errorf("failed to get absolute path: %w", err)
@@ -3178,13 +3201,13 @@ func serveHTMLInteractive(htmlPath string, port int, ln net.Listener, initialMsg
 		InitialText:             initialMsg,
 		FocusMessage:            true,
 		AllowCommit:             true,
-		AllowPush:               true,
+		AllowPush:               !isPushReview,
 		AllowSkip:               true,
 		AllowVouch:              true,
 		AllowAbort:              true,
-		RequireMessageForCommit: true,
-		RequireMessageForSkip:   true,
-		RequireMessageForVouch:  true,
+		RequireMessageForCommit: !isPushReview,
+		RequireMessageForSkip:   !isPushReview,
+		RequireMessageForVouch:  !isPushReview,
 	}
 	publishTerminalDraft := func(text string) int64 {
 		snap, err := draftState.Update(text, draftSourceTerminal, 0)

@@ -18,6 +18,7 @@ func WriteManagedHookScripts(dir string, cfg TemplateConfig) error {
 		"prepare-commit-msg": GeneratePrepareCommitMsgHook(cfg),
 		"commit-msg":         GenerateCommitMsgHook(cfg),
 		"post-commit":        GeneratePostCommitHook(cfg),
+		"pre-push":           GeneratePrePushHook(cfg),
 	}
 
 	for name, content := range scripts {
