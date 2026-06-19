@@ -56,6 +56,49 @@ func TestRunOnRecordsEmpty(t *testing.T) {
 	}
 }
 
+func TestValidateReadOnlySQL(t *testing.T) {
+	valid := []string{
+		"SELECT 1",
+		"  select * from review_log  ",
+		"SELECT * FROM review_log;",
+		"SELECT * FROM review_log ;  ",
+		"With x AS (SELECT 1) SELECT * FROM x",
+		"select action, count(*) from review_log group by action",
+	}
+	for _, sqlText := range valid {
+		t.Run("valid: "+sqlText, func(t *testing.T) {
+			if err := validateReadOnlySQL(sqlText); err != nil {
+				t.Errorf("validateReadOnlySQL(%q) = %v; want nil", sqlText, err)
+			}
+		})
+	}
+
+	invalid := []string{
+		"",
+		"   ",
+		"DROP TABLE review_log",
+		"DELETE FROM review_log",
+		"INSERT INTO review_log VALUES (1)",
+		"UPDATE review_log SET action='x'",
+		"CREATE TABLE evil (x)",
+		"ALTER TABLE review_log ADD COLUMN x",
+		"ATTACH DATABASE '/tmp/evil.db' AS evil",
+		"PRAGMA writable_schema=1",
+		"REPLACE INTO review_log VALUES (1)",
+		"SELECT 1; DROP TABLE review_log",
+		"SELECT 1;DROP TABLE review_log",
+		"SELECT 1; SELECT 2",
+		"-- comment\nSELECT 1",
+	}
+	for _, sqlText := range invalid {
+		t.Run("invalid: "+sqlText, func(t *testing.T) {
+			if err := validateReadOnlySQL(sqlText); err == nil {
+				t.Errorf("validateReadOnlySQL(%q) = nil; want an error", sqlText)
+			}
+		})
+	}
+}
+
 // BenchmarkRunOnRecords measures load+query cost at various repo sizes.
 // Run: go test -run=^$ -bench=RunOnRecords -benchmem ./internal/reviewquery/
 func BenchmarkRunOnRecords(b *testing.B) {

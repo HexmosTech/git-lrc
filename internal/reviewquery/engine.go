@@ -9,6 +9,9 @@ import (
 )
 
 // QueryResult is a generic tabular result: column headers + stringified rows.
+// Invariant: every row in Rows has exactly len(Columns) cells. storage.QueryRows
+// guarantees this when building a QueryResult; preserve it in any other
+// construction path (formatters rely on it).
 type QueryResult struct {
 	Columns []string
 	Rows    [][]string

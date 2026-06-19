@@ -9,7 +9,9 @@ import (
 
 // OpenInMemorySQLite opens a fresh in-memory sqlite database via the storage
 // boundary. Used by the review-query engine to build an ephemeral table that is
-// discarded when the handle is closed.
+// discarded when the handle is closed. The caller owns the returned handle and
+// must Close() it; the in-memory database (and all its data) is destroyed once
+// the last connection closes.
 func OpenInMemorySQLite() (*sql.DB, error) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
