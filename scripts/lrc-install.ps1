@@ -646,23 +646,6 @@ if (-not $env:HOME -and $env:USERPROFILE) {
     $env:HOME = $env:USERPROFILE
 }
 
-# Ship default review-history query aliases (idempotent — never clobbers edits)
-$LRC_DATA_DIR = Join-Path $env:USERPROFILE ".lrc"
-$LRC_QUERIES_FILE = Join-Path $LRC_DATA_DIR "queries.toml"
-if (-not (Test-Path $LRC_QUERIES_FILE)) {
-    New-Item -ItemType Directory -Path $LRC_DATA_DIR -Force | Out-Null
-    @'
-# git-lrc saved queries. Run with:  lrc query <name>
-# Add your own with:                lrc query --add "<sql>" --name "<name>"
-# Table columns: hash, short_hash, author, email, date, branch, subject, action, iterations, coverage
-[queries]
-stats = "SELECT action AS Action, COUNT(*) AS Commits, ROUND(AVG(iterations),1) AS AvgIter, ROUND(AVG(coverage),1) AS AvgCoveragePct FROM review_log GROUP BY action ORDER BY Commits DESC"
-by-author = "SELECT author AS Author, COUNT(*) AS Commits, SUM(action = 'reviewed') AS Reviewed FROM review_log GROUP BY author ORDER BY Commits DESC"
-recent = "SELECT short_hash AS Hash, date AS Date, action AS Action, subject AS Subject FROM review_log ORDER BY date DESC LIMIT 20"
-'@ | Set-Content -Path $LRC_QUERIES_FILE -Encoding UTF8
-    Write-Host "  OK Wrote default query aliases to $LRC_QUERIES_FILE" -ForegroundColor Green
-}
-
 # Install global hooks via lrc unless explicitly suppressed by the caller.
 if ($LRC_INSTALL_SKIP_HOOKS -eq "1") {
     Write-Host "Skipping automatic hook installation because LRC_INSTALL_SKIP_HOOKS=1" -ForegroundColor Yellow

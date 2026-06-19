@@ -62,6 +62,7 @@ type Handlers struct {
 	RunConfigCheck                  cli.ActionFunc
 	RunConfigPreview                cli.ActionFunc
 	RunQuery                        cli.ActionFunc
+	RunQueryAdd                     cli.ActionFunc
 	RunQueryList                    cli.ActionFunc
 	RunQueryView                    cli.ActionFunc
 	RunQueryDelete                  cli.ActionFunc
@@ -370,14 +371,18 @@ TABLE: review_log (one row per commit)
    iterations   INTEGER  review iterations (0 if none)
    coverage     INTEGER  review coverage percent 0-100 (0 if none)
 
-ALIASES: built-ins (stats, by-author, recent) plus your own, saved in
-~/.lrc/queries.toml. 'lrc query' with no args runs the 'stats' alias.
+ALIASES: built-in (stats, by-author, recent) plus your own. Manage them with
+'lrc query add|list|view|delete'. User aliases are saved in ~/.lrc/queries.toml:
+
+   [queries]
+   skipped = "SELECT date, subject FROM review_log WHERE action='skipped'"
+   my-cov  = "SELECT ROUND(AVG(coverage),1) FROM review_log WHERE action='reviewed'"
 
 EXAMPLES
-   lrc query                              # default summary (the 'stats' alias)
+   lrc query stats                        # run a built-in alias
    lrc query stats --json                 # same data, as JSON
-   lrc query list                         # show all aliases
-   lrc query view stats                   # show an alias's SQL
+   lrc query list                         # show all aliases + a preview
+   lrc query view stats                   # show an alias's full SQL
 
    # Was a specific commit reviewed? (incident forensics)
    lrc query "SELECT short_hash, action, iterations, coverage FROM review_log WHERE hash LIKE 'a1b2c3%'"
@@ -385,11 +390,8 @@ EXAMPLES
    # Per-author review effort
    lrc query "SELECT author, COUNT(*) AS commits, SUM(action='reviewed') AS reviewed FROM review_log GROUP BY author ORDER BY commits DESC"
 
-   # Coverage only on reviewed commits
-   lrc query "SELECT ROUND(AVG(coverage),1) AS avg_cov FROM review_log WHERE action='reviewed'"
-
    # Save and reuse your own query
-   lrc query --add "SELECT date, subject FROM review_log WHERE action='skipped'" --name skipped
+   lrc query add skipped "SELECT date, subject FROM review_log WHERE action='skipped'"
    lrc query skipped --json
 
    # Bound the scan on huge repos (Linux kernel = ~1.5M commits)
@@ -397,14 +399,18 @@ EXAMPLES
    lrc query stats --range main...feature   # just this PR's commits`,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "json", Usage: "output machine-readable JSON"},
-					&cli.StringFlag{Name: "add", Usage: "save the given SQL as an alias (requires --name)"},
-					&cli.StringFlag{Name: "name", Usage: "alias name to save with --add"},
 					&cli.StringFlag{Name: "from", Usage: "only scan commits since this git date (e.g. 2024-01-01, '2 weeks ago') — bounds large repos"},
 					&cli.StringFlag{Name: "to", Usage: "only scan commits until this git date"},
 					&cli.StringFlag{Name: "range", Usage: "only scan a ref range, e.g. main...feature (per-PR stats)"},
 				},
 				Action: h.RunQuery,
 				Subcommands: []*cli.Command{
+					{
+						Name:      "add",
+						Usage:     "Save a query alias: lrc query add <name> \"<sql>\"",
+						ArgsUsage: "<name> \"<sql>\"",
+						Action:    h.RunQueryAdd,
+					},
 					{
 						Name:   "list",
 						Usage:  "List saved and built-in query aliases",

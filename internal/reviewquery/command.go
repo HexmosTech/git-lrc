@@ -7,25 +7,10 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// RunQuery is the default action for `lrc query`. It either saves an alias
-// (--add/--name) or runs a saved alias / raw SQL and prints a table or JSON.
+// RunQuery is the default action for `lrc query`: runs a saved alias or raw SQL
+// and prints a table or JSON. With no argument it shows help (so users discover
+// the schema and examples rather than silently running a default query).
 func RunQuery(c *cli.Context) error {
-	if c.IsSet("add") {
-		add := strings.TrimSpace(c.String("add"))
-		name := strings.TrimSpace(c.String("name"))
-		if !c.IsSet("name") || name == "" {
-			return fmt.Errorf("--add requires --name")
-		}
-		if add == "" {
-			return fmt.Errorf("--add requires non-empty SQL")
-		}
-		if err := AddAlias(name, add); err != nil {
-			return err
-		}
-		fmt.Printf("Saved alias %q.\n", name)
-		return nil
-	}
-
 	// Seed from flags placed BEFORE the positional arg (cli parses those).
 	jsonOut := c.Bool("json")
 	filter := Filter{From: c.String("from"), To: c.String("to"), Range: c.String("range")}
@@ -37,11 +22,12 @@ func RunQuery(c *cli.Context) error {
 		return err
 	}
 
-	arg := "stats" // default alias
-	if len(positionals) > 0 && strings.TrimSpace(positionals[0]) != "" {
-		arg = strings.TrimSpace(positionals[0])
+	// No alias/SQL given -> show help instead of defaulting to a query.
+	if len(positionals) == 0 || strings.TrimSpace(positionals[0]) == "" {
+		return cli.ShowSubcommandHelp(c)
 	}
 
+	arg := strings.TrimSpace(positionals[0])
 	sqlText, found, err := ResolveAlias(arg)
 	if err != nil {
 		return err
@@ -53,7 +39,7 @@ func RunQuery(c *cli.Context) error {
 
 	res, err := Run(filter, sqlText)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w\n\nRun a saved alias or valid SQL, e.g.:\n  lrc query stats\n  lrc query \"SELECT * FROM review_log LIMIT 5\"\nSee 'lrc query --help' for the table schema and 'lrc query list' for aliases", err)
 	}
 
 	if jsonOut {
@@ -66,6 +52,29 @@ func RunQuery(c *cli.Context) error {
 	}
 	fmt.Print(FormatTable(res))
 	return nil
+}
+
+// RunQueryAdd saves a user alias: `lrc query add <name> "<sql>"`.
+func RunQueryAdd(c *cli.Context) error {
+	name := strings.TrimSpace(c.Args().Get(0))
+	sqlText := strings.TrimSpace(c.Args().Get(1))
+	if name == "" || sqlText == "" {
+		return fmt.Errorf("usage: lrc query add <name> \"<sql>\"")
+	}
+	if err := AddAlias(name, sqlText); err != nil {
+		return err
+	}
+	fmt.Printf("Saved alias %q.\n", name)
+	return nil
+}
+
+// truncateSQL shortens a query for compact listing.
+func truncateSQL(s string, max int) string {
+	s = strings.Join(strings.Fields(s), " ") // collapse whitespace/newlines
+	if len(s) > max {
+		return s[:max-1] + "…"
+	}
+	return s
 }
 
 // parseTrailingFlags pulls flags out of args that cli left unparsed (anything
@@ -128,7 +137,7 @@ func RunQueryList(c *cli.Context) error {
 		return nil
 	}
 	for _, a := range aliases {
-		fmt.Printf("%-18s [%s]\n", a.Name, a.Source)
+		fmt.Printf("%-16s %-10s %s\n", a.Name, "["+a.Source+"]", truncateSQL(a.SQL, 60))
 	}
 	return nil
 }

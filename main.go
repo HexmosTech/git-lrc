@@ -86,6 +86,7 @@ func main() {
 		RunConfigCheck:                  appcore.RunConfigCheck,
 		RunConfigPreview:                appcore.RunConfigPreview,
 		RunQuery:                        reviewquery.RunQuery,
+		RunQueryAdd:                     reviewquery.RunQueryAdd,
 		RunQueryList:                    reviewquery.RunQueryList,
 		RunQueryView:                    reviewquery.RunQueryView,
 		RunQueryDelete:                  reviewquery.RunQueryDelete,
