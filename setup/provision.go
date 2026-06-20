@@ -67,26 +67,11 @@ func ProvisionLiveReviewUser(cbData *HexmosCallbackData, apiURL string, logf fun
 		}
 	}
 
-	apiKeyReq := CreateAPIKeyRequest{Label: "LRC CLI Key"}
-	apiKeyURL := network.SetupCreateAPIKeyURL(apiURL, result.OrgID)
-	log("creating API key: POST %s", apiKeyURL)
-	resp2, err := network.SetupCreateAPIKey(client, apiURL, result.OrgID, apiKeyReq, result.AccessToken)
+	plainKey, err := createSetupAPIKey(client, apiURL, result.OrgID, result.AccessToken, log)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create API key: %w", err)
-	}
-	if resp2.StatusCode != http.StatusCreated && resp2.StatusCode != http.StatusOK {
-		// Do not log/echo response bodies here because create-key responses can contain plaintext secrets.
-		log("create API key failed: status=%d", resp2.StatusCode)
-		return nil, fmt.Errorf("create API key returned %d", resp2.StatusCode)
+		return nil, err
 	}
 
-	log("API key created: status=%d", resp2.StatusCode)
-
-	var apiKeyResp CreateAPIKeyResponse
-	if err := json.Unmarshal(resp2.Body, &apiKeyResp); err != nil {
-		return nil, fmt.Errorf("failed to parse API key response: %w", err)
-	}
-
-	result.PlainAPIKey = apiKeyResp.PlainKey
+	result.PlainAPIKey = plainKey
 	return result, nil
 }

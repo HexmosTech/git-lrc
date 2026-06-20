@@ -7,6 +7,26 @@ func SetupEnsureCloudUser(client *Client, cloudBase string, payload any, jwt str
 	return client.DoJSON(http.MethodPost, SetupEnsureCloudUserURL(cloudBase), payload, jwt, "", nil)
 }
 
+// SetupAuthLogin submits the self-hosted email/password login request.
+func SetupAuthLogin(client *Client, baseURL string, payload any) (*Response, error) {
+	return client.DoJSON(http.MethodPost, SetupAuthLoginURL(baseURL), payload, "", "", nil)
+}
+
+// SetupUIConfig retrieves the deployment configuration to check the server mode.
+func SetupUIConfig(client *Client, baseURL string) (*Response, error) {
+	return client.DoJSON(http.MethodGet, SetupUIConfigURL(baseURL), nil, "", "", nil)
+}
+
+// SetupAuthSetupStatus checks whether initial self-hosted admin setup is required.
+func SetupAuthSetupStatus(client *Client, baseURL string) (*Response, error) {
+	return client.DoJSON(http.MethodGet, SetupAuthSetupStatusURL(baseURL), nil, "", "", nil)
+}
+
+// SetupInitialAdmin submits the first-time self-hosted admin setup request.
+func SetupInitialAdmin(client *Client, baseURL string, payload any) (*Response, error) {
+	return client.DoJSON(http.MethodPost, SetupAuthSetupURL(baseURL), payload, "", "", nil)
+}
+
 // SetupRefreshTokens submits the auth refresh request.
 func SetupRefreshTokens(client *Client, cloudBase string, payload any) (*Response, error) {
 	return client.DoJSON(http.MethodPost, SetupAuthRefreshURL(cloudBase), payload, "", "", nil)

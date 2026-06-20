@@ -13,6 +13,7 @@ import (
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"
 	"github.com/HexmosTech/git-lrc/internal/staticserve"
 	"github.com/HexmosTech/git-lrc/network"
+	setuptpl "github.com/HexmosTech/git-lrc/setup"
 	"github.com/HexmosTech/git-lrc/storage"
 	uicfg "github.com/HexmosTech/git-lrc/ui"
 )
@@ -182,7 +183,13 @@ func (s *connectorManagerServer) handleReauthenticate(w http.ResponseWriter, r *
 	}
 
 	slog := newSetupLog()
-	result, err := runHexmosLoginFlow(slog, apiURL)
+	var result *setupResult
+	var err error
+	if setuptpl.IsCloudAPIURL(apiURL) {
+		result, err = runHexmosLoginFlow(slog, apiURL)
+	} else {
+		result, err = promptSelfHostedLoginFlow(apiURL, slog)
+	}
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("reauthentication failed: %v", err))
 		return
