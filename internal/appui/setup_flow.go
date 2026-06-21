@@ -75,11 +75,18 @@ func RunSetup(c *cli.Context) error {
 			return setupError(slog, err)
 		}
 
-		fmt.Printf("  %s%sStep 1/2%s  🔑 Authenticate with Hexmos\n", clr(cBold), clr(cBlue), clr(cReset))
-		fmt.Println()
-		slog.write("phase 1: starting hexmos login flow")
-
-		result, err = runHexmosLoginFlow(slog, selectedAPIURL)
+		if setuptpl.IsCloudAPIURL(selectedAPIURL) {
+			fmt.Printf("  %s%sStep 1/2%s  🔑 Authenticate with Hexmos\n", clr(cBold), clr(cBlue), clr(cReset))
+			fmt.Println()
+			slog.write("phase 1: starting hexmos login flow")
+			result, err = runHexmosLoginFlow(slog, selectedAPIURL)
+		} else {
+			fmt.Printf("  %s%sStep 1/2%s  🔑 Sign in to LiveReview\n", clr(cBold), clr(cBlue), clr(cReset))
+			fmt.Printf("  %sUsing self-hosted authentication at %s%s\n", clr(cDim), selectedAPIURL, clr(cReset))
+			fmt.Println()
+			slog.write("phase 1: starting self-hosted login flow for api_url=%s", selectedAPIURL)
+			result, err = promptSelfHostedLoginFlow(selectedAPIURL, slog)
+		}
 		if err != nil {
 			return setupError(slog, fmt.Errorf("authentication failed: %w", err))
 		}

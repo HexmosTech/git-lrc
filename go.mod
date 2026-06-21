@@ -8,6 +8,7 @@ require (
 	github.com/knadh/koanf/parsers/toml v0.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.3.2
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/term v0.39.0
 	modernc.org/sqlite v1.44.3

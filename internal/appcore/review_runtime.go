@@ -1,6 +1,7 @@
 package appcore
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"encoding/base64"
@@ -29,6 +30,7 @@ import (
 	"github.com/HexmosTech/git-lrc/interactive/input"
 	"github.com/HexmosTech/git-lrc/internal/appcore/decisionruntime"
 	"github.com/HexmosTech/git-lrc/internal/decisionflow"
+	"github.com/HexmosTech/git-lrc/internal/lrcrules"
 	"github.com/HexmosTech/git-lrc/internal/reviewapi"
 	"github.com/HexmosTech/git-lrc/internal/reviewdb"
 	"github.com/HexmosTech/git-lrc/internal/reviewhtml"
@@ -137,8 +139,10 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 	// Determine if this is a post-commit review (reviewing already-committed code, read-only)
 	// vs a pre-commit review (reviewing staged changes before commit, can commit from UI)
-	// When --commit flag is used, we're always reviewing historical commits (read-only mode)
-	isPostCommitReview := opts.DiffSource == "commit"
+	// When --commit or --range is used, we're always reviewing a diff between
+	// existing refs (read-only mode) — there's nothing in the working tree to
+	// commit, and no per-tree attestation applies.
+	isPostCommitReview := opts.DiffSource == "commit" || opts.DiffSource == "range"
 	useBlockingReview := opts.BlockingReview && !isPostCommitReview
 	deferCommit := opts.Precommit || useBlockingReview
 
@@ -303,6 +307,37 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		return fmt.Errorf("no diff content collected")
 	}
 
+	// Apply .lrc/ignore (if present) to the collected diff before zipping it
+	// up, so ignored files are never sent to LiveReview for review or billing.
+	if repoRootPath != "" {
+		lrcDir, ok, lrcErr := lrcrules.Load(repoRootPath)
+		if lrcErr != nil {
+			log.Printf("Warning: failed to load .lrc directory: %v", lrcErr)
+		} else if ok {
+			patterns, patErr := lrcrules.LoadIgnorePatterns(lrcDir)
+			if patErr != nil {
+				log.Printf("Warning: failed to read .lrc/ignore: %v", patErr)
+			} else if len(patterns) > 0 {
+				filtered, excluded := lrcrules.FilterDiff(diffContent, patterns)
+				if len(excluded) > 0 {
+					if len(filtered) == 0 {
+						fmt.Printf("LiveReview: no diff to submit -- %d file(s) excluded by .lrc/ignore: %s\n",
+							len(excluded), formatExcludedFiles(excluded))
+						if !isPostCommitReview {
+							if err := ensureAttestationFull(attestationPayload{Action: "skipped"}, verbose, &attestationWritten); err != nil {
+								return err
+							}
+						}
+						return nil
+					}
+					fmt.Printf("LiveReview: excluding %d file(s) via .lrc/ignore: %s\n",
+						len(excluded), formatExcludedFiles(excluded))
+					diffContent = filtered
+				}
+			}
+		}
+	}
+
 	var fakeBaseFiles []reviewmodel.DiffReviewFileResult
 	if fakeMode {
 		fakeBaseFiles, err = parseDiffToFiles(diffContent)
@@ -315,8 +350,24 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		log.Printf("Collected %d bytes of diff content", len(diffContent))
 	}
 
-	// Create ZIP archive
-	zipData, err := reviewapi.CreateZipArchive(diffContent)
+	// Create ZIP archive, including the raw .lrc/ tree (if present) so
+	// LiveReview can apply Repository Rules.
+	var lrcExtras map[string][]byte
+	if repoRootPath != "" {
+		var lrcWarnings []string
+		lrcExtras, lrcWarnings, err = lrcrules.CollectZipExtras(repoRootPath)
+		if err != nil {
+			log.Printf("Warning: failed to collect .lrc/ files: %v", err)
+		}
+		for _, w := range lrcWarnings {
+			log.Printf("Warning: .lrc/ %s", w)
+		}
+		if verbose && len(lrcExtras) > 0 {
+			log.Printf("Including %d .lrc/ file(s) in review bundle", len(lrcExtras))
+		}
+	}
+
+	zipData, err := reviewapi.CreateZipArchiveWithExtras(diffContent, lrcExtras)
 	if err != nil {
 		return fmt.Errorf("failed to create zip archive: %w", err)
 	}
@@ -1531,6 +1582,19 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	return nil
 }
 
+// maxExcludedFilesListed caps how many .lrc/ignore-excluded file paths are
+// printed by name before the rest are summarized as "and N more", so a
+// large ignore list doesn't produce an unreadable wall of text.
+const maxExcludedFilesListed = 10
+
+func formatExcludedFiles(excluded []string) string {
+	if len(excluded) <= maxExcludedFilesListed {
+		return strings.Join(excluded, ", ")
+	}
+	shown := excluded[:maxExcludedFilesListed]
+	return fmt.Sprintf("%s, and %d more", strings.Join(shown, ", "), len(excluded)-maxExcludedFilesListed)
+}
+
 func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 	diffSource := opts.DiffSource
 	verbose := opts.Verbose
@@ -1934,6 +1998,22 @@ func loadConfigValues(apiKeyOverride, apiURLOverride string, verbose bool) (*Con
 	return config, nil
 }
 
+// zipEntryNames lists the file names contained in a zip archive, falling
+// back to a placeholder describing the read error if the archive can't be
+// read.
+func zipEntryNames(zipData []byte) []string {
+	reader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return []string{fmt.Sprintf("(failed to read zip: %v)", err)}
+	}
+
+	names := make([]string, 0, len(reader.File))
+	for _, f := range reader.File {
+		names = append(names, f.Name)
+	}
+	return names
+}
+
 // saveBundleForInspection saves the bundle in multiple formats for inspection
 func saveBundleForInspection(path string, diffContent, zipData []byte, base64Diff string, verbose bool) error {
 	// Create a comprehensive bundle file with sections
@@ -1951,7 +2031,7 @@ func saveBundleForInspection(path string, diffContent, zipData []byte, base64Dif
 	buf.WriteString("## SECTION 2: Zip Archive Info\n")
 	buf.WriteString("## " + strings.Repeat("-", 76) + "\n")
 	buf.WriteString(fmt.Sprintf("## Zip size: %d bytes\n", len(zipData)))
-	buf.WriteString("## Contains: diff.txt\n\n")
+	buf.WriteString("## Contains: " + strings.Join(zipEntryNames(zipData), ", ") + "\n\n")
 
 	buf.WriteString("## SECTION 3: Base64 Encoded Bundle (sent to API)\n")
 	buf.WriteString("## This is what gets transmitted in the API request\n")

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,6 +80,14 @@ func ResolveRepoRoot() (string, error) {
 }
 
 func CreateZipArchive(diffContent []byte) ([]byte, error) {
+	return CreateZipArchiveWithExtras(diffContent, nil)
+}
+
+// CreateZipArchiveWithExtras builds the diff-review zip containing
+// "diff.txt" plus any additional named entries (e.g. the raw .lrc/ tree,
+// keyed by repo-relative path such as ".lrc/rules/security.md"). extras
+// may be nil.
+func CreateZipArchiveWithExtras(diffContent []byte, extras map[string][]byte) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(buf)
 
@@ -89,6 +98,23 @@ func CreateZipArchive(diffContent []byte) ([]byte, error) {
 
 	if _, err := fileWriter.Write(diffContent); err != nil {
 		return nil, fmt.Errorf("failed to write to zip: %w", err)
+	}
+
+	// Sort keys for deterministic zip output.
+	names := make([]string, 0, len(extras))
+	for name := range extras {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		extraWriter, err := zipWriter.Create(name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create zip entry %q: %w", name, err)
+		}
+		if _, err := extraWriter.Write(extras[name]); err != nil {
+			return nil, fmt.Errorf("failed to write zip entry %q: %w", name, err)
+		}
 	}
 
 	if err := zipWriter.Close(); err != nil {

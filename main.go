@@ -10,11 +10,12 @@ import (
 	"github.com/HexmosTech/git-lrc/internal/appui"
 	"github.com/HexmosTech/git-lrc/internal/reviewdb"
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"
+	"github.com/HexmosTech/git-lrc/internal/reviewquery"
 	"github.com/HexmosTech/git-lrc/internal/selfupdate"
 	"github.com/urfave/cli/v2"
 )
 
-const appVersion = "v0.5.0"
+const appVersion = "v0.5.2"
 
 var (
 	version    = appVersion
@@ -26,7 +27,7 @@ var (
 var baseFlags = []cli.Flag{
 	&cli.StringFlag{Name: "repo-name", Usage: "repository name (defaults to current directory basename)", EnvVars: []string{"LRC_REPO_NAME"}},
 	&cli.BoolFlag{Name: "staged", Usage: "use staged changes instead of working tree", EnvVars: []string{"LRC_STAGED"}},
-	&cli.StringFlag{Name: "range", Usage: "git range for staged/working diff override (e.g., HEAD~1..HEAD)", EnvVars: []string{"LRC_RANGE"}},
+	&cli.StringFlag{Name: "range", Usage: "review a diff between two refs, e.g. for a PR before merging: 'main...my-feature' (changes on my-feature since it diverged from main). Read-only: skips commit/attestation.", EnvVars: []string{"LRC_RANGE"}},
 	&cli.StringFlag{Name: "commit", Usage: "review a specific commit or commit range (e.g., HEAD, HEAD~1, HEAD~3..HEAD, abc123)", EnvVars: []string{"LRC_COMMIT"}},
 	&cli.StringFlag{Name: "diff-file", Usage: "path to pre-generated diff file", EnvVars: []string{"LRC_DIFF_FILE"}},
 	&cli.StringFlag{Name: "api-url", Value: reviewopts.DefaultAPIURL, Usage: "LiveReview API base URL", EnvVars: []string{"LRC_API_URL"}},
@@ -59,22 +60,22 @@ func main() {
 	appcore.Configure(version, reviewMode)
 
 	app := cmdapp.BuildApp(version, buildTime, gitCommit, reviewMode, baseFlags, debugFlags, cmdapp.Handlers{
-		RunReviewSimple:       runReviewSimple,
-		RunReviewDebug:        runReviewDebug,
-		RunEnsure:             appui.RunEnsure,
-		RunUninstall:          appcore.RunUninstall,
-		RunHooksInstall:       appcore.RunHooksInstall,
-		RunHooksUninstall:     appcore.RunHooksUninstall,
-		RunHooksEnable:        appcore.RunHooksEnable,
-		RunHooksDisable:       appcore.RunHooksDisable,
-		RunHooksStatus:        appcore.RunHooksStatus,
-		RunSelfUpdate:         selfupdate.RunSelfUpdate,
-		RunReviewCleanup:      func(c *cli.Context) error { return reviewdb.RunReviewDBCleanup(c.Bool("verbose")) },
-		RunAttestationTrailer: appcore.RunAttestationTrailer,
-		RunSetup:              appui.RunSetup,
-		RunOnboard:            appui.RunOnboard,
-		RunUI:                 appui.RunUI,
-		RunUsageInspect:              appcore.RunUsageInspect,
+		RunReviewSimple:                 runReviewSimple,
+		RunReviewDebug:                  runReviewDebug,
+		RunEnsure:                       appui.RunEnsure,
+		RunUninstall:                    appcore.RunUninstall,
+		RunHooksInstall:                 appcore.RunHooksInstall,
+		RunHooksUninstall:               appcore.RunHooksUninstall,
+		RunHooksEnable:                  appcore.RunHooksEnable,
+		RunHooksDisable:                 appcore.RunHooksDisable,
+		RunHooksStatus:                  appcore.RunHooksStatus,
+		RunSelfUpdate:                   selfupdate.RunSelfUpdate,
+		RunReviewCleanup:                func(c *cli.Context) error { return reviewdb.RunReviewDBCleanup(c.Bool("verbose")) },
+		RunAttestationTrailer:           appcore.RunAttestationTrailer,
+		RunSetup:                        appui.RunSetup,
+		RunOnboard:                      appui.RunOnboard,
+		RunUI:                           appui.RunUI,
+		RunUsageInspect:                 appcore.RunUsageInspect,
 		RunInternalClaudePreToolUse:     appcore.RunInternalClaudePreToolUse,
 		RunInternalClaudeRunCommit:      appcore.RunInternalClaudeRunCommit,
 		RunInternalClaudeSetupStart:     appcore.RunInternalClaudeSetupStart,
@@ -82,6 +83,14 @@ func main() {
 		RunInternalClaudeSetupSubmitKey: appcore.RunInternalClaudeSetupSubmitKey,
 		RunInternalClaudeSetupStatus:    appcore.RunInternalClaudeSetupStatus,
 		RunRemoveAttestation:            appcore.RunRemoveAttestation,
+		RunConfigInit:                   appcore.RunConfigInit,
+		RunConfigCheck:                  appcore.RunConfigCheck,
+		RunConfigPreview:                appcore.RunConfigPreview,
+		RunQuery:                        reviewquery.RunQuery,
+		RunQueryAdd:                     reviewquery.RunQueryAdd,
+		RunQueryList:                    reviewquery.RunQueryList,
+		RunQueryView:                    reviewquery.RunQueryView,
+		RunQueryDelete:                  reviewquery.RunQueryDelete,
 	})
 
 	if err := app.Run(os.Args); err != nil {

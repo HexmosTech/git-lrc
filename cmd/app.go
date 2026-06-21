@@ -6,6 +6,34 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// reviewCommandDescription documents the most common diff sources, including
+// how to review a feature branch before merging (PR-style review).
+const reviewCommandDescription = `By default, reviews staged changes (git diff --staged).
+
+Common diff sources:
+
+   lrc review                          # staged changes (default)
+   lrc review --staged=false           # working tree changes (unstaged)
+   lrc review --commit HEAD            # the most recent commit
+   lrc review --commit HEAD~3..HEAD    # the last 3 commits
+
+Reviewing a branch before merging (PR-style review):
+
+   lrc review --range main...my-feature
+
+   Three dots (...) compare against the merge base: you get exactly the
+   changes introduced by my-feature since it diverged from main, even if
+   main has moved on since. This is what GitHub/GitLab show in a PR diff,
+   and is almost always what you want.
+
+   Two dots (main..my-feature) is a direct diff between the two tips,
+   which also includes any commits already on main that my-feature
+   hasn't picked up yet.
+
+--range and --commit (with a "..." or ".." range) are read-only: they
+review a diff between existing refs, open a browsable HTML report, and
+do not write a commit attestation or offer to commit/push.`
+
 // Handlers contains injected command actions so CLI wiring can live outside main.
 type Handlers struct {
 	RunReviewSimple       cli.ActionFunc
@@ -29,8 +57,16 @@ type Handlers struct {
 	RunInternalClaudeSetupStart   cli.ActionFunc
 	RunInternalClaudeSetupWorker  cli.ActionFunc
 	RunInternalClaudeSetupSubmitKey cli.ActionFunc
-	RunInternalClaudeSetupStatus  cli.ActionFunc
-	RunRemoveAttestation          cli.ActionFunc
+	RunInternalClaudeSetupStatus    cli.ActionFunc
+	RunRemoveAttestation            cli.ActionFunc
+	RunConfigInit                   cli.ActionFunc
+	RunConfigCheck                  cli.ActionFunc
+	RunConfigPreview                cli.ActionFunc
+	RunQuery                        cli.ActionFunc
+	RunQueryAdd                     cli.ActionFunc
+	RunQueryList                    cli.ActionFunc
+	RunQueryView                    cli.ActionFunc
+	RunQueryDelete                  cli.ActionFunc
 }
 
 // BuildApp constructs the full CLI app with all command wiring.
@@ -98,17 +134,19 @@ func BuildApp(version, buildTime, gitCommit, reviewMode string, baseFlags, debug
 				Action: h.RunUninstall,
 			},
 			{
-				Name:    "review",
-				Aliases: []string{"r"},
-				Usage:   "Run a review with sensible defaults",
-				Flags:   baseFlags,
-				Action:  h.RunReviewSimple,
+				Name:        "review",
+				Aliases:     []string{"r"},
+				Usage:       "Run a review with sensible defaults",
+				Description: reviewCommandDescription,
+				Flags:       baseFlags,
+				Action:      h.RunReviewSimple,
 			},
 			{
-				Name:   "review-debug",
-				Usage:  "Run a review with advanced debug options",
-				Flags:  append(baseFlags, debugFlags...),
-				Action: h.RunReviewDebug,
+				Name:        "review-debug",
+				Usage:       "Run a review with advanced debug options",
+				Description: reviewCommandDescription,
+				Flags:       append(baseFlags, debugFlags...),
+				Action:      h.RunReviewDebug,
 			},
 			{
 				Name:  "hooks",
@@ -316,6 +354,103 @@ func BuildApp(version, buildTime, gitCommit, reviewMode string, baseFlags, debug
 				Name:   "remove-attestation",
 				Usage:  "Remove the attestation for the current staged tree",
 				Action: h.RunRemoveAttestation,
+			},
+			{
+				Name:  "config",
+				Usage: "Manage .lrc/ repository rules configuration",
+				Subcommands: []*cli.Command{
+					{
+						Name:   "init",
+						Usage:  "Scaffold the .lrc/ directory structure",
+						Action: h.RunConfigInit,
+					},
+					{
+						Name:   "check",
+						Usage:  "Validate .lrc/ rules and structure (offline)",
+						Action: h.RunConfigCheck,
+					},
+					{
+						Name:   "preview",
+						Usage:  "Show the rules bundle LiveReview will use (offline)",
+						Action: h.RunConfigPreview,
+					},
+				},
+			},
+			{
+				Name:  "query",
+				Usage: "Query LiveReview history with SQL or a saved alias (e.g. 'lrc query stats')",
+				Description: `Builds an in-memory SQLite table of this repo's review history (parsed
+from the 'LiveReview Pre-Commit Check' commit trailers) and runs SQL — or a
+saved alias — against it. Output as a table or, with --json, machine-readable.
+
+TABLE: review_log (one row per commit)
+   hash         TEXT     full commit hash
+   short_hash   TEXT     abbreviated hash
+   author       TEXT     commit author name
+   email        TEXT     commit author email
+   date         TEXT     author date, ISO-8601 (sortable, e.g. 2026-06-17T10:30:00Z)
+   branch       TEXT     branch the query ran from
+   subject      TEXT     commit subject (first line)
+   action       TEXT     'reviewed' | 'vouched' | 'skipped' | 'none'
+   iterations   INTEGER  review iterations (0 if none)
+   coverage     INTEGER  review coverage percent 0-100 (0 if none)
+
+ALIASES: built-in (stats, by-author, recent) plus your own. Manage them with
+'lrc query add|list|view|delete'. User aliases are saved in ~/.lrc/queries.toml:
+
+   [queries]
+   skipped = "SELECT date, subject FROM review_log WHERE action='skipped'"
+   my-cov  = "SELECT ROUND(AVG(coverage),1) FROM review_log WHERE action='reviewed'"
+
+EXAMPLES
+   lrc query stats                        # run a built-in alias
+   lrc query stats --json                 # same data, as JSON
+   lrc query list                         # show all aliases + a preview
+   lrc query view stats                   # show an alias's full SQL
+
+   # Was a specific commit reviewed? (incident forensics)
+   lrc query "SELECT short_hash, action, iterations, coverage FROM review_log WHERE hash LIKE 'a1b2c3%'"
+
+   # Per-author review effort
+   lrc query "SELECT author, COUNT(*) AS commits, SUM(action='reviewed') AS reviewed FROM review_log GROUP BY author ORDER BY commits DESC"
+
+   # Save and reuse your own query
+   lrc query add skipped "SELECT date, subject FROM review_log WHERE action='skipped'"
+   lrc query skipped --json
+
+   # Bound the scan on huge repos (Linux kernel = ~1.5M commits)
+   lrc query stats --from "2024-01-01" --to "2024-12-31"
+   lrc query stats --range main...feature   # just this PR's commits`,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "json", Usage: "output machine-readable JSON"},
+					&cli.StringFlag{Name: "from", Usage: "only scan commits since this git date (e.g. 2024-01-01, '2 weeks ago') — bounds large repos"},
+					&cli.StringFlag{Name: "to", Usage: "only scan commits until this git date"},
+					&cli.StringFlag{Name: "range", Usage: "only scan a ref range, e.g. main...feature (per-PR stats)"},
+				},
+				Action: h.RunQuery,
+				Subcommands: []*cli.Command{
+					{
+						Name:      "add",
+						Usage:     "Save a query alias: lrc query add <name> \"<sql>\"",
+						ArgsUsage: "<name> \"<sql>\"",
+						Action:    h.RunQueryAdd,
+					},
+					{
+						Name:   "list",
+						Usage:  "List saved and built-in query aliases",
+						Action: h.RunQueryList,
+					},
+					{
+						Name:   "view",
+						Usage:  "Print the SQL behind an alias",
+						Action: h.RunQueryView,
+					},
+					{
+						Name:   "delete",
+						Usage:  "Delete a saved alias",
+						Action: h.RunQueryDelete,
+					},
+				},
 			},
 			{
 				Name:   "internal",

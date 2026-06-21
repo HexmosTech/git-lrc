@@ -1,0 +1,5 @@
+# .lrc/ignore — gitignore-style patterns
+#
+# Paths are matched relative to the repository root, using the same syntax
+# as .gitignore (comments, blank lines, "**", negation with "!", etc.).
+# Files matching a pattern here are excluded from AI review.

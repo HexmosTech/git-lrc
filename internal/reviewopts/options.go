@@ -115,7 +115,15 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 			opts.Serve = true
 		}
 	} else if opts.RangeVal != "" {
+		if opts.BlockingReview {
+			return Options{}, fmt.Errorf("cannot use --blocking-review with --range reviews")
+		}
 		diffSource = "range"
+		opts.Precommit = false
+		opts.Skip = false
+		if !c.IsSet("serve") && !c.IsSet("save-html") {
+			opts.Serve = true
+		}
 	} else if staged {
 		diffSource = "staged"
 	}

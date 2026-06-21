@@ -75,6 +75,15 @@ func WriteFileAtomically(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
+// ReadFile reads bytes from disk via the storage boundary.
+func ReadFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %s: %w", path, err)
+	}
+	return data, nil
+}
+
 // WriteFile writes bytes to disk via the storage boundary.
 func WriteFile(path string, data []byte, mode os.FileMode) error {
 	if err := os.WriteFile(path, data, mode); err != nil {
