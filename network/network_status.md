@@ -10,7 +10,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 
 - Network boundary: outbound HTTP API operations and response handling in network package.
 - Modes represented: api.
-- Operation count tracked: 22 operations.
+- Operation count tracked: 24 operations.
 - Severity distribution: High 10, Medium 7, Low 2.
 - Current diff note: self-hosted setup now uses LiveReview email/password auth endpoints (`/api/v1/auth/login`, `/api/v1/auth/setup-status`, `/api/v1/auth/setup`) in addition to existing cloud ensure-cloud-user setup path.
 - Current diff note: internal reviewapi helper evidence links were revalidated after git path helper additions; network inventory scope is unchanged.
@@ -53,6 +53,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | SetupValidateConnectorKey | api | Provider key and validation request body | Validate AI connector key before persistence | High | Third-party key exposure/handling risk | Compensated by authenticated request path plus connector key redaction in setup error surfaces; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L41) |
 | SetupCreateConnector | api | Connector configuration payload | Persist connector configuration via LiveReview API | High | Misconfiguration and sensitive metadata transmission risk | Compensated by bearer auth plus org context boundary; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L46) |
 | SetupListConnectors | api | Existing connector inventory for current org | Inspect minimum AI readiness during setup and re-auth preflight | High | Sensitive connector metadata and auth-context exposure risk | Compensated by bearer auth plus org context boundary; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L51) |
+| SetupOnboard | api | Onboarding API key (X-API-Key header) and returned token set | Non-interactively onboard a new machine using an onboarding API key | High | Exposure of onboarding key and returned credentials | Compensated by direct, secure binary execution, atomic config writes (0600), and short-lived setup context; residual risk acceptable | [network/setup_operations.go](setup_operations.go#L56) |
 
 ## Inventory: Proxy And Forwarding APIs
 
@@ -76,10 +77,11 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | Client.DoJSON | api | Request/response JSON payload bytes | Standard JSON HTTP call wrapper | Medium | Medium risk from broad transport usage and status-handling variance | Compensated by centralized transport wrapper with timeout controls; acceptable risk | [network/http_client.go](http_client.go#L43) |
 | Client.Do | api | Raw HTTP request/response bytes | Generic HTTP call wrapper for non-JSON/raw workflows | Medium | Medium risk from raw payload handling flexibility | Partially compensated by shared client boundary; Suggestion: document callsite expectations for raw bodies | [network/http_client.go](http_client.go#L89) |
 | SetupEnsureCloudUserURL | api | Base URL plus endpoint normalization inputs | Normalize endpoint composition and reduce path ambiguity | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L13) |
-| SetupAuthLoginURL | api | Base URL plus endpoint normalization inputs | Build self-hosted login endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L17) |
-| SetupUIConfigURL | api | Base URL | Build UI config URL | Low | Low risk | Compensated by public endpoint utility; acceptable risk | [network/endpoints.go](endpoints.go#L21) |
-| SetupAuthSetupStatusURL | api | Base URL plus endpoint normalization inputs | Build self-hosted setup-status endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L25) |
-| SetupAuthSetupURL | api | Base URL plus endpoint normalization inputs | Build self-hosted initial-admin setup endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L29) |
+| SetupOnboardURL | api | Base URL plus endpoint normalization inputs | Build onboarding endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L17) |
+| SetupAuthLoginURL | api | Base URL plus endpoint normalization inputs | Build self-hosted login endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L21) |
+| SetupUIConfigURL | api | Base URL | Build UI config URL | Low | Low risk | Compensated by public endpoint utility; acceptable risk | [network/endpoints.go](endpoints.go#L25) |
+| SetupAuthSetupStatusURL | api | Base URL plus endpoint normalization inputs | Build self-hosted setup-status endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L29) |
+| SetupAuthSetupURL | api | Base URL plus endpoint normalization inputs | Build self-hosted initial-admin setup endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L33) |
 | PollReview | api | Review IDs, status payloads, timeout state | Timeout-bounded polling orchestration in review runtime | High | High availability/latency risk if review service is degraded | Compensated by bounded timeout and interval controls; residual risk acceptable | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L201) |
 | formatJSONParseError | api | Response body text for parse diagnostics | Improve operator diagnostics when endpoint/port mismatches occur | Low | Low risk diagnostic utility behavior | Compensated by safer error interpretation path; acceptable risk | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L129) |
 
