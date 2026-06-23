@@ -1,4 +1,4 @@
-import { formatResetAt, normalizeUsagePayload, planLabel, usageTone } from '/static/components/usage_chip_model.mjs';
+import { formatResetAt, isEnterpriseSelfhostedPlan, normalizeUsagePayload, planLabel, usageTone } from '/static/components/usage_chip_model.mjs';
 
 const { html, useEffect, useMemo, useRef, useState } = window.preact;
 
@@ -118,7 +118,9 @@ export function UsageChip({ endpoint, refreshMs = DEFAULT_REFRESH_MS }) {
   const buttonLabel = loading
     ? 'Usage...'
     : chip.available
-      ? `${planLabel(chip.planCode)} ${chip.usagePct}%`
+      ? isEnterpriseSelfhostedPlan(chip.planCode)
+        ? `${planLabel(chip.planCode)} • ${chip.locUsed.toLocaleString()} LOC used`
+        : `${planLabel(chip.planCode)} ${chip.usagePct}%`
       : 'Usage unavailable';
 
   const title = chip.available
@@ -147,16 +149,21 @@ export function UsageChip({ endpoint, refreshMs = DEFAULT_REFRESH_MS }) {
             : chip.available
               ? html`
                 <p class="usage-chip-title">Billing Usage Detail</p>
-                <p class="usage-chip-help">
-                  Scope: organization usage in current billing period. Attribution is charged to the triggering actor.
-                </p>
+
+                ${!isEnterpriseSelfhostedPlan(chip.planCode) && html`
+                  <p class="usage-chip-help">
+                    Scope: organization usage in current billing period. Attribution is charged to the triggering actor.
+                  </p>
+                `}
 
                 ${''}
 
-                <div class="usage-chip-reset-card">
-                  <p class="usage-chip-reset-title">Usage resets on ${formatResetAt(chip.resetAt)}</p>
-                  <p class="usage-chip-reset-sub">Local timezone. New cycle usage starts immediately after this time.</p>
-                </div>
+                ${!isEnterpriseSelfhostedPlan(chip.planCode) && html`
+                  <div class="usage-chip-reset-card">
+                    <p class="usage-chip-reset-title">Usage resets on ${formatResetAt(chip.resetAt)}</p>
+                    <p class="usage-chip-reset-sub">Local timezone. New cycle usage starts immediately after this time.</p>
+                  </div>
+                `}
 
                 <div class="usage-chip-grid">
                   <div class="usage-chip-cell">
@@ -165,7 +172,9 @@ export function UsageChip({ endpoint, refreshMs = DEFAULT_REFRESH_MS }) {
                   </div>
                   <div class="usage-chip-cell">
                     <p class="usage-chip-cell-label">Org Usage</p>
-                    <p class="usage-chip-cell-value">${chip.locUsed.toLocaleString()} / ${chip.locLimit > 0 ? chip.locLimit.toLocaleString() : 'Unlimited'} LOC</p>
+                    ${isEnterpriseSelfhostedPlan(chip.planCode)
+                      ? html`<p class="usage-chip-cell-value">${chip.locUsed.toLocaleString()} LOC</p>`
+                      : html`<p class="usage-chip-cell-value">${chip.locUsed.toLocaleString()} LOC / ${chip.locLimit > 0 ? chip.locLimit.toLocaleString() : 'Unlimited'} LOC</p>`}
                   </div>
                   <div class="usage-chip-cell">
                     <p class="usage-chip-cell-label">My Usage</p>
@@ -181,8 +190,9 @@ export function UsageChip({ endpoint, refreshMs = DEFAULT_REFRESH_MS }) {
                       `}
                   </div>
                 </div>
-
+                ${!isEnterpriseSelfhostedPlan(chip.planCode) && html`
                 <p class="usage-chip-footnote">Operations are billable actions. Share is your LOC contribution percentage out of org usage.</p>
+                `}
 
                 ${chip.canViewTeamBreakdown && chip.topMembers.length > 0
                   ? html`

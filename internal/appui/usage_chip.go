@@ -74,12 +74,19 @@ func (s *connectorManagerServer) handleUsageChip(w http.ResponseWriter, r *http.
 		return
 	}
 
+	s.mu.Lock()
+	apiURL := strings.TrimSpace(s.cfg.APIURL)
+	s.mu.Unlock()
+	if apiURL == "" {
+		apiURL = setuptpl.CloudAPIURL
+	}
+
 	payload := uicfg.UsageChipResponse{
 		Available:            false,
 		UsagePct:             0,
 		TopMembers:           make([]uicfg.UsageChipMember, 0),
 		CanViewTeamBreakdown: false,
-		CloudURL:             setuptpl.CloudAPIURL,
+		CloudURL:             apiURL,
 		FetchedAt:            time.Now().UTC().Format(time.RFC3339),
 	}
 

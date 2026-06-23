@@ -11,7 +11,6 @@ import (
 	"github.com/HexmosTech/git-lrc/internal/reviewmodel"
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"
 	"github.com/HexmosTech/git-lrc/network"
-	"github.com/HexmosTech/git-lrc/setup"
 	uicfg "github.com/HexmosTech/git-lrc/ui"
 )
 
@@ -92,7 +91,6 @@ func buildRuntimeUsageChipPayload(config *Config, verbose bool) uicfg.UsageChipR
 		TopMembers:           make([]uicfg.UsageChipMember, 0),
 		CanViewTeamBreakdown: false,
 		FetchedAt:            time.Now().UTC().Format(time.RFC3339),
-		CloudURL:             setup.CloudAPIURL,
 	}
 
 	if config == nil {
@@ -104,6 +102,7 @@ func buildRuntimeUsageChipPayload(config *Config, verbose bool) uicfg.UsageChipR
 	if apiURL == "" {
 		apiURL = reviewopts.DefaultAPIURL
 	}
+	payload.CloudURL = apiURL
 	if strings.TrimSpace(config.JWT) == "" || strings.TrimSpace(config.OrgID) == "" {
 		payload.UnavailableReason = "Not authenticated. Run lrc ui to sign in and select an organization."
 		return payload

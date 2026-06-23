@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { clampUsagePercent, normalizeUsagePayload, planLabel, usageTone } from './usage_chip_model.mjs';
+import { clampUsagePercent, isEnterpriseSelfhostedPlan, normalizeUsagePayload, planLabel, usageTone } from './usage_chip_model.mjs';
 
 test('planLabel maps known plan codes', () => {
   assert.equal(planLabel('free'), 'Free 30k');
@@ -10,6 +10,14 @@ test('planLabel maps known plan codes', () => {
   assert.equal(planLabel('team_32usd'), 'Team 100k');
   assert.equal(planLabel('loc_1600k'), 'Team 1.6M');
   assert.equal(planLabel('custom_plan'), 'custom_plan');
+  assert.equal(planLabel('enterprise-selfhosted'), 'Enterprise - Selfhosted');
+});
+
+test('isEnterpriseSelfhostedPlan detects enterprise-selfhosted plan', () => {
+  assert.equal(isEnterpriseSelfhostedPlan('enterprise-selfhosted'), true);
+  assert.equal(isEnterpriseSelfhostedPlan('free_30k'), false);
+  assert.equal(isEnterpriseSelfhostedPlan('team_32usd'), false);
+  assert.equal(isEnterpriseSelfhostedPlan(''), false);
 });
 
 test('clampUsagePercent normalizes numeric values', () => {

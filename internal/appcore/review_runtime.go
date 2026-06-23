@@ -267,6 +267,9 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		if strings.TrimSpace(opts.APIURL) != "" {
 			config.APIURL = opts.APIURL
 		}
+		if authErr := loadAuthConfigFile(config); authErr != nil {
+			log.Printf("Failed to load auth config: %v", authErr)
+		}
 		if verbose {
 			log.Printf("Fake review mode enabled (reviewMode=%s)", reviewMode)
 		}
@@ -1996,6 +1999,40 @@ func loadConfigValues(apiKeyOverride, apiURLOverride string, verbose bool) (*Con
 	}
 
 	return config, nil
+}
+
+// loadAuthConfigFile reads JWT and OrgID from ~/.lrc.toml and populates
+// them on the given config. It does not require an API key, so it can be
+// used in fake mode where the full config loading is skipped.
+// Returns nil on success or when the config file simply doesn't exist
+// (which is expected for first-time users). Returns an error only when
+// the file exists but cannot be read or parsed.
+func loadAuthConfigFile(config *Config) error {
+	configPath, err := configpath.ResolveConfigPath()
+	if err != nil {
+		return fmt.Errorf("resolve config path: %w", err)
+	}
+	if _, err := os.Stat(configPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("access config file %s: %w", configPath, err)
+	}
+	k := koanf.New(".")
+	if err := k.Load(file.Provider(configPath), toml.Parser()); err != nil {
+		return fmt.Errorf("parse config file %s: %w", configPath, err)
+	}
+	if v := k.Get("jwt"); v != nil {
+		if s, ok := v.(string); ok {
+			config.JWT = strings.TrimSpace(s)
+		}
+	}
+	if v := k.Get("org_id"); v != nil {
+		if s, ok := v.(string); ok {
+			config.OrgID = strings.TrimSpace(s)
+		}
+	}
+	return nil
 }
 
 // zipEntryNames lists the file names contained in a zip archive, falling

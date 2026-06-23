@@ -9,7 +9,13 @@ export function planLabel(planCode) {
     if (normalized === 'loc_800k') return 'Team 800k';
     if (normalized === 'loc_1600k') return 'Team 1.6M';
     if (normalized === 'loc_3200k') return 'Team 3.2M';
+    if (normalized === 'enterprise-selfhosted') return 'Enterprise - Selfhosted';
     return planCode;
+}
+
+export function isEnterpriseSelfhostedPlan(planCode) {
+    const normalized = String(planCode || '').trim().toLowerCase();
+    return normalized === 'enterprise-selfhosted';
 }
 
 export function clampUsagePercent(value) {
