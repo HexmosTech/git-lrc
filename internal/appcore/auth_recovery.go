@@ -92,8 +92,8 @@ func isLiveReviewAPIKeyInvalid(err error) bool {
 	return code == liveReviewAPIKeyInvalidCode
 }
 
-func submitReviewWithRecovery(config Config, base64Diff, repoName string, verbose bool) (reviewmodel.DiffReviewCreateResponse, Config, error) {
-	submitResp, err := reviewapi.SubmitReview(config.APIURL, config.APIKey, base64Diff, repoName, verbose)
+func submitReviewWithRecovery(config Config, base64Diff, repoName string, toolsOnly bool, verbose bool) (reviewmodel.DiffReviewCreateResponse, Config, error) {
+	submitResp, err := reviewapi.SubmitReview(config.APIURL, config.APIKey, base64Diff, repoName, toolsOnly, verbose)
 	if err == nil {
 		return submitResp, config, nil
 	}
@@ -107,7 +107,7 @@ func submitReviewWithRecovery(config Config, base64Diff, repoName string, verbos
 	}
 
 	fmt.Println("Retrying review submission with refreshed credentials...")
-	retryResp, retryErr := reviewapi.SubmitReview(recoveredConfig.APIURL, recoveredConfig.APIKey, base64Diff, repoName, verbose)
+	retryResp, retryErr := reviewapi.SubmitReview(recoveredConfig.APIURL, recoveredConfig.APIKey, base64Diff, repoName, toolsOnly, verbose)
 	if retryErr != nil {
 		return reviewmodel.DiffReviewCreateResponse{}, recoveredConfig, retryErr
 	}

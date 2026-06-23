@@ -394,7 +394,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		submitResp = buildFakeSubmitResponse()
 	} else {
 		var updatedConfig Config
-		submitResp, updatedConfig, err = submitReviewWithRecovery(*config, base64Diff, repoName, verbose)
+		submitResp, updatedConfig, err = submitReviewWithRecovery(*config, base64Diff, repoName, opts.ToolsOnly, verbose)
 		config = &updatedConfig
 	}
 	if err != nil {
@@ -797,16 +797,19 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			}))
 			// Proxy endpoint for review-events API to avoid CORS
 			mux.HandleFunc("/api/v1/diff-review/", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
-				if fakeMode {
-					if r.Method != http.MethodGet {
-						w.WriteHeader(http.StatusMethodNotAllowed)
-						return
-					}
-					if !strings.HasSuffix(r.URL.Path, "/events") {
-						http.NotFound(w, r)
-						return
-					}
+				if r.Method != http.MethodGet {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					return
+				}
 
+				// Both fake and real modes handle the /events sub-path locally.
+				// The backend has no /api/v1/diff-review/:id/events route — only
+				// /api/v1/reviews/:id/events exists. Proxying would always return
+				// 404, causing fetchFinalReviewData in the JS to never be called.
+				// Instead, respond with meta.status from ReviewState so the JS
+				// detects "completed" and calls fetchFinalReviewData itself (which
+				// proxies to GET /api/v1/diff-review/:id — a route that does exist).
+				if strings.HasSuffix(r.URL.Path, "/events") {
 					reviewStateMu.RLock()
 					state := currentReviewState
 					reviewStateMu.RUnlock()
@@ -814,18 +817,23 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 						http.Error(w, "No review in progress", http.StatusNotFound)
 						return
 					}
-
 					w.Header().Set("Content-Type", "application/json")
 					if err := json.NewEncoder(w).Encode(buildFakeEventsResponse(state.Snapshot())); err != nil {
 						if verbose {
-							log.Printf("failed to write fake events response: %v", err)
+							log.Printf("failed to write events response: %v", err)
 						}
 					}
 					return
 				}
 
+				if fakeMode {
+					http.NotFound(w, r)
+					return
+				}
+
 				handleReviewEventsProxy(w, r, *config, reviewID, verbose)
 			}))
+
 			// Proxy feedback endpoints — adds API key so browser never holds the key
 			mux.HandleFunc("/api/v1/feedback", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
 				handleFeedbackProxy(w, r, *config, verbose, reviewID)
@@ -1838,6 +1846,32 @@ func renderPretty(result *reviewmodel.DiffReviewResponse) error {
 			lines := strings.Split(comment.Content, "\n")
 			for _, line := range lines {
 				fmt.Printf("    %s\n", line)
+			}
+		}
+	}
+
+	if len(result.ToolResults) > 0 {
+		hasFindings := false
+		for _, tr := range result.ToolResults {
+			if len(tr.Findings) > 0 {
+				hasFindings = true
+				break
+			}
+		}
+		if hasFindings {
+			fmt.Println("\nStatic Analysis Tool Results:")
+			for _, tr := range result.ToolResults {
+				for _, f := range tr.Findings {
+					colStr := ""
+					if f.Col > 0 {
+						colStr = fmt.Sprintf(":%d", f.Col)
+					}
+					ruleStr := ""
+					if f.Rule != "" {
+						ruleStr = fmt.Sprintf("  %s", f.Rule)
+					}
+					fmt.Printf("[%s] %s:%d%s%s  %s\n", tr.ToolName, f.File, f.Line, colStr, ruleStr, f.Message)
+				}
 			}
 		}
 	}

@@ -38,6 +38,16 @@ type APIErrorPayload struct {
 type DiffReviewRequest struct {
 	DiffZipBase64 string `json:"diff_zip_base64"`
 	RepoName      string `json:"repo_name"`
+	ToolsOnly     bool   `json:"tools_only,omitempty"`
+}
+
+// ToolComment is a flat comment from a static analysis tool, including the file path.
+type ToolComment struct {
+	FilePath string `json:"file_path"`
+	Line     int    `json:"line"`
+	Content  string `json:"content"`
+	Severity string `json:"severity"`
+	Category string `json:"category"`
 }
 
 // DiffReviewResponse models the response from GET /api/v1/diff-review/:id.
@@ -45,9 +55,11 @@ type DiffReviewResponse struct {
 	Status       string                 `json:"status"`
 	Summary      string                 `json:"summary,omitempty"`
 	Files        []DiffReviewFileResult `json:"files,omitempty"`
+	ToolComments []ToolComment          `json:"tool_comments,omitempty"`
 	Message      string                 `json:"message,omitempty"`
 	FriendlyName string                 `json:"friendly_name,omitempty"`
 	Envelope     *PlanUsageEnvelope     `json:"envelope,omitempty"`
+	ToolResults  []ToolResultEventData  `json:"tool_results,omitempty"`
 }
 
 type DiffReviewCreateResponse struct {
@@ -89,4 +101,21 @@ type DiffReviewComment struct {
 	Type        string `json:"type"`
 	Category    string `json:"category"`
 	Subcategory string `json:"subcategory"`
+}
+
+type ToolFinding struct {
+	File    string `json:"file"`
+	Line    int    `json:"line"`
+	Col     int    `json:"col"`
+	Rule    string `json:"rule"`
+	Message string `json:"message"`
+}
+
+type ToolResultEventData struct {
+	ToolID      int64         `json:"tool_id"`
+	ToolName    string        `json:"tool_name"`
+	ExitCode    int           `json:"exit_code"`
+	Findings    []ToolFinding `json:"findings"`
+	LinesOfCode int           `json:"lines_of_code"`
+	Stderr      string        `json:"stderr"`
 }

@@ -88,7 +88,7 @@ func (rs *ReviewState) UpdateFromResult(result *reviewmodel.DiffReviewResponse) 
 	rs.Status = result.Status
 	rs.Summary = result.Summary
 
-	// Merge comments from result into existing files (preserving hunks)
+	// Merge AI comments from result into existing files (preserving hunks)
 	totalComments := 0
 	for i := range rs.Files {
 		for _, resultFile := range result.Files {
@@ -99,7 +99,37 @@ func (rs *ReviewState) UpdateFromResult(result *reviewmodel.DiffReviewResponse) 
 		}
 		totalComments += len(rs.Files[i].Comments)
 	}
+
+	// Inject tool_comments into the files list. Tool findings may reference
+	// files not in the diff (or lines outside hunks) so we handle them
+	// separately from the diff-matched AI comments above.
+	fileIndex := make(map[string]int, len(rs.Files))
+	for i, f := range rs.Files {
+		fileIndex[f.FilePath] = i
+	}
+	for _, tc := range result.ToolComments {
+		comment := reviewmodel.DiffReviewComment{
+			Line:     tc.Line,
+			Content:  tc.Content,
+			Severity: tc.Severity,
+			Category: tc.Category,
+		}
+		if idx, ok := fileIndex[tc.FilePath]; ok {
+			rs.Files[idx].Comments = append(rs.Files[idx].Comments, comment)
+		} else {
+			// File not in diff — create a stub entry so the comment is visible
+			rs.Files = append(rs.Files, reviewmodel.DiffReviewFileResult{
+				FilePath: tc.FilePath,
+				Comments: []reviewmodel.DiffReviewComment{comment},
+			})
+			fileIndex[tc.FilePath] = len(rs.Files) - 1
+		}
+		totalComments++
+	}
+
+
 	rs.TotalComments = totalComments
+	rs.TotalFiles = len(rs.Files)
 }
 
 // SetCompleted marks the review as completed

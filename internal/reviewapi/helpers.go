@@ -144,10 +144,11 @@ func formatJSONParseError(body []byte, contentType string, parseErr error) error
 		parseErr, contentType, preview)
 }
 
-func SubmitReview(apiURL, apiKey, base64Diff, repoName string, verbose bool) (reviewmodel.DiffReviewCreateResponse, error) {
+func SubmitReview(apiURL, apiKey, base64Diff, repoName string, toolsOnly bool, verbose bool) (reviewmodel.DiffReviewCreateResponse, error) {
 	payload := reviewmodel.DiffReviewRequest{
 		DiffZipBase64: base64Diff,
 		RepoName:      repoName,
+		ToolsOnly:     toolsOnly,
 	}
 
 	if verbose {

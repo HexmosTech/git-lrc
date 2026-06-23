@@ -43,6 +43,7 @@ type Options struct {
 	Force                 bool
 	Vouch                 bool
 	InitialMsg            string
+	ToolsOnly             bool
 }
 
 func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
@@ -76,6 +77,7 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		SaveJSON:              c.String("save-json"),
 		SaveText:              c.String("save-text"),
 		InitialMsg:            initialMsg,
+		ToolsOnly:             c.Bool("tools"),
 	}
 
 	if opts.Skip || opts.Vouch {
