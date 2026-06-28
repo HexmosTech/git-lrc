@@ -1,13 +1,14 @@
 package gitops
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 )
 
-func IsGitRepositoryCurrentDir() bool {
-	_, err := os.Stat(".git")
+// IsGitRepository checks if the current working directory is inside a Git repository.
+func IsGitRepository() bool {
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	err := cmd.Run()
 	return err == nil
 }
 
