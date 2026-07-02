@@ -3288,7 +3288,6 @@ body {
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-muted);
-  padding-left: 27px;
 }
 
 .send-to-agent-menu-item-icon-codex .send-to-agent-logo {

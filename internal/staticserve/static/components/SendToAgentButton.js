@@ -63,7 +63,7 @@ export async function createSendToAgentButton() {
             };
         }, [isOpen]);
 
-        const primaryAgent = SEND_TO_AGENT_AGENTS[0];
+        const primaryAgent = SEND_TO_AGENT_AGENTS.find((agent) => agent.available) || SEND_TO_AGENT_AGENTS[0];
 
         const selectAgent = (agentKey) => {
             setIsOpen(false);
