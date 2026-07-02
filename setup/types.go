@@ -97,4 +97,7 @@ type CreateConnectorRequest struct {
 	SelectedModel string `json:"selected_model"`
 	DisplayOrder  int    `json:"display_order"`
 	BaseURL       string `json:"base_url,omitempty"`
+	// Role is "leader" or "helper" (see LiveReview's Adaptive Review
+	// feature). Omitted/empty defaults to "leader" server-side.
+	Role string `json:"role,omitempty"`
 }

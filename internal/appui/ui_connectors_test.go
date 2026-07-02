@@ -28,6 +28,25 @@ org_id = "42"
 			APIKey:        "gkey",
 			SelectedModel: "gemini-2.5-flash",
 			DisplayOrder:  1,
+			Role:          "leader",
+		},
+		{
+			ID:            8,
+			ProviderName:  "gemini",
+			ConnectorName: "Gemini Flash-Lite (Helper)",
+			APIKey:        "gkey2",
+			SelectedModel: "gemini-2.5-flash-lite",
+			DisplayOrder:  1,
+			Role:          "helper",
+		},
+		{
+			ID:            9,
+			ProviderName:  "gemini",
+			ConnectorName: "Legacy connector with no role",
+			APIKey:        "gkey3",
+			SelectedModel: "gemini-2.5-flash",
+			DisplayOrder:  2,
+			Role:          "",
 		},
 	}
 
@@ -55,6 +74,13 @@ org_id = "42"
 
 	if !strings.Contains(updated, `[[ai_connectors]]`) || !strings.Contains(updated, `provider_name = "gemini"`) {
 		t.Fatalf("connector data not written to managed section")
+	}
+
+	if strings.Count(updated, `role = "leader"`) != 2 {
+		t.Fatalf("expected two connectors (explicit leader + empty-role fallback) rendered with role=\"leader\", got: %s", updated)
+	}
+	if !strings.Contains(updated, `role = "helper"`) {
+		t.Fatalf("expected the helper connector to render role=\"helper\", got: %s", updated)
 	}
 }
 

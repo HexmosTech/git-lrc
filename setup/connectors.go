@@ -69,6 +69,7 @@ func CreateGeminiConnector(result *SetupResult, geminiKey string, apiURL string)
 		ConnectorName: "Gemini Flash",
 		SelectedModel: DefaultGeminiModel,
 		DisplayOrder:  0,
+		Role:          "leader",
 	}
 
 	client := network.NewSetupClient(30 * time.Second)
@@ -78,6 +79,37 @@ func CreateGeminiConnector(result *SetupResult, geminiKey string, apiURL string)
 	}
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("create connector returned %d: %s", resp.StatusCode, redactConnectorErrorBody(resp.Body, geminiKey))
+	}
+
+	return nil
+}
+
+// CreateGeminiHelperConnector creates a Gemini Flash-Lite helper connector in
+// LiveReview, reusing the same free Gemini key as the leader connector. This
+// powers Adaptive Review (see LiveReview's leader/helper model feature) out
+// of the box for onboarded orgs, with no second key prompt.
+func CreateGeminiHelperConnector(result *SetupResult, geminiKey string, apiURL string) error {
+	apiURL = strings.TrimSpace(apiURL)
+	if apiURL == "" {
+		apiURL = CloudAPIURL
+	}
+
+	reqBody := CreateConnectorRequest{
+		ProviderName:  "gemini",
+		APIKey:        geminiKey,
+		ConnectorName: "Gemini Flash-Lite (Helper)",
+		SelectedModel: DefaultGeminiHelperModel,
+		DisplayOrder:  0,
+		Role:          "helper",
+	}
+
+	client := network.NewSetupClient(30 * time.Second)
+	resp, err := network.SetupCreateConnector(client, apiURL, result.OrgID, reqBody, result.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to create helper connector: %w", err)
+	}
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("create helper connector returned %d: %s", resp.StatusCode, redactConnectorErrorBody(resp.Body, geminiKey))
 	}
 
 	return nil

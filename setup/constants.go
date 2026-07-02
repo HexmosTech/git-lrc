@@ -4,6 +4,7 @@ const (
 	CloudAPIURL        = "https://livereview.hexmos.com"
 	HexmosSigninBase   = "https://hexmos.com/signin"
 	GeminiKeysURL      = "https://aistudio.google.com/api-keys"
-	DefaultGeminiModel = "gemini-2.5-flash"
+	DefaultGeminiModel       = "gemini-2.5-flash"
+	DefaultGeminiHelperModel = "gemini-2.5-flash-lite"
 	IssuesURL          = "https://github.com/HexmosTech/git-lrc/issues/new"
 )

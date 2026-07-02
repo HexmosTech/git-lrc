@@ -115,8 +115,21 @@ func RunSetup(c *cli.Context) error {
 		return setupError(slog, fmt.Errorf("failed to create AI connector: %w", err))
 	}
 	fmt.Printf("  %s✅ Gemini connector created%s %s(model: %s)%s\n", clr(cGreen), clr(cReset), clr(cDim), defaultGeminiModel, clr(cReset))
-	fmt.Println()
 	slog.write("gemini connector created")
+
+	// Helper connector powers Adaptive Review out of the box, reusing the
+	// same free key. Best-effort: the leader connector above is already
+	// committed, so a failure here shouldn't fail the whole setup — the org
+	// just stays leader-only until they configure a helper connector later.
+	slog.write("creating gemini helper connector")
+	if err := createGeminiHelperConnector(result, geminiKey, selectedAPIURL); err != nil {
+		slog.write("warning: failed to create helper connector: %v", err)
+		fmt.Printf("  %s⚠ Could not create Helper connector%s %s(Adaptive Review will stay leader-only for now)%s\n", clr(cYellow), clr(cReset), clr(cDim), clr(cReset))
+	} else {
+		fmt.Printf("  %s✅ Helper connector created%s %s(model: %s)%s\n", clr(cGreen), clr(cReset), clr(cDim), defaultGeminiHelperModel, clr(cReset))
+		slog.write("gemini helper connector created")
+	}
+	fmt.Println()
 
 	if !skipLogin {
 		if err := writeConfig(result, selectedAPIURL); err != nil {
@@ -404,6 +417,10 @@ func validateGeminiKey(result *setupResult, geminiKey string, apiURL string) (bo
 
 func createGeminiConnector(result *setupResult, geminiKey string, apiURL string) error {
 	return setuptpl.CreateGeminiConnector(result, geminiKey, apiURL)
+}
+
+func createGeminiHelperConnector(result *setupResult, geminiKey string, apiURL string) error {
+	return setuptpl.CreateGeminiHelperConnector(result, geminiKey, apiURL)
 }
 
 func writeConfig(result *setupResult, apiURL string) error {

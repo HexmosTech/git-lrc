@@ -95,6 +95,13 @@ func RenderManagedAIConnectorsSection(connectors []uicfg.ConnectorRemote, sectio
 		builder.WriteString("provider_name = ")
 		builder.WriteString(strconv.Quote(connector.ProviderName))
 		builder.WriteString("\n")
+		role := strings.TrimSpace(connector.Role)
+		if role == "" {
+			role = "leader"
+		}
+		builder.WriteString("role = ")
+		builder.WriteString(strconv.Quote(role))
+		builder.WriteString("\n")
 		builder.WriteString("connector_name = ")
 		builder.WriteString(strconv.Quote(connector.ConnectorName))
 		builder.WriteString("\n")

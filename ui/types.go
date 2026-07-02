@@ -32,8 +32,12 @@ type ConnectorRemote struct {
 	GCPLocation   string `json:"gcp_location"`
 	SelectedModel string `json:"selected_model"`
 	DisplayOrder  int    `json:"display_order"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	// Role is "leader" or "helper" (LiveReview's Adaptive Review feature).
+	// The backend always includes this on connector responses; empty here
+	// just means an old/unexpected payload, and should be treated as "leader".
+	Role      string `json:"role"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type AuthRefreshRequest struct {
