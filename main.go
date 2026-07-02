@@ -15,7 +15,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const appVersion = "v0.5.2"
+const appVersion = "v0.5.4"
 
 var (
 	version    = appVersion
@@ -73,6 +73,7 @@ func main() {
 		RunReviewCleanup:                func(c *cli.Context) error { return reviewdb.RunReviewDBCleanup(c.Bool("verbose")) },
 		RunAttestationTrailer:           appcore.RunAttestationTrailer,
 		RunSetup:                        appui.RunSetup,
+		RunOnboard:                      appui.RunOnboard,
 		RunUI:                           appui.RunUI,
 		RunUsageInspect:                 appcore.RunUsageInspect,
 		RunInternalClaudePreToolUse:     appcore.RunInternalClaudePreToolUse,

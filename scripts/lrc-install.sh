@@ -146,106 +146,6 @@ print_windows_handoff_help() {
     echo ""
 }
 
-toml_escape() {
-    printf '%s' "$1" | sed -e ':a' -e 'N' -e '$!ba' \
-        -e 's/\\/\\\\/g' \
-        -e 's/"/\\"/g' \
-        -e 's/\t/\\t/g' \
-        -e 's/\r/\\r/g' \
-        -e 's/\n/\\n/g'
-}
-
-upsert_config_values() {
-    local file_path="$1"
-    local key1="$2"
-    local value1="$3"
-    local key2="$4"
-    local value2="$5"
-    local escaped_value1
-    local escaped_value2
-    escaped_value1="$(toml_escape "$value1")"
-    escaped_value2="$(toml_escape "$value2")"
-    local replacement1
-    local replacement2
-    replacement1="$key1 = \"$escaped_value1\""
-    replacement2="$key2 = \"$escaped_value2\""
-    local tmp_path
-    tmp_path="${file_path}.tmp.$$"
-
-    awk -v key1="$key1" -v key2="$key2" -v replacement1="$replacement1" -v replacement2="$replacement2" '
-        BEGIN {
-            found1 = 0
-            found2 = 0
-            inserted_before_section = 0
-            saw_nonempty = 0
-        }
-        {
-            line = $0
-            trimmed = line
-            sub(/^[[:space:]]+/, "", trimmed)
-
-            if (trimmed ~ /^#|^;/) {
-                print line
-                if (line ~ /[^[:space:]]/) {
-                    saw_nonempty = 1
-                }
-                next
-            }
-
-            if (found1 == 0 && trimmed ~ "^" key1 "[[:space:]]*=") {
-                print replacement1
-                found1 = 1
-                saw_nonempty = 1
-                next
-            }
-            if (found2 == 0 && trimmed ~ "^" key2 "[[:space:]]*=") {
-                print replacement2
-                found2 = 1
-                saw_nonempty = 1
-                next
-            }
-
-            if (inserted_before_section == 0 && trimmed ~ /^\[/) {
-                inserted_any = 0
-                if (found1 == 0) {
-                    print replacement1
-                    found1 = 1
-                    inserted_any = 1
-                }
-                if (found2 == 0) {
-                    print replacement2
-                    found2 = 1
-                    inserted_any = 1
-                }
-                if (inserted_any == 1) {
-                    print ""
-                }
-                inserted_before_section = 1
-            }
-
-            print line
-
-            if (line ~ /[^[:space:]]/) {
-                saw_nonempty = 1
-            }
-        }
-        END {
-            if (found1 == 0 || found2 == 0) {
-                if (saw_nonempty == 1) {
-                    print ""
-                }
-                if (found1 == 0) {
-                    print replacement1
-                }
-                if (found2 == 0) {
-                    print replacement2
-                }
-            }
-        }
-    ' "$file_path" > "$tmp_path"
-
-    mv "$tmp_path" "$file_path"
-}
 
 # Require git to be present; we also install lrc alongside the git binary
 if ! command -v git >/dev/null 2>&1; then
@@ -606,49 +506,12 @@ fi
 
 # Create config file if API key and URL are provided
 if [ -n "$LRC_API_KEY" ] && [ -n "$LRC_API_URL" ]; then
-    CONFIG_DIR="$HOME/.config"
-    CONFIG_FILE="$HOME/.lrc.toml"
-    
-    # Check if config already exists
-    if [ -f "$CONFIG_FILE" ]; then
-        echo -e "${YELLOW}Note: Config file already exists at $CONFIG_FILE${NC}"
-        echo -n "Replace existing config? [y/N]: "
-        # Read from terminal even when stdin is piped
-        if [ -t 0 ]; then
-            read -r REPLACE_CONFIG
-        else
-            read -r REPLACE_CONFIG < /dev/tty 2>/dev/null || REPLACE_CONFIG="n"
-        fi
-        if [[ "$REPLACE_CONFIG" =~ ^[Yy]$ ]]; then
-            echo -n "Replacing config file at $CONFIG_FILE (with backup + merge)... "
-            mkdir -p "$CONFIG_DIR"
-            BACKUP_PATH="${CONFIG_FILE}.bak.$(date +%Y%m%d-%H%M%S)"
-            cp "$CONFIG_FILE" "$BACKUP_PATH"
-
-                if upsert_config_values "$CONFIG_FILE" "api_key" "$LRC_API_KEY" "api_url" "$LRC_API_URL"; then
-                chmod 600 "$CONFIG_FILE"
-                echo -e "${GREEN}OK${NC}"
-                echo -e "${GREEN}Config file updated and backed up to:${NC} $BACKUP_PATH"
-            else
-                cp "$BACKUP_PATH" "$CONFIG_FILE"
-                chmod 600 "$CONFIG_FILE"
-                echo -e "${RED}FAIL${NC}"
-                echo -e "${RED}Error: Failed to update config; restored from backup${NC}"
-                exit 1
-            fi
-        else
-            echo -e "${YELLOW}Skipping config creation to preserve existing settings${NC}"
-        fi
+    # Delegate to the newly compiled lrc binary for a secure, transaction-safe, native onboarding flow
+    if "$INSTALL_PATH" onboard --api-url "$LRC_API_URL" --yes; then
+        :
     else
-        echo -n "Creating config file at $CONFIG_FILE... "
-        mkdir -p "$CONFIG_DIR"
-        cat > "$CONFIG_FILE" <<EOF
-api_key = "$LRC_API_KEY"
-api_url = "$LRC_API_URL"
-EOF
-        chmod 600 "$CONFIG_FILE"
-        echo -e "${GREEN}OK${NC}"
-        echo -e "${GREEN}Config file created with your API credentials${NC}"
+        echo -e "${RED}Error: Onboarding failed.${NC}"
+        exit 1
     fi
 fi
 

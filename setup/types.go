@@ -30,6 +30,45 @@ type HexmosCallbackData struct {
 	} `json:"result"`
 }
 
+// SelfHostedLoginRequest is the body for POST /api/v1/auth/login.
+type SelfHostedLoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// SelfHostedSetupAdminRequest is the body for POST /api/v1/auth/setup.
+type SelfHostedSetupAdminRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	OrgName  string `json:"org_name"`
+}
+
+// SelfHostedAuthResponse models login and initial-admin setup responses.
+type SelfHostedAuthResponse struct {
+	Message string `json:"message"`
+	User    struct {
+		ID    json.Number `json:"id"`
+		Email string      `json:"email"`
+	} `json:"user"`
+	Tokens struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresAt    string `json:"expires_at"`
+		TokenType    string `json:"token_type"`
+	} `json:"tokens"`
+	Organizations []struct {
+		ID   json.Number `json:"id"`
+		Name string      `json:"name"`
+		Role string      `json:"role"`
+	} `json:"organizations"`
+}
+
+// SelfHostedSetupStatusResponse models GET /api/v1/auth/setup-status.
+type SelfHostedSetupStatusResponse struct {
+	SetupRequired bool `json:"setup_required"`
+	UserCount     int  `json:"user_count"`
+}
+
 // EnsureCloudUserRequest is the body for POST /api/v1/auth/ensure-cloud-user.
 type EnsureCloudUserRequest struct {
 	Email     string `json:"email"`

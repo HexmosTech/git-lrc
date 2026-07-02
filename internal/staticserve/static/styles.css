@@ -3038,6 +3038,303 @@ body {
   gap: 4px;
 }
 
+/* Send to Agent — split button + provider dropdown */
+.send-to-agent-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  animation: sendToAgentEnter 320ms var(--motion-ease-settle);
+}
+
+@keyframes sendToAgentEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.send-to-agent-btn {
+  position: relative;
+  overflow: hidden;
+  gap: 9px;
+  padding: 7px 18px 7px 16px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  transition:
+    background 180ms var(--motion-ease-soft),
+    transform 180ms var(--motion-ease-soft),
+    box-shadow 220ms var(--motion-ease-soft);
+}
+
+/* Ambient sheen — one slow, quiet sweep so the primary action reads as "alive"
+   without competing for attention in a toolbar the user looks at constantly. */
+.send-to-agent-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 34%;
+  height: 100%;
+  background: linear-gradient(
+    120deg,
+    transparent,
+    rgba(255, 255, 255, 0.28),
+    transparent
+  );
+  transform: skewX(-20deg);
+  pointer-events: none;
+  animation: sendToAgentShine 7s ease-in-out infinite;
+}
+
+@keyframes sendToAgentShine {
+  0% {
+    left: -60%;
+  }
+  12% {
+    left: 130%;
+  }
+  100% {
+    left: 130%;
+  }
+}
+
+.send-to-agent-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 120, 212, 0.35);
+}
+
+.send-to-agent-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.send-to-agent-label {
+  font-weight: 600;
+}
+
+.send-to-agent-count {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.send-to-agent-btn.launching .send-to-agent-logo {
+  animation: sendToAgentLogoPulse 380ms var(--motion-ease-soft);
+}
+
+@keyframes sendToAgentLogoPulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.send-to-agent-menu-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.send-to-agent-menu-item-icon .send-to-agent-logo {
+  height: 18px;
+}
+
+.send-to-agent-logo {
+  height: 14px;
+  width: auto;
+  display: block;
+  transition: transform 180ms var(--motion-ease-soft);
+}
+
+.send-to-agent-btn .send-to-agent-logo {
+  height: 19px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.send-to-agent-toggle {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 6px 10px;
+  transition:
+    background 180ms var(--motion-ease-soft),
+    transform 180ms var(--motion-ease-soft);
+}
+
+.send-to-agent-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.send-to-agent-toggle:active {
+  transform: translateY(0);
+}
+
+.send-to-agent-toggle svg {
+  transition: transform 220ms var(--motion-ease-soft);
+}
+
+.send-to-agent-toggle.open svg {
+  transform: rotate(180deg);
+}
+
+.send-to-agent-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 172px;
+  background: #1a1d23;
+  border: 1px solid rgba(110, 118, 129, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.4);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 200;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px) scale(0.98);
+  transform-origin: top right;
+  pointer-events: none;
+  transition:
+    opacity 180ms var(--motion-ease-soft),
+    transform 200ms var(--motion-ease-soft),
+    visibility 200ms;
+}
+
+.send-to-agent-menu.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.send-to-agent-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 140ms var(--motion-ease-soft),
+    transform 140ms var(--motion-ease-soft);
+}
+
+.send-to-agent-menu-item-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.send-to-agent-menu-item:hover {
+  background: var(--bg-hover);
+  transform: translateX(2px);
+}
+
+.send-to-agent-menu.open .send-to-agent-menu-item {
+  animation: sendToAgentMenuItemIn 220ms var(--motion-ease-soft) backwards;
+}
+
+.send-to-agent-menu.open .send-to-agent-menu-item:nth-child(1) {
+  animation-delay: 20ms;
+}
+
+.send-to-agent-menu.open .send-to-agent-menu-item:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.send-to-agent-menu.open .send-to-agent-menu-item:nth-child(3) {
+  animation-delay: 100ms;
+}
+
+@keyframes sendToAgentMenuItemIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.send-to-agent-menu-item.unavailable {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.send-to-agent-menu-item.unavailable:hover {
+  transform: none;
+}
+
+.send-to-agent-menu-item-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.send-to-agent-menu-item-icon-codex .send-to-agent-logo {
+  height: 26px;
+}
+
+.send-to-agent-menu-item-icon-gemini .send-to-agent-logo {
+  height: 20px;
+  border-radius: 5px;
+}
+
+.send-to-agent-menu-item-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .send-to-agent-group {
+    animation: none;
+  }
+
+  .send-to-agent-btn::after {
+    display: none;
+  }
+
+  .send-to-agent-btn:hover,
+  .send-to-agent-toggle:hover {
+    transform: none;
+  }
+
+  .send-to-agent-btn.launching .send-to-agent-logo {
+    animation: none;
+  }
+
+  .send-to-agent-menu,
+  .send-to-agent-menu-item:hover {
+    transform: none;
+  }
+
+  .send-to-agent-menu.open .send-to-agent-menu-item {
+    animation: none;
+  }
+}
+
 @media (max-width: 980px) {
   .severity-filter-bar {
     flex-wrap: wrap;
@@ -3842,5 +4139,327 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Handoff modal — agent handoff feedback (starting / success / error / info) */
+.handoff-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  animation: handoffOverlayIn 180ms var(--motion-ease-soft);
+}
+
+.handoff-modal-content {
+  position: relative;
+  background: var(--bg-secondary);
+  padding: 32px;
+  border-radius: 12px;
+  max-width: 400px;
+  width: 90%;
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  animation: handoffModalIn 240ms var(--motion-ease-settle);
+}
+
+@keyframes handoffOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes handoffModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.handoff-agent-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 22px;
+  margin: 0 auto 18px;
+  border-radius: 14px;
+  background: #f3f0e7;
+  color: #1a1d23;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+}
+
+.handoff-agent-badge-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 18px;
+  border: 2px solid rgba(217, 119, 87, 0.5);
+  animation: handoffRingPulse 1.6s var(--motion-ease-soft) infinite;
+  pointer-events: none;
+}
+
+.handoff-agent-badge-logo {
+  height: 28px;
+  width: auto;
+  display: block;
+}
+
+@keyframes handoffRingPulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.9;
+  }
+  70%,
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+.handoff-agent-badge.is-success {
+  animation: handoffBadgePop 420ms var(--motion-ease-settle);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.35),
+    0 0 0 6px rgba(76, 175, 80, 0.16);
+}
+
+@keyframes handoffBadgePop {
+  0% {
+    transform: scale(0.8);
+  }
+  55% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.handoff-agent-badge-check {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #4caf50;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-secondary);
+  animation: handoffCheckPop 320ms var(--motion-ease-settle) 300ms backwards;
+}
+
+@keyframes handoffCheckPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Impact summary — scope of what's being auto-fixed (starting/success modal states). */
+.handoff-impact-summary {
+  margin: 0 0 20px 0;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  text-align: center;
+  animation: handoffImpactIn 260ms var(--motion-ease-settle) 120ms backwards;
+}
+
+@keyframes handoffImpactIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.handoff-impact-total {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.handoff-impact-section + .handoff-impact-section {
+  margin-top: 10px;
+}
+
+.handoff-impact-section-divided {
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.handoff-impact-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.handoff-impact-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.handoff-impact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(var(--sev-rgb, 55, 148, 255), 0.14);
+  border: 1px solid rgba(var(--sev-rgb, 55, 148, 255), 0.4);
+  color: var(--sev-text, #93c5fd);
+}
+
+.handoff-impact-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sev-text, #93c5fd);
+}
+
+.handoff-impact-chip.severity-critical {
+  --sev-rgb: 241, 76, 76;
+  --sev-text: #fecaca;
+}
+
+.handoff-impact-chip.severity-warning {
+  --sev-rgb: 204, 167, 0;
+  --sev-text: #fef08a;
+}
+
+.handoff-impact-chip.severity-info {
+  --sev-rgb: 55, 148, 255;
+  --sev-text: #93c5fd;
+}
+
+.handoff-impact-types {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.handoff-impact-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 6px 4px 10px;
+  border-radius: 6px;
+  background: rgba(69, 78, 89, 0.35);
+  border: 1px solid rgba(110, 118, 129, 0.25);
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.handoff-impact-type-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(110, 118, 129, 0.3);
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.9);
+}
+
+/* Confetti — full-screen celebratory feedback when the handoff succeeds.
+   Fixed to the viewport (not the modal card) so it falls across the whole screen. */
+.handoff-confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 10000;
+}
+
+.handoff-confetti-piece {
+  position: absolute;
+  top: -24px;
+  left: var(--x, 50%);
+  width: 8px;
+  height: 14px;
+  background: var(--c, #d97757);
+  border-radius: 1px;
+  opacity: 0;
+  transform: translate(-50%, 0) rotate(0deg);
+  animation: handoffConfettiFall var(--dur, 3.4s) linear both;
+  animation-delay: var(--d, 0ms);
+}
+
+.handoff-confetti-piece.is-round {
+  border-radius: 50%;
+  width: 9px;
+  height: 9px;
+}
+
+@keyframes handoffConfettiFall {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) rotate(0deg);
+  }
+  6% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx, 0px)), 100vh) rotate(var(--r, 360deg));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handoff-modal-overlay,
+  .handoff-modal-content,
+  .handoff-agent-badge.is-success,
+  .handoff-agent-badge-check,
+  .handoff-agent-badge-ring,
+  .handoff-impact-summary,
+  .handoff-confetti-piece {
+    animation: none;
+  }
+
+  .handoff-confetti {
+    display: none;
   }
 }

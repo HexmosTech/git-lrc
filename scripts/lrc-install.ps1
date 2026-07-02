@@ -165,90 +165,6 @@ function Print-ElevationHelp {
     Write-Host ""
 }
 
-function ConvertTo-TomlQuotedValue {
-    param([string]$Value)
-    $escaped = $Value
-    $escaped = $escaped -replace '\\', '\\\\'
-    $escaped = $escaped -replace '"', '\\"'
-    $escaped = $escaped -replace "`t", '\\t'
-    $escaped = $escaped -replace "`r", '\\r'
-    $escaped = $escaped -replace "`n", '\\n'
-    return '"' + $escaped + '"'
-}
-
-function Upsert-LrcConfigValues {
-    param(
-        [string]$Content,
-        [string]$Key1,
-        [string]$Value1,
-        [string]$Key2,
-        [string]$Value2
-    )
-
-    $replacement1 = "$Key1 = $(ConvertTo-TomlQuotedValue -Value $Value1)"
-    $replacement2 = "$Key2 = $(ConvertTo-TomlQuotedValue -Value $Value2)"
-    $lines = @($Content -split "`r?`n", -1)
-    $updatedLines = New-Object System.Collections.Generic.List[string]
-    $found1 = $false
-    $found2 = $false
-    $insertedBeforeSection = $false
-
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        $line = $lines[$i]
-        $trimmed = $line.TrimStart()
-
-        if ($trimmed -match '^#|^;') {
-            $updatedLines.Add($line)
-            continue
-        }
-
-        if (-not $found1 -and $trimmed -match "^$([regex]::Escape($Key1))\s*=") {
-            $updatedLines.Add($replacement1)
-            $found1 = $true
-            continue
-        }
-
-        if (-not $found2 -and $trimmed -match "^$([regex]::Escape($Key2))\s*=") {
-            $updatedLines.Add($replacement2)
-            $found2 = $true
-            continue
-        }
-
-        if (-not $insertedBeforeSection -and $trimmed -match '^\[') {
-            $insertedAny = $false
-            if (-not $found1) {
-                $updatedLines.Add($replacement1)
-                $found1 = $true
-                $insertedAny = $true
-            }
-            if (-not $found2) {
-                $updatedLines.Add($replacement2)
-                $found2 = $true
-                $insertedAny = $true
-            }
-            if ($insertedAny) {
-                $updatedLines.Add('')
-            }
-            $insertedBeforeSection = $true
-        }
-
-        $updatedLines.Add($line)
-    }
-
-    if (-not $found1 -or -not $found2) {
-        if ($updatedLines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($updatedLines[$updatedLines.Count - 1])) {
-            $updatedLines.Add('')
-        }
-        if (-not $found1) {
-            $updatedLines.Add($replacement1)
-        }
-        if (-not $found2) {
-            $updatedLines.Add($replacement2)
-        }
-    }
-
-    return ($updatedLines -join "`n")
-}
 
 # Detect admin status once; elevation is only needed for legacy cleanup, not for fresh installs
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -532,88 +448,11 @@ try {
 
 # Create config file if API key and URL are provided
 if ($env:LRC_API_KEY -and $env:LRC_API_URL) {
-    $CONFIG_FILE = "$env:USERPROFILE\.lrc.toml"
-
-    # Check if config already exists
-    if (Test-Path $CONFIG_FILE) {
-        Write-Host "Note: Config file already exists at $CONFIG_FILE" -ForegroundColor Yellow
-
-        # Read from console host even when piped
-        $replaceConfig = "n"
-        try {
-            if ([Environment]::UserInteractive) {
-                Write-Host -NoNewline "Replace existing config? [y/N]: "
-                $replaceConfig = [Console]::ReadLine()
-                if ([string]::IsNullOrWhiteSpace($replaceConfig)) {
-                    $replaceConfig = "n"
-                }
-            }
-        } catch {
-            Write-Host "Replace existing config? [y/N]: n (defaulting to No)" -ForegroundColor Yellow
-        }
-
-        if ($replaceConfig -match '^[Yy]$') {
-            Write-Host -NoNewline "Replacing config file at $CONFIG_FILE (with backup + merge)... "
-            try {
-                $backupPath = "$CONFIG_FILE.bak.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-                Copy-Item -Path $CONFIG_FILE -Destination $backupPath -Force -ErrorAction Stop
-
-                $existingConfig = Get-Content -Path $CONFIG_FILE -Raw -ErrorAction Stop
-                $updatedConfig = Upsert-LrcConfigValues -Content $existingConfig -Key1 "api_key" -Value1 $env:LRC_API_KEY -Key2 "api_url" -Value2 $env:LRC_API_URL
-                Set-Content -Path $CONFIG_FILE -Value $updatedConfig -NoNewline -Encoding UTF8
-
-                # Restrict config file to current user only (contains API key)
-                $acl = Get-Acl $CONFIG_FILE
-                $acl.SetAccessRuleProtection($true, $false)
-                $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) } | Out-Null
-                $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-                    [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
-                    "FullControl", "Allow")
-                $acl.AddAccessRule($rule)
-                Set-Acl -Path $CONFIG_FILE -AclObject $acl
-                Write-Host "$OK" -ForegroundColor Green
-                Write-Host "Config file updated and backed up to: $backupPath" -ForegroundColor Green
-            } catch {
-                try {
-                    if ($backupPath -and (Test-Path $backupPath)) {
-                        Copy-Item -Path $backupPath -Destination $CONFIG_FILE -Force -ErrorAction SilentlyContinue
-                    }
-                } catch {
-                    Write-Host "Warning: Failed to restore backup $backupPath" -ForegroundColor Yellow
-                    Write-Host $_.Exception.Message -ForegroundColor Yellow
-                }
-                Write-Host "$FAIL" -ForegroundColor Red
-                Write-Host "Warning: Failed to update config file (restored from backup when possible)" -ForegroundColor Yellow
-                Write-Host $_.Exception.Message -ForegroundColor Yellow
-                exit 1
-            }
-        } else {
-            Write-Host "Skipping config creation to preserve existing settings" -ForegroundColor Yellow
-        }
-    } else {
-        Write-Host -NoNewline "Creating config file at $CONFIG_FILE... "
-        try {
-            $configContent = @"
-api_key = "$($env:LRC_API_KEY)"
-api_url = "$($env:LRC_API_URL)"
-"@
-            Set-Content -Path $CONFIG_FILE -Value $configContent -NoNewline
-            # Restrict config file to current user only (contains API key)
-            $acl = Get-Acl $CONFIG_FILE
-            $acl.SetAccessRuleProtection($true, $false)
-            $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) } | Out-Null
-            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-                [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
-                "FullControl", "Allow")
-            $acl.AddAccessRule($rule)
-            Set-Acl -Path $CONFIG_FILE -AclObject $acl
-            Write-Host "$OK" -ForegroundColor Green
-            Write-Host "Config file created with your API credentials" -ForegroundColor Green
-        } catch {
-            Write-Host "$FAIL" -ForegroundColor Red
-            Write-Host "Warning: Failed to create config file" -ForegroundColor Yellow
-            Write-Host $_.Exception.Message -ForegroundColor Yellow
-        }
+    # Delegate to the newly compiled lrc binary for a secure, transaction-safe, native onboarding flow
+    & $INSTALL_PATH onboard --api-url $env:LRC_API_URL --yes
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: Onboarding failed." -ForegroundColor Red
+        exit 1
     }
 }
 

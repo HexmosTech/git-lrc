@@ -49,6 +49,7 @@ type Handlers struct {
 	RunReviewCleanup                cli.ActionFunc
 	RunAttestationTrailer           cli.ActionFunc
 	RunSetup                        cli.ActionFunc
+	RunOnboard                      cli.ActionFunc
 	RunUI                           cli.ActionFunc
 	RunUsageInspect                 cli.ActionFunc
 	RunInternalClaudePreToolUse     cli.ActionFunc
@@ -320,6 +321,29 @@ func BuildApp(version, buildTime, gitCommit, reviewMode string, baseFlags, debug
 					},
 				},
 				Action: h.RunSetup,
+			},
+			{
+				Name:  "onboard",
+				Usage: "Perform non-interactive onboarding using an onboarding API key",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "api-url",
+						Aliases: []string{"base-url"},
+						Usage:   "override LiveReview API base URL for onboarding",
+					},
+					&cli.StringFlag{
+						Name:     "onboarding-key",
+						Aliases:  []string{"key"},
+						Usage:    "onboarding API key to use for authentication",
+						Required: true,
+						EnvVars:  []string{"LRC_API_KEY"},
+					},
+					&cli.BoolFlag{
+						Name:  "yes",
+						Usage: "run non-interactively; replaces config file if already exists without confirmation",
+					},
+				},
+				Action: h.RunOnboard,
 			},
 			{
 				Name:   "ui",
