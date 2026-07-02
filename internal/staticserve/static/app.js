@@ -2,7 +2,7 @@
 // Fetches data from /api/review and updates reactively
 
 import { waitForPreact, filePathToId, transformEvent, getBadgeClass, formatIssueForCopy, getCommentVisibilityKey } from './components/utils.js';
-import { buildIssueCategoryGroups, buildIssueFacetOptions, buildIssueFilterUniverse, countIssuesByFilters, createDefaultIssueFilters, getIssueFilterSummary, matchesIssueFilters, resetIssueFilters, toggleIssueFilterValue } from './components/issue_filter_state.mjs';
+import { buildIssueCategoryGroups, buildIssueFacetOptions, buildIssueFilterUniverse, countIssuesByFilters, createDefaultIssueFilters, DEFAULT_SEVERITIES, getCommentFilterValue, getIssueFilterSummary, matchesIssueFilters, resetIssueFilters, toggleIssueFilterValue } from './components/issue_filter_state.mjs';
 import { appendStreamedCommentsToFiles, buildEventsURL, extractExternalCommentsFromEvents, extractNewEvents, inferReviewStatusFromEvents } from './components/review_stream_state.mjs';
 import { getHeader } from './components/Header.js';
 import { getSidebar } from './components/Sidebar.js';
@@ -12,6 +12,8 @@ import { getPrecommitBar } from './components/PrecommitBar.js';
 import { getFileBlock } from './components/FileBlock.js';
 import { getEventLog } from './components/EventLog.js';
 import { getIssueFilterBar } from './components/IssueFilterBar.js';
+import { getSendToAgentInfo } from './components/SendToAgentButton.js';
+import { renderHandoffConfetti } from './components/handoffConfetti.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
@@ -34,6 +36,30 @@ function countCommentsFromFiles(files) {
         const comments = file.comments || file.Comments || [];
         return total + comments.length;
     }, 0);
+}
+
+// Build a severity + type breakdown for the handoff modal so the user can see the
+// scope of what's being auto-fixed (e.g. "6 issues — 2 Critical, 3 Warning, 1 Info").
+function buildHandoffImpactSummary(files) {
+    const bySeverity = Object.fromEntries(DEFAULT_SEVERITIES.map((severity) => [severity, 0]));
+    const typeCounts = new Map();
+    let total = 0;
+    (files || []).forEach((file) => {
+        (file.comments || file.Comments || []).forEach((comment) => {
+            total += 1;
+            const severity = getCommentFilterValue(comment, 'severity');
+            bySeverity[severity] = (bySeverity[severity] || 0) + 1;
+
+            const type = getCommentFilterValue(comment, 'type');
+            if (type) {
+                typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+            }
+        });
+    });
+    const byType = [...typeCounts.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    return { total, bySeverity, byType };
 }
 
 function convertFilesToUIFormat(files) {
@@ -267,7 +293,7 @@ async function initApp() {
         const [isTailing, setIsTailing] = useState(false);
         const [hiddenCommentKeys, setHiddenCommentKeys] = useState(new Set());
         const [copyFeedback, setCopyFeedback] = useState({ status: 'idle', message: '' });
-        const [handoffModal, setHandoffModal] = useState({ isOpen: false, type: '', message: '' });
+        const [handoffModal, setHandoffModal] = useState({ isOpen: false, type: '', message: '', agent: null, summary: null });
         const [slideShowOpen, setSlideShowOpen] = useState(false);
         const [embeddedSlideshowActive, setEmbeddedSlideshowActive] = useState(false);
         const [summarySlideIndex, setSummarySlideIndex] = useState(0);
@@ -679,7 +705,19 @@ async function initApp() {
             });
         }, []);
 
-        const handleSendToAgent = useCallback(async () => {
+        const handleSendToAgent = useCallback(async (agentKey) => {
+            const agent = getSendToAgentInfo(agentKey);
+
+            if (!agent.available) {
+                setHandoffModal({
+                    isOpen: true,
+                    type: 'info',
+                    agent,
+                    message: `${agent.label} handoff is coming soon. Try Claude for now.`
+                });
+                return;
+            }
+
             const filteredFiles = (reviewData.files || reviewData.Files || []).map(file => {
                 const filePath = file.file_path || file.filePath || file.FilePath;
                 const newComments = (file.comments || file.Comments || []).filter(c => {
@@ -689,24 +727,36 @@ async function initApp() {
                 });
                 return { ...file, comments: newComments, Comments: newComments };
             }).filter(file => file.comments.length > 0);
-            
+
             if (filteredFiles.length === 0) {
-                setHandoffModal({ 
-                    isOpen: true, 
-                    type: 'error', 
-                    message: "No visible comments to send to the AI agent. Please show some comments first." 
+                setHandoffModal({
+                    isOpen: true,
+                    type: 'error',
+                    agent,
+                    message: "No visible comments to send to the AI agent. Please show some comments first."
                 });
                 return;
             }
-            
+
+            const impactSummary = buildHandoffImpactSummary(filteredFiles);
+
+            setHandoffModal({
+                isOpen: true,
+                type: 'starting',
+                agent,
+                summary: impactSummary,
+                message: `${agent.label} started auto-fixing the issues…`
+            });
+
             const payload = {
                 ...reviewData,
                 files: filteredFiles,
                 Files: filteredFiles,
                 summary: "AI Agent Handoff generated for visible issues.",
-                status: "completed"
+                status: "completed",
+                agent: agent.key
             };
-            
+
             try {
                 const handoffURL = sessionReviewID ? `/handoff?r=${sessionReviewID}` : '/handoff';
                 const response = await fetch(handoffURL, {
@@ -715,16 +765,19 @@ async function initApp() {
                     body: JSON.stringify(payload)
                 });
                 if (!response.ok) throw new Error("Handoff failed");
-                setHandoffModal({ 
-                    isOpen: true, 
-                    type: 'success', 
-                    message: "Claude Code is now starting in your terminal! You can safely close this browser window." 
+                setHandoffModal({
+                    isOpen: true,
+                    type: 'success',
+                    agent,
+                    summary: impactSummary,
+                    message: `Auto-fixing started for your issues — check the ${agent.label} Code terminal to follow along. You can safely close this browser window.`
                 });
             } catch (e) {
-                setHandoffModal({ 
-                    isOpen: true, 
-                    type: 'error', 
-                    message: "Failed to send to agent: " + e.message 
+                setHandoffModal({
+                    isOpen: true,
+                    type: 'error',
+                    agent,
+                    message: "Failed to send to agent: " + e.message
                 });
             }
         }, [reviewData, issueFilters, hiddenCommentKeys]);
@@ -1131,25 +1184,71 @@ async function initApp() {
                         }
                     </div>
                     
+                    ${handoffModal.isOpen && handoffModal.type === 'success' && renderHandoffConfetti(html)}
                     ${handoffModal.isOpen && html`
-                        <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-                            <div class="modal-content" style="background: var(--bg-card); padding: 32px; border-radius: 12px; max-width: 400px; width: 90%; border: 1px solid var(--border-color); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); text-align: center;">
-                                ${handoffModal.type === 'success' 
+                        <div class="modal-overlay handoff-modal-overlay">
+                            <div class="modal-content handoff-modal-content">
+                                ${(handoffModal.type === 'starting' || handoffModal.type === 'success')
                                     ? html`
-                                        <div style="margin-bottom: 16px; color: #8b5cf6;">
-                                            ${renderIcon(html, 'handoffSuccess', { size: 48 })}
+                                        <div class="handoff-agent-badge ${handoffModal.type === 'success' ? 'is-success' : ''}">
+                                            ${handoffModal.type === 'starting' && html`<span class="handoff-agent-badge-ring"></span>`}
+                                            ${(handoffModal.agent?.logoOnLight || handoffModal.agent?.logo)
+                                                ? html`<img class="handoff-agent-badge-logo" src=${handoffModal.agent.logoOnLight || handoffModal.agent.logo} alt="${handoffModal.agent.label}" />`
+                                                : renderIcon(html, handoffModal.agent?.icon || 'sendToAgent', { size: 26 })}
+                                            ${handoffModal.type === 'success' && html`
+                                                <span class="handoff-agent-badge-check">${renderIcon(html, 'check', { size: 12 })}</span>
+                                            `}
                                         </div>
                                     `
                                     : html`<div style="margin-bottom: 16px;">${renderIcon(html, 'handoffNotice', { size: 48 })}</div>`
                                 }
                                 <h3 style="margin: 0 0 12px 0; font-size: 20px; color: var(--text-primary);">
-                                    ${handoffModal.type === 'success' ? 'Check Your Terminal' : 'Notice'}
+                                    ${handoffModal.type === 'starting'
+                                        ? `${handoffModal.agent?.label || 'Agent'} is on it`
+                                        : handoffModal.type === 'success'
+                                            ? `Auto-fixing Using ${handoffModal.agent?.label || 'Agent'} Code`
+                                            : handoffModal.type === 'info'
+                                                ? 'Coming Soon'
+                                                : 'Notice'}
                                 </h3>
-                                <p style="margin: 0 0 24px 0; color: var(--text-secondary); line-height: 1.5;">
+                                <p style="margin: 0 0 16px 0; color: var(--text-secondary); line-height: 1.5;">
                                     ${handoffModal.message}
                                 </p>
-                                <button 
-                                    class="btn btn-primary" 
+                                ${handoffModal.summary && handoffModal.summary.total > 0 && html`
+                                    <div class="handoff-impact-summary">
+                                        <div class="handoff-impact-total">
+                                            ${handoffModal.summary.total} issue${handoffModal.summary.total === 1 ? '' : 's'} being fixed
+                                        </div>
+                                        <div class="handoff-impact-section">
+                                            <div class="handoff-impact-label">Severity</div>
+                                            <div class="handoff-impact-chips">
+                                                ${['critical', 'warning', 'info']
+                                                    .filter((severity) => handoffModal.summary.bySeverity[severity] > 0)
+                                                    .map((severity) => html`
+                                                        <span class="handoff-impact-chip severity-${severity}">
+                                                            <span class="handoff-impact-chip-dot"></span>
+                                                            ${handoffModal.summary.bySeverity[severity]} ${severity.charAt(0).toUpperCase() + severity.slice(1)}
+                                                        </span>
+                                                    `)}
+                                            </div>
+                                        </div>
+                                        ${handoffModal.summary.byType && handoffModal.summary.byType.length > 0 && html`
+                                            <div class="handoff-impact-section handoff-impact-section-divided">
+                                                <div class="handoff-impact-label">Type</div>
+                                                <div class="handoff-impact-types">
+                                                    ${handoffModal.summary.byType.map((entry) => html`
+                                                        <span class="handoff-impact-type-chip">
+                                                            ${entry.label}
+                                                            <span class="handoff-impact-type-count">${entry.count}</span>
+                                                        </span>
+                                                    `)}
+                                                </div>
+                                            </div>
+                                        `}
+                                    </div>
+                                `}
+                                <button
+                                    class="btn btn-primary"
                                     onClick=${() => setHandoffModal({ ...handoffModal, isOpen: false })}
                                     style="width: 100%; padding: 12px; font-size: 16px;"
                                 >

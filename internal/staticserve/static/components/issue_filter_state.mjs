@@ -68,6 +68,7 @@ export {
     buildCommentVisibilityKey,
     cloneIssueFilters,
     createDefaultIssueFilters,
+    DEFAULT_SEVERITIES,
     hasActiveIssueFilters,
     normalizeIssueFilters,
     toggleIssueFilterValue,

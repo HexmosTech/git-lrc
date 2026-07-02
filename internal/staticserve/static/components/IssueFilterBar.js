@@ -1,6 +1,7 @@
 import { waitForPreact } from './utils.js';
 import { hasActiveIssueFilters } from './issue_filter_state.mjs';
 import { getFeedbackPopup } from './FeedbackPopup.js';
+import { getSendToAgentButton } from './SendToAgentButton.js';
 import { renderIcon } from './icons.js';
 
 function renderFacetSection(html, title, field, options, onToggleFilter) {
@@ -73,6 +74,7 @@ function renderCategoryTree(html, categoryGroups, onToggleFilter) {
 export async function createIssueFilterBar() {
     const { html, useState } = await waitForPreact();
     const FeedbackPopup = await getFeedbackPopup();
+    const SendToAgentButton = await getSendToAgentButton();
 
     return function IssueFilterBar({
         issueFilters,
@@ -158,10 +160,10 @@ export async function createIssueFilterBar() {
                                 ${renderIcon(html, buttonLabel === 'Copied!' ? 'copied' : 'copyLogs')}
                                 ${buttonLabel}
                             </button>
-                            <button class="btn btn-primary" onClick=${onSendToAgent} title="Send visible issues to Claude">
-                                ${renderIcon(html, 'sendToAgent')}
-                                Send to Claude (${visibleCount})
-                            </button>
+                            <${SendToAgentButton}
+                                visibleCount=${visibleCount}
+                                onSendToAgent=${onSendToAgent}
+                            />
                             ${copyFeedbackMessage && html`
                                 <div class="copy-feedback copy-feedback-${copyFeedbackStatus}" role="status" aria-live="polite">
                                     ${copyFeedbackMessage}
