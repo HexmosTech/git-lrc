@@ -423,7 +423,7 @@
     }
     button.tertiary-danger:hover { background: var(--status-error-bg); }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
     .connector-name-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -441,7 +441,7 @@
       white-space: nowrap;
       opacity: 0.92;
     }
-    .status { margin-top: 8px; font-size: 13px; }
+    .status { margin-top: 8px; margin-bottom: 10px; font-size: 13px; }
     .status.ok { color: var(--status-success-text); }
     .status.err { color: var(--status-error-text); }
     .connectors-content {

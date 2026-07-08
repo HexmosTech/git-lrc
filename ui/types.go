@@ -23,15 +23,17 @@ type RuntimeConfig struct {
 }
 
 type ConnectorRemote struct {
-	ID            int64  `json:"id"`
-	ProviderName  string `json:"provider_name"`
-	ConnectorName string `json:"connector_name"`
-	APIKey        string `json:"api_key"`
-	BaseURL       string `json:"base_url"`
-	GCPProjectID  string `json:"gcp_project_id"`
-	GCPLocation   string `json:"gcp_location"`
-	SelectedModel string `json:"selected_model"`
-	DisplayOrder  int    `json:"display_order"`
+	ID             int64  `json:"id"`
+	ProviderName   string `json:"provider_name"`
+	ConnectorName  string `json:"connector_name"`
+	APIKey         string `json:"api_key"`
+	BaseURL        string `json:"base_url"`
+	GCPProjectID   string `json:"gcp_project_id"`
+	GCPLocation    string `json:"gcp_location"`
+	AWSAccessKeyID string `json:"aws_access_key_id"`
+	AWSRegion      string `json:"aws_region"`
+	SelectedModel  string `json:"selected_model"`
+	DisplayOrder   int    `json:"display_order"`
 	// Role is "leader" or "helper" (LiveReview's Adaptive Review feature).
 	// The backend always includes this on connector responses; empty here
 	// just means an old/unexpected payload, and should be treated as "leader".

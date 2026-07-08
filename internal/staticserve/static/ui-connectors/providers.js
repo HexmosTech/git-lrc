@@ -68,6 +68,11 @@ export const providers = [
     id: 'gemini-enterprise',
     name: 'Gemini Enterprise',
     apiKeyPlaceholder: 'Google Cloud Service Account JSON',
+  },
+  {
+    id: 'bedrock',
+    name: 'AWS Bedrock',
+    apiKeyPlaceholder: 'Enter your AWS Secret Access Key',
   }
 ];
 
@@ -82,6 +87,8 @@ export function defaultForm() {
     selected_model: '',
     gcp_project_id: '',
     gcp_location: '',
+    aws_access_key_id: '',
+    aws_region: '',
     role: 'leader',
   };
 }

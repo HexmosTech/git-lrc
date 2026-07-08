@@ -408,6 +408,26 @@ func (s *connectorManagerServer) handleOllamaModels(w http.ResponseWriter, r *ht
 	writeRawJSON(w, status, respBody)
 }
 
+func (s *connectorManagerServer) handleBedrockModels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+
+	status, respBody, err := s.proxyJSONRequest(http.MethodPost, "/api/v1/aiconnectors/bedrock/models", body)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeRawJSON(w, status, respBody)
+}
+
 func (s *connectorManagerServer) handleProviderModels(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -431,4 +451,3 @@ func (s *connectorManagerServer) handleProviderModels(w http.ResponseWriter, r *
 	}
 	writeRawJSON(w, status, respBody)
 }
-

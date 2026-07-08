@@ -123,6 +123,16 @@ func RenderManagedAIConnectorsSection(connectors []uicfg.ConnectorRemote, sectio
 			builder.WriteString(strconv.Quote(connector.GCPLocation))
 			builder.WriteString("\n")
 		}
+		if connector.AWSAccessKeyID != "" {
+			builder.WriteString("aws_access_key_id = ")
+			builder.WriteString(strconv.Quote(connector.AWSAccessKeyID))
+			builder.WriteString("\n")
+		}
+		if connector.AWSRegion != "" {
+			builder.WriteString("aws_region = ")
+			builder.WriteString(strconv.Quote(connector.AWSRegion))
+			builder.WriteString("\n")
+		}
 		if connector.SelectedModel != "" {
 			builder.WriteString("selected_model = ")
 			builder.WriteString(strconv.Quote(connector.SelectedModel))

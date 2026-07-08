@@ -33,6 +33,7 @@ function App() {
   const [modelsFetched, setModelsFetched] = useState(false);
   const [form, setForm] = useState(defaultForm());
   const [ollamaModels, setOllamaModels] = useState([]);
+  const [bedrockModels, setBedrockModels] = useState([]);
   const [dynamicModels, setDynamicModels] = useState([]);
   const [apiDefaultModel, setApiDefaultModel] = useState('');
   const [session, setSession] = useState(null);
@@ -44,7 +45,7 @@ function App() {
   }, [form.provider_name]);
 
   useEffect(() => {
-    if (!form.provider_name || form.provider_name === 'ollama') {
+    if (!form.provider_name || form.provider_name === 'ollama' || form.provider_name === 'bedrock') {
       setDynamicModels([]);
       setApiDefaultModel('');
       return;
@@ -93,11 +94,14 @@ function App() {
     if (form.provider_name === 'ollama' && ollamaModels.length > 0) {
       return ollamaModels;
     }
+    if (form.provider_name === 'bedrock' && bedrockModels.length > 0) {
+      return bedrockModels.map((model) => model.model_id);
+    }
     if (dynamicModels.length > 0) {
       return dynamicModels;
     }
     return selectedProvider.models || [];
-  }, [selectedProvider, form.provider_name, ollamaModels, dynamicModels]);
+  }, [selectedProvider, form.provider_name, ollamaModels, bedrockModels, dynamicModels]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -431,6 +435,7 @@ function App() {
       const connector = connectors.find((entry) => String(entry.id) === String(route.connectorID));
       if (connector) {
         setOllamaModels([]);
+        setBedrockModels([]);
         setModelsFetched(false);
         setFetchingModels(false);
         setForm({
@@ -442,6 +447,8 @@ function App() {
           selected_model: connector.selected_model || '',
           gcp_project_id: connector.gcp_project_id || '',
           gcp_location: connector.gcp_location || '',
+          aws_access_key_id: connector.aws_access_key_id || '',
+          aws_region: connector.aws_region || '',
           role: connector.role || 'leader',
         });
         setStatus(`Editing connector #${connector.id}`);
@@ -452,6 +459,7 @@ function App() {
   function resetFormState(role) {
     setForm({ ...defaultForm(), role: role || 'leader' });
     setOllamaModels([]);
+    setBedrockModels([]);
     setApiDefaultModel('');
     setModelsFetched(false);
     setFetchingModels(false);
@@ -471,12 +479,21 @@ function App() {
         : '',
       gcp_project_id: '',
       gcp_location: '',
+      aws_access_key_id: '',
+      aws_region: '',
     }));
     if (provider.id !== 'ollama') {
       setOllamaModels([]);
+    }
+    if (provider.id !== 'bedrock') {
+      setBedrockModels([]);
+    }
+    if (provider.id !== 'ollama' && provider.id !== 'bedrock') {
       setApiDefaultModel('');
       setModelsFetched(false);
     }
+    setStatus('');
+    setError('');
   }
 
   function setFormField(field, value) {
@@ -501,8 +518,14 @@ function App() {
       selected_model: connector.selected_model || '',
       gcp_project_id: connector.gcp_project_id || '',
       gcp_location: connector.gcp_location || '',
+      aws_access_key_id: connector.aws_access_key_id || '',
+      aws_region: connector.aws_region || '',
       role: connector.role || 'leader',
     });
+    setOllamaModels([]);
+    setBedrockModels([]);
+    setModelsFetched(false);
+    setFetchingModels(false);
     setStatus(`Editing connector #${connector.id}`);
     navigate(`/connectors/edit/${connector.id}`);
   }
@@ -534,6 +557,51 @@ function App() {
         return { ...prev, selected_model: '' };
       });
       setStatus(`Fetched ${models.length} Ollama model(s)`);
+    } catch (err) {
+      setModelsFetched(false);
+      if (await handleAuthError(err)) {
+        return;
+      }
+      setError(err.message || String(err));
+    } finally {
+      setFetchingModels(false);
+    }
+  }
+
+  async function fetchBedrockModels() {
+    setFetchingModels(true);
+    setError('');
+    setStatus('');
+    const awsRegion = (form.aws_region || '').trim();
+    if (!awsRegion) {
+      setError('Region is required for Bedrock model discovery');
+      setFetchingModels(false);
+      return;
+    }
+    try {
+      const response = await api('/api/ui/connectors/bedrock/models', {
+        method: 'POST',
+        body: JSON.stringify({
+          access_key_id: (form.aws_access_key_id || '').trim(),
+          secret_access_key: form.api_key || '',
+          region: awsRegion,
+        }),
+      });
+      const models = response.models || [];
+      setBedrockModels(models);
+      setModelsFetched(true);
+      const modelIds = models.map((model) => model.model_id);
+      setForm((prev) => {
+        if (prev.selected_model && modelIds.includes(prev.selected_model)) {
+          return prev;
+        }
+        return { ...prev, selected_model: '' };
+      });
+      if (models.length === 0) {
+        setError('No foundation models found for this region. Request model access in the AWS Bedrock console first.');
+      } else {
+        setStatus(`Fetched ${models.length} Bedrock model(s)`);
+      }
     } catch (err) {
       setModelsFetched(false);
       if (await handleAuthError(err)) {
@@ -587,6 +655,27 @@ function App() {
         setStatus('');
         return;
       }
+    } else if (provider.id === 'bedrock') {
+      if (!(form.aws_access_key_id || '').trim()) {
+        setError('AWS Access Key ID is required');
+        setStatus('');
+        return;
+      }
+      if (!apiKey) {
+        setError('AWS Secret Access Key is required');
+        setStatus('');
+        return;
+      }
+      if (!(form.aws_region || '').trim()) {
+        setError('Region is required');
+        setStatus('');
+        return;
+      }
+      if (!selectedModel) {
+        setError('Please select a model');
+        setStatus('');
+        return;
+      }
     } else if (!apiKey) {
       setError('API key is required');
       setStatus('');
@@ -609,6 +698,8 @@ function App() {
             model: selectedModel || apiDefaultModel || undefined,
             gcp_project_id: (form.gcp_project_id || '').trim() || undefined,
             gcp_location: (form.gcp_location || '').trim() || undefined,
+            aws_access_key_id: (form.aws_access_key_id || '').trim() || undefined,
+            aws_region: (form.aws_region || '').trim() || undefined,
           }),
         });
 
@@ -627,6 +718,8 @@ function App() {
         selected_model: selectedModel || apiDefaultModel || undefined,
         gcp_project_id: (form.gcp_project_id || '').trim() || undefined,
         gcp_location: (form.gcp_location || '').trim() || undefined,
+        aws_access_key_id: (form.aws_access_key_id || '').trim() || undefined,
+        aws_region: (form.aws_region || '').trim() || undefined,
         display_order: 0,
         role: form.role || 'leader',
       };
@@ -759,6 +852,12 @@ function App() {
       return !apiKey || !gcpProjectID || !gcpLocation;
     }
 
+    if (provider.id === 'bedrock') {
+      const awsAccessKeyID = (form.aws_access_key_id || '').trim();
+      const awsRegion = (form.aws_region || '').trim();
+      return !apiKey || !awsAccessKeyID || !awsRegion || !selectedModel;
+    }
+
     if (!apiKey) {
       return true;
     }
@@ -838,6 +937,7 @@ function App() {
         onProviderChange=${setProvider}
         onFieldChange=${setFormField}
         onFetchOllamaModels=${fetchOllamaModels}
+        onFetchBedrockModels=${fetchBedrockModels}
         onSave=${saveConnector}
         onGenerateName=${generateConnectorName}
         onCancel=${() => {
