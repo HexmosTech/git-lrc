@@ -925,6 +925,34 @@ body {
   margin-bottom: 0.9em;
 }
 
+.summary-text-content table {
+  width: 100%;
+  margin: 12px 0 16px;
+  border-collapse: collapse;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.summary-text-content th,
+.summary-text-content td {
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.summary-text-content th {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.summary-text-content td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .summary-slideshow-embedded {
   width: 100%;
   outline: none;

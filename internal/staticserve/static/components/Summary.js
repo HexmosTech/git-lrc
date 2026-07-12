@@ -4,8 +4,8 @@ import { waitForPreact } from './utils.js';
 import { getSummarySlideshow } from './SummarySlideshow/SummarySlideshow.js';
 
 const ALLOWED_TAGS = new Set([
-    'A', 'BLOCKQUOTE', 'BR', 'CODE', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-    'HR', 'LI', 'OL', 'P', 'PRE', 'STRONG', 'UL'
+    'A', 'BLOCKQUOTE', 'BR', 'CAPTION', 'CODE', 'COL', 'COLGROUP', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+    'HR', 'LI', 'OL', 'P', 'PRE', 'STRONG', 'TABLE', 'TBODY', 'TD', 'TFOOT', 'TH', 'THEAD', 'TR', 'UL'
 ]);
 
 const SAFE_URL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
