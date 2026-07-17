@@ -315,7 +315,7 @@ func runHexmosLoginFlow(slog *setupLog, apiURL string) (*setupResult, error) {
 
 	mux := http.NewServeMux()
 
-	signinURL, err := setuptpl.BuildSigninURL(callbackURL)
+	signinURL, err := setuptpl.BuildSigninURL(callbackURL, apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build signin url: %w", err)
 	}
