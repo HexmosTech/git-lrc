@@ -38,3 +38,4 @@ go.work.sum
 security_issues/
 
 scripts/__pycache__/
+self-hosted/creds.toml
