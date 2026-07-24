@@ -75,6 +75,26 @@ const ignoreContent = `# .lrc/ignore — gitignore-style patterns
 # Files matching a pattern here are excluded from AI review.
 `
 
+const policyToolsTomlContent = `# .lrc/policy/tools.toml — Repository Tool Configuration
+# Configure static-analysis security & quality tools for this repository.
+# Tools configured here will run during code reviews even if disabled in Organization settings.
+
+[gitleaks]
+enabled = true
+category = "secret-scanning"
+include = ["*"]
+# exclude = ["tests/fixtures/**", "*.md"]
+
+# [ruff]
+# enabled = true
+# category = "python-sast"
+# include = ["**/*.py"]
+
+# [bandit]
+# enabled = true
+# category = "python-sast"
+`
+
 // scaffoldFile describes one file Init may create.
 type scaffoldFile struct {
 	relPath string // relative to .lrc/
@@ -89,7 +109,7 @@ func scaffoldFiles() []scaffoldFile {
 		{"rules/design.md", ""},
 		{"rules/security.md", ""},
 		{"rules/style.md", ""},
-		{"policy/tools.toml", ""},
+		{"policy/tools.toml", policyToolsTomlContent},
 	}
 }
 
