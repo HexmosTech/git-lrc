@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/HexmosTech/git-lrc/storage"
+	"github.com/pelletier/go-toml"
 )
 
 // CharLimit is the maximum size, in bytes (UTF-8), of the concatenated rules
@@ -181,3 +182,34 @@ func CheckIgnoreSyntax(lrcDir string) []Issue {
 	}
 	return issues
 }
+
+// CheckToolsSyntax checks .lrc/policy/tools.toml or .lrc/tools.toml for TOML syntax errors.
+func CheckToolsSyntax(lrcDir string) []Issue {
+	toolsPath := filepath.Join(lrcDir, "policy", "tools.toml")
+	data, err := storage.ReadFile(toolsPath)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		toolsPath = filepath.Join(lrcDir, "tools.toml")
+		data, err = storage.ReadFile(toolsPath)
+	}
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return []Issue{{Level: "error", Path: "policy/tools.toml", Message: fmt.Sprintf("failed to read file: %v", err)}}
+	}
+
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil
+	}
+
+	var cfg map[string]interface{}
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		relPath, _ := filepath.Rel(lrcDir, toolsPath)
+		return []Issue{{Level: "error", Path: relPath, Message: fmt.Sprintf("invalid TOML syntax: %v", err)}}
+	}
+
+	return nil
+}
+
+
+

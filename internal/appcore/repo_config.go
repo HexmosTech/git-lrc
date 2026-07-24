@@ -52,6 +52,7 @@ func RunConfigCheck(c *cli.Context) error {
 	var issues []lrcrules.Issue
 	issues = append(issues, lrcrules.ValidateStructure(lrcDir)...)
 	issues = append(issues, lrcrules.CheckIgnoreSyntax(lrcDir)...)
+	issues = append(issues, lrcrules.CheckToolsSyntax(lrcDir)...)
 
 	_, charCount, bundleIssues := lrcrules.BuildRulesBundle(lrcDir)
 	issues = append(issues, bundleIssues...)
