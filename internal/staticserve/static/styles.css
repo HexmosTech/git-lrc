@@ -4588,4 +4588,61 @@ body {
   .send-to-agent-btn {
     padding: 7px 10px;
   }
+
+  /* .brand's base rule is flex-shrink:0 and .brand h1's base rule is
+     white-space:nowrap — both defined *after* the very first mobile pass's
+     media query that tried to relax them, so that earlier attempt always
+     lost the cascade. Redeclaring here (this block is last in the file)
+     actually wins, letting the title genuinely wrap instead of overflowing
+     past the header card on very narrow phones (~320px). */
+  .brand {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .brand h1 {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* .header-actions' base rule (later in this file, unconditional) sets
+     gap:8px and never shrinks — same later-wins cascade trap as .brand h1
+     above. Let it wrap as a safety net rather than clipping/overflowing
+     past the header card. */
+  .header-actions {
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  /* Slideshow chrome/body/controls carry fixed desktop padding as inline
+     styles (SummarySlideshow.js) — shrink it on mobile to give slide
+     content more usable width. */
+  .summary-slideshow-chrome {
+    padding: 6px 10px !important;
+  }
+  .summary-slideshow-body {
+    padding: 14px 14px !important;
+  }
+  .summary-slideshow-controls {
+    padding: 8px 10px 10px 10px !important;
+  }
+  .summary-slideshow-complete {
+    padding: 16px !important;
+  }
+
+  /* The embedded (non-modal) slide panel's height/max-height and its body's
+     overflow-y are set inline by SummarySlideshow.js as a fixed clamp tuned
+     for desktop line counts. On a narrow phone the same text wraps onto far
+     more lines, so content regularly exceeds that fixed box and silently
+     scrolls in a cramped inner scrollbox instead of the card growing and
+     the page scrolling as a whole. Let the card grow with content instead. */
+  .summary-slideshow-embedded-panel {
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .summary-slideshow-embedded-panel .summary-slideshow-body {
+    overflow-y: visible !important;
+  }
 }

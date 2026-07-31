@@ -136,28 +136,41 @@ function truncatePathDisplay(filePath, maxDisplayChars = 52) {
 
 function resolveSlideTypography(slide) {
     const kind = slide?.kind || 'detail';
+    const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 640;
 
     if (kind === 'intro') {
-        return { fontSize: 'clamp(38px, 4.6vw, 54px)', lineHeight: '1.18', maxWidth: 'min(100%, 640px)' };
+        return isNarrow
+            ? { fontSize: 'clamp(24px, 8vw, 34px)', lineHeight: '1.22', maxWidth: '100%' }
+            : { fontSize: 'clamp(38px, 4.6vw, 54px)', lineHeight: '1.18', maxWidth: 'min(100%, 640px)' };
     }
 
     if (kind === 'sentence') {
-        return { fontSize: 'clamp(31px, 3.5vw, 46px)', lineHeight: '1.28', maxWidth: 'min(100%, 800px)' };
+        return isNarrow
+            ? { fontSize: 'clamp(20px, 6.5vw, 28px)', lineHeight: '1.32', maxWidth: '100%' }
+            : { fontSize: 'clamp(31px, 3.5vw, 46px)', lineHeight: '1.28', maxWidth: 'min(100%, 800px)' };
     }
 
     if (kind === 'list') {
-        return { fontSize: 'clamp(28px, 3.1vw, 40px)', lineHeight: '1.34', maxWidth: '100%' };
+        return isNarrow
+            ? { fontSize: 'clamp(19px, 6vw, 26px)', lineHeight: '1.36', maxWidth: '100%' }
+            : { fontSize: 'clamp(28px, 3.1vw, 40px)', lineHeight: '1.34', maxWidth: '100%' };
     }
 
     if (kind === 'file-point' || kind === 'label-point') {
-        return { fontSize: 'clamp(31px, 3.5vw, 46px)', lineHeight: '1.28', maxWidth: 'min(100%, 800px)' };
+        return isNarrow
+            ? { fontSize: 'clamp(20px, 6.5vw, 28px)', lineHeight: '1.32', maxWidth: '100%' }
+            : { fontSize: 'clamp(31px, 3.5vw, 46px)', lineHeight: '1.28', maxWidth: 'min(100%, 800px)' };
     }
 
     if (kind === 'code') {
-        return { fontSize: 'clamp(18px, 1.9vw, 24px)', lineHeight: '1.52', maxWidth: '100%' };
+        return isNarrow
+            ? { fontSize: 'clamp(13px, 3.6vw, 17px)', lineHeight: '1.48', maxWidth: '100%' }
+            : { fontSize: 'clamp(18px, 1.9vw, 24px)', lineHeight: '1.52', maxWidth: '100%' };
     }
 
-    return { fontSize: 'clamp(22px, 2.3vw, 30px)', lineHeight: '1.46', maxWidth: '100%' };
+    return isNarrow
+        ? { fontSize: 'clamp(16px, 5vw, 21px)', lineHeight: '1.4', maxWidth: '100%' }
+        : { fontSize: 'clamp(22px, 2.3vw, 30px)', lineHeight: '1.46', maxWidth: '100%' };
 }
 
 export function clampSlideIndex(value, length) {
@@ -852,6 +865,7 @@ export async function createSummarySlideshow() {
         }
 
         const isIntro = !isCompleteSlide && slide?.kind === 'intro';
+        const isNarrowViewport = typeof window !== 'undefined' && window.innerWidth <= 640;
         const panelBg = isCompleteSlide ? '#1f2430' : (slide ? slide.color.surface : '#1f2430');
         const typography = slide ? resolveSlideTypography(slide) : null;
         const panelHeight = isModal ? 'clamp(540px, 78vh, 760px)' : 'clamp(440px, 62vh, 620px)';
@@ -931,9 +945,9 @@ export async function createSummarySlideshow() {
 
                 <div ref=${bodyRef} class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; ${isIntro || isCompleteSlide ? 'align-items: center;' : ''} padding: 28px 32px;">
                     ${isCompleteSlide ? html`
-                        <div class="summary-slideshow-complete" style="text-align: center; padding: 32px; max-width: 520px; width: 100%;">
+                        <div class="summary-slideshow-complete" style="text-align: center; padding: ${isNarrowViewport ? '12px' : '32px'}; max-width: 520px; width: 100%; overflow-wrap: break-word; word-break: break-word;">
                             <div class="summary-slideshow-celebration" aria-hidden="true">
-                                <svg viewBox="0 0 240 84" width="220" height="76">
+                                <svg viewBox="0 0 240 84" width="${isNarrowViewport ? '160' : '220'}" height="${isNarrowViewport ? '55' : '76'}">
                                     <circle cx="32" cy="24" r="5" fill="#4f8cff"/>
                                     <circle cx="58" cy="14" r="4" fill="#38b28a"/>
                                     <circle cx="86" cy="28" r="4" fill="#f5a524"/>
@@ -944,20 +958,20 @@ export async function createSummarySlideshow() {
                                     <path d="M112 28l6 6 10-12" fill="none" stroke="#9ed8ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                             </div>
-                            <div style="font-size: 34px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; margin-bottom: 12px;">
+                            <div style="font-size: ${isNarrowViewport ? '24px' : '34px'}; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; margin-bottom: 12px;">
                                 Review complete
                             </div>
-                            <div style="font-size: 18px; color: var(--text-secondary); margin-bottom: 30px; line-height: 1.6;">
+                            <div style="font-size: ${isNarrowViewport ? '15px' : '18px'}; color: var(--text-secondary); margin-bottom: ${isNarrowViewport ? '18px' : '30px'}; line-height: 1.6;">
                                 You finished all ${slides.length} slides.
                             </div>
-                            <div style="font-size: 15px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6;">
+                            <div style="font-size: ${isNarrowViewport ? '13px' : '15px'}; color: var(--text-muted); margin-bottom: ${isNarrowViewport ? '14px' : '20px'}; line-height: 1.6;">
                                 Your commitment to higher engineering standards made this review possible.
                             </div>
                             <div style="margin-bottom: 6px;">
-                                <span style="font-size: 30px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">${formatActualElapsed(sessionStartRef.current)}</span>
+                                <span style="font-size: ${isNarrowViewport ? '22px' : '30px'}; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">${formatActualElapsed(sessionStartRef.current)}</span>
                                 <span style="font-size: 15px; color: var(--text-muted); margin-left: 8px;">actual</span>
                             </div>
-                            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 40px;">
+                            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: ${isNarrowViewport ? '20px' : '40px'};">
                                 Planned: ${formatElapsed(slides)}
                             </div>
                             ${isModal && html`
@@ -969,8 +983,8 @@ export async function createSummarySlideshow() {
                         </div>
                     ` : isIntro
                         ? html`
-                            <div class="summary-slideshow-intro" style="text-align: center; max-width: min(820px, 100%); width: 100%;">
-                                <h1 style="margin: 0; font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; color: ${slide.color.title}; font-weight: 760; letter-spacing: -0.034em; text-wrap: balance;">
+                            <div class="summary-slideshow-intro" style="text-align: center; max-width: min(820px, 100%); width: 100%; overflow-wrap: break-word; word-break: break-word;">
+                                <h1 style="margin: 0; font-size: ${typography.fontSize}; line-height: ${typography.lineHeight}; color: ${slide.color.title}; font-weight: 760; letter-spacing: -0.034em; text-wrap: balance; overflow-wrap: break-word; word-break: break-word;">
                                     ${slide.title}
                                 </h1>
                             </div>
@@ -979,7 +993,7 @@ export async function createSummarySlideshow() {
                             ? html`
                                 <div class="summary-file-point" style="max-width: ${typography.maxWidth}; width: 100%;">
                                     ${slide.title && html`
-                                        <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
+                                        <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent}; overflow-wrap: break-word; word-break: break-word;">
                                             ${slide.title}
                                         </div>
                                     `}
@@ -1009,7 +1023,7 @@ export async function createSummarySlideshow() {
                                 ? html`
                                     <div class="summary-label-point" style="max-width: ${typography.maxWidth}; width: 100%;">
                                         ${slide.title && html`
-                                            <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
+                                            <div class="summary-point-title" style="margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent}; overflow-wrap: break-word; word-break: break-word;">
                                                 ${slide.title}
                                             </div>
                                         `}
@@ -1023,7 +1037,7 @@ export async function createSummarySlideshow() {
                                 `
                                 : html`
                                     ${slide.title && html`
-                                        <div style="margin-bottom: 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent};">
+                                        <div style="margin-bottom: 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; color: ${slide.color.accent}; overflow-wrap: break-word; word-break: break-word;">
                                             ${slide.title}
                                         </div>
                                     `}
