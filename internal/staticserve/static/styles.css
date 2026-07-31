@@ -937,6 +937,24 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
+/* Plays once, the first time the toggle scrolls into view, to draw the
+   eye to Slides/Text/Quiz — easy to miss since it sits above the fold-ish
+   summary content rather than looking like an interactive control. */
+@keyframes summaryViewTogglePulse {
+  0%, 100% {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02), 0 0 0 0 rgba(0, 120, 212, 0);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02), 0 0 0 6px rgba(0, 120, 212, 0.3);
+    transform: scale(1.035);
+  }
+}
+
+.summary-view-toggle-attention {
+  animation: summaryViewTogglePulse 0.9s ease-in-out 2;
+}
+
 .summary-view-btn {
   border: 0;
   border-radius: 0;
@@ -964,7 +982,8 @@ body {
   color: var(--text-primary);
 }
 
-.summary-embedded-container {
+.summary-embedded-container,
+.summary-quiz-container {
   margin-bottom: 12px;
 }
 
@@ -1544,6 +1563,14 @@ body {
   align-items: center;
   justify-content: center;
   opacity: 0.92;
+}
+
+.summary-slideshow-take-quiz-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(0, 120, 212, 0.35);
 }
 
 .summary-file-point {
@@ -2819,6 +2846,132 @@ body {
 
 .tab-content.active {
   display: block;
+}
+
+.quiz-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.quiz-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin: var(--space-md) 0;
+}
+
+.quiz-score-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.quiz-question {
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.quiz-question-text {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quiz-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.quiz-option:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent-blue);
+}
+
+.quiz-option:disabled {
+  cursor: default;
+}
+
+.quiz-option.chosen {
+  border-color: var(--accent-blue);
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.quiz-option.correct {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green-light);
+}
+
+.quiz-option.incorrect {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+}
+
+.quiz-option-letter {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.quiz-option-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.quiz-explanation {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent-blue);
+  background: rgba(0, 120, 212, 0.1);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.quiz-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .notification-badge {
@@ -4644,5 +4797,66 @@ body {
 
   .summary-slideshow-embedded-panel .summary-slideshow-body {
     overflow-y: visible !important;
+  }
+
+  .summary-embedded-container,
+  .summary-quiz-container {
+    margin-bottom: 8px;
+  }
+
+  /* Slides/Text/Quiz toggle: three horizontal pills plus the "Open Slides"
+     button and "SUMMARY" label all competing for one narrow row is exactly
+     what reads as jagged/overlapped on a phone (and blocks clicks on
+     buttons the row can't fit). Stack the toggle full-width instead of a
+     true nested accordion — same "pick one view" semantics, each option
+     gets the full row width and stays readable. */
+  .summary-header-row {
+    grid-template-columns: 1fr;
+    grid-template-areas: "left" "right";
+    row-gap: 8px;
+  }
+
+  .summary-header-left {
+    grid-area: left;
+    width: 100%;
+  }
+
+  .summary-actions {
+    grid-area: right;
+    justify-self: stretch;
+  }
+
+  .summary-header-center {
+    display: none;
+  }
+
+  .summary-view-toggle {
+    flex-direction: column;
+    width: 100%;
+    border-radius: 8px;
+  }
+
+  .summary-view-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 9px 14px;
+  }
+
+  .summary-view-btn + .summary-view-btn {
+    border-left: none;
+    border-top: 1px solid var(--border-medium);
+  }
+
+  /* "Open Slides" button text is a raw text node (not a wrapped span), so
+     font-size:0 is the way to hide it without touching the render logic —
+     the icon stays visible since renderIcon sets explicit width/height on
+     the svg itself, not relying on font-size. */
+  .summary-play-btn {
+    font-size: 0;
+    padding: 6px 8px;
+  }
+
+  .summary-play-btn svg {
+    font-size: 0;
   }
 }

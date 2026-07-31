@@ -2,6 +2,7 @@
 import { renderIcon } from './icons.js';
 import { waitForPreact } from './utils.js';
 import { getSummarySlideshow } from './SummarySlideshow/SummarySlideshow.js';
+import { getQuiz } from './Quiz.js';
 
 const ALLOWED_TAGS = new Set([
     'A', 'BLOCKQUOTE', 'BR', 'CODE', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
@@ -157,14 +158,18 @@ function renderSafeMarkdown(container, markdown, handlers = {}) {
 export async function createSummary() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
     const SummarySlideshow = await getSummarySlideshow();
-    
-    return function Summary({ markdown, status, errorSummary, showAllClear, slidesEnabled = true, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false }) {
+    const Quiz = await getQuiz();
+
+    return function Summary({ markdown, status, errorSummary, showAllClear, slidesEnabled = true, isSlideshowModalOpen, onOpenSlideshowModal, onEmbeddedShortcutActiveChange, slideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false, quiz = [], onViewModeChange = () => {} }) {
         const contentRef = useRef(null);
         const summaryRootRef = useRef(null);
         const [summaryViewMode, setSummaryViewMode] = useState(slidesEnabled ? 'slides' : 'text');
         const [isSummaryInView, setIsSummaryInView] = useState(false);
+        const [showViewToggleAttention, setShowViewToggleAttention] = useState(false);
+        const hasPlayedAttentionRef = useRef(false);
         const hasSummaryMarkdown = Boolean(markdown && markdown.trim());
-        
+        const hasQuiz = Array.isArray(quiz) && quiz.length > 0;
+
         useEffect(() => {
             renderSafeMarkdown(contentRef.current, markdown, { onOpenFileFromSlide, canOpenFileFromSlide });
         }, [markdown, onOpenFileFromSlide, canOpenFileFromSlide]);
@@ -174,6 +179,10 @@ export async function createSummary() {
                 setSummaryViewMode(slidesEnabled ? 'slides' : 'text');
             }
         }, [markdown, hasSummaryMarkdown, slidesEnabled]);
+
+        useEffect(() => {
+            onViewModeChange(summaryViewMode);
+        }, [summaryViewMode, onViewModeChange]);
 
         useEffect(() => {
             const element = summaryRootRef.current;
@@ -190,6 +199,22 @@ export async function createSummary() {
             observer.observe(element);
             return () => observer.disconnect();
         }, []);
+
+        // Draw attention to the Slides/Text/Quiz toggle once, the first
+        // time it's actually scrolled into view — not on mount, since the
+        // summary is often below the fold when a review first completes.
+        useEffect(() => {
+            if (!isSummaryInView || hasPlayedAttentionRef.current) {
+                return;
+            }
+            if (!hasSummaryMarkdown || !(slidesEnabled || hasQuiz)) {
+                return;
+            }
+            hasPlayedAttentionRef.current = true;
+            setShowViewToggleAttention(true);
+            const timer = setTimeout(() => setShowViewToggleAttention(false), 1800);
+            return () => clearTimeout(timer);
+        }, [isSummaryInView, hasSummaryMarkdown, slidesEnabled, hasQuiz]);
 
         const embeddedShortcutsActive = Boolean(
             hasSummaryMarkdown
@@ -217,19 +242,21 @@ export async function createSummary() {
                 ${hasSummaryMarkdown && html`
                     <div class="summary-header-row">
                         <div class="summary-header-left">
-                            ${slidesEnabled
+                            ${(slidesEnabled || hasQuiz)
                                 ? html`
-                                    <div class="summary-view-toggle" role="group" aria-label="Summary display mode">
-                                        <button
-                                            class="action-btn summary-view-btn ${summaryViewMode === 'slides' ? 'active' : ''}"
-                                            onClick=${() => setSummaryViewMode('slides')}
-                                            title="Show slides view"
-                                            aria-label="Show slides view"
-                                            aria-pressed=${summaryViewMode === 'slides'}
-                                        >
-                                            ${renderIcon(html, 'slidesView', { className: 'btn-icon' })}
-                                            Slides
-                                        </button>
+                                    <div class="summary-view-toggle ${showViewToggleAttention ? 'summary-view-toggle-attention' : ''}" role="group" aria-label="Summary display mode">
+                                        ${slidesEnabled && html`
+                                            <button
+                                                class="action-btn summary-view-btn ${summaryViewMode === 'slides' ? 'active' : ''}"
+                                                onClick=${() => setSummaryViewMode('slides')}
+                                                title="Show slides view"
+                                                aria-label="Show slides view"
+                                                aria-pressed=${summaryViewMode === 'slides'}
+                                            >
+                                                ${renderIcon(html, 'slidesView', { className: 'btn-icon' })}
+                                                Slides
+                                            </button>
+                                        `}
                                         <button
                                             class="action-btn summary-view-btn ${summaryViewMode === 'text' ? 'active' : ''}"
                                             onClick=${() => setSummaryViewMode('text')}
@@ -240,6 +267,18 @@ export async function createSummary() {
                                             ${renderIcon(html, 'textView', { className: 'btn-icon' })}
                                             Text
                                         </button>
+                                        ${hasQuiz && html`
+                                            <button
+                                                class="action-btn summary-view-btn ${summaryViewMode === 'quiz' ? 'active' : ''}"
+                                                onClick=${() => setSummaryViewMode('quiz')}
+                                                title="Show comprehension quiz"
+                                                aria-label="Show comprehension quiz"
+                                                aria-pressed=${summaryViewMode === 'quiz'}
+                                            >
+                                                ${renderIcon(html, 'help', { className: 'btn-icon' })}
+                                                Quiz
+                                            </button>
+                                        `}
                                     </div>
                                 `
                                 : html`<span style="font-size: 12px; color: var(--text-muted);">Text view</span>`
@@ -287,14 +326,22 @@ export async function createSummary() {
                             onOpenFileFromSlide=${onOpenFileFromSlide}
                             canOpenFileFromSlide=${canOpenFileFromSlide}
                             className="summary-embedded-slideshow"
+                            hasQuiz=${hasQuiz}
+                            onTakeQuiz=${() => setSummaryViewMode('quiz')}
                         />
+                    </div>
+                `}
+
+                ${hasSummaryMarkdown && hasQuiz && summaryViewMode === 'quiz' && html`
+                    <div class="summary-quiz-container">
+                        <${Quiz} quiz=${quiz} />
                     </div>
                 `}
 
                 <div
                     ref=${contentRef}
                     class="summary-text-content"
-                    style=${hasSummaryMarkdown && (!slidesEnabled || summaryViewMode === 'text') ? '' : 'display: none;'}
+                    style=${hasSummaryMarkdown && summaryViewMode === 'text' ? '' : 'display: none;'}
                 ></div>
             </div>
         `;

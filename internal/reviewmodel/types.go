@@ -48,6 +48,19 @@ type DiffReviewResponse struct {
 	Message      string                 `json:"message,omitempty"`
 	FriendlyName string                 `json:"friendly_name,omitempty"`
 	Envelope     *PlanUsageEnvelope     `json:"envelope,omitempty"`
+	Quiz         []QuizQuestion         `json:"quiz,omitempty"`
+}
+
+// QuizQuestion mirrors one entry of LiveReview's optional "quiz" array — a
+// 5-question comprehension quiz generated alongside the summary. Absent
+// (nil) for reviews created before this existed, or if LiveReview's LLM
+// call didn't produce a well-formed quiz for a given diff.
+type QuizQuestion struct {
+	Type         string   `json:"type"`
+	Question     string   `json:"question"`
+	Options      []string `json:"options"`
+	CorrectIndex int      `json:"correctIndex"`
+	Explanation  string   `json:"explanation,omitempty"`
 }
 
 type DiffReviewCreateResponse struct {

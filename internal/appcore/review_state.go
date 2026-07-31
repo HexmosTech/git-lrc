@@ -30,6 +30,7 @@ type ReviewState struct {
 	// Content
 	Summary string                             `json:"summary"`
 	Files   []reviewmodel.DiffReviewFileResult `json:"files"`
+	Quiz    []reviewmodel.QuizQuestion         `json:"quiz,omitempty"`
 
 	// Counts
 	TotalFiles    int `json:"totalFiles"`
@@ -87,6 +88,7 @@ func (rs *ReviewState) UpdateFromResult(result *reviewmodel.DiffReviewResponse) 
 
 	rs.Status = result.Status
 	rs.Summary = result.Summary
+	rs.Quiz = result.Quiz
 
 	// Merge comments from result into existing files (preserving hunks)
 	totalComments := 0

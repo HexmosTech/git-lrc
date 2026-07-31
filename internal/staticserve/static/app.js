@@ -297,6 +297,7 @@ async function initApp() {
         const [slideShowOpen, setSlideShowOpen] = useState(false);
         const [embeddedSlideshowActive, setEmbeddedSlideshowActive] = useState(false);
         const [summarySlideIndex, setSummarySlideIndex] = useState(0);
+        const [summaryViewMode, setSummaryViewMode] = useState('slides');
         const [sidebarOpen, setSidebarOpen] = useState(false);
         const [performanceNowMs, setPerformanceNowMs] = useState(domReadyStartMs || getPerformanceNow());
         const [commentRenderTimes, setCommentRenderTimes] = useState({});
@@ -816,6 +817,7 @@ async function initApp() {
         const showLoader = Boolean(reviewData) && status === 'in_progress';
         const summary = reviewData?.summary || '';
         const files = reviewData?.Files || [];
+        const quiz = reviewData?.quiz || [];
         const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
         const errorSummary = reviewData?.errorSummary || '';
         const hasSummary = Boolean(summary && summary.trim());
@@ -1109,10 +1111,12 @@ async function initApp() {
                             onSlideIndexChange=${setSummarySlideIndex}
                             onOpenFileFromSlide=${handleOpenFileFromSlide}
                             canOpenFileFromSlide=${canOpenFileFromSlide}
+                            quiz=${quiz}
+                            onViewModeChange=${setSummaryViewMode}
                         />
                     `}
-                    
-                    <${Stats} 
+
+                    <${Stats}
                         totalFiles=${files.length}
                         totalComments=${totalComments}
                     />
@@ -1300,6 +1304,8 @@ async function initApp() {
                     onOpenFileFromSlide=${handleOpenFileFromSlide}
                     canOpenFileFromSlide=${canOpenFileFromSlide}
                     onClose=${() => setSlideShowOpen(false)}
+                    hasQuiz=${quiz.length > 0}
+                    onTakeQuiz=${() => setSummaryViewMode('quiz')}
                 />
             `}
             `;

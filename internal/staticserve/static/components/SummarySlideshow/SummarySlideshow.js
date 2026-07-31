@@ -463,7 +463,7 @@ export async function createSummarySlideshow() {
     const { html, useEffect, useRef, useState } = await waitForPreact();
     const FeedbackPopup = await getFeedbackPopup();
 
-    return function SummarySlideshow({ markdown, isOpen = true, onClose = () => {}, mode = 'modal', isShortcutActive = false, className = '', initialSlideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false }) {
+    return function SummarySlideshow({ markdown, isOpen = true, onClose = () => {}, mode = 'modal', isShortcutActive = false, className = '', initialSlideIndex = 0, onSlideIndexChange = () => {}, onOpenFileFromSlide = () => {}, canOpenFileFromSlide = () => false, hasQuiz = false, onTakeQuiz = null }) {
         const isModal = mode === 'modal';
         const isVisible = isModal ? isOpen : true;
         const [slides, setSlides] = useState([]);
@@ -785,6 +785,13 @@ export async function createSummarySlideshow() {
             }
         };
 
+        const handleTakeQuiz = () => {
+            handleClose();
+            if (typeof onTakeQuiz === 'function') {
+                onTakeQuiz();
+            }
+        };
+
         const moveToSlide = (nextIndex) => {
             clearAutoPlayTimers();
             setCurrentSlide(clampSlideIndex(nextIndex, slides.length));
@@ -868,7 +875,16 @@ export async function createSummarySlideshow() {
         const isNarrowViewport = typeof window !== 'undefined' && window.innerWidth <= 640;
         const panelBg = isCompleteSlide ? '#1f2430' : (slide ? slide.color.surface : '#1f2430');
         const typography = slide ? resolveSlideTypography(slide) : null;
-        const panelHeight = isModal ? 'clamp(540px, 78vh, 760px)' : 'clamp(440px, 62vh, 620px)';
+        // The complete slide's content height varies with the review's
+        // slide count and whether quiz data exists (adds a button) —
+        // clamping it to the same fixed box as regular content slides
+        // caused it to overflow into an internal scrollbar for reviews
+        // with more slides/longer text. Let it grow to fit instead; every
+        // other slide keeps the fixed, viewport-relative box since that's
+        // what keeps their typography consistent.
+        const panelHeight = isCompleteSlide
+            ? 'auto'
+            : (isModal ? 'clamp(540px, 78vh, 760px)' : 'clamp(440px, 62vh, 620px)');
         const progressAccent = slide ? slide.color.accent : (slides[slides.length - 1]?.color?.accent || '#3b82f6');
         const explorerFocusTrackItemKey = highlightedTrackItemKey || activeProgressTrackItemKey;
 
@@ -879,7 +895,7 @@ export async function createSummarySlideshow() {
                     width: ${isModal ? 'min(1040px, calc(100vw - 48px))' : '100%'};
                     max-width: ${isModal ? 'calc(100vw - 48px)' : '100%'};
                     height: ${panelHeight};
-                    max-height: ${isModal ? 'calc(100vh - 48px)' : '620px'};
+                    max-height: ${isModal ? 'calc(100vh - 48px)' : (isCompleteSlide ? 'none' : '620px')};
                     aspect-ratio: ${isModal ? '16 / 10' : 'auto'};
                     display: flex; flex-direction: column;
                     border-radius: 14px; overflow: hidden;
@@ -943,7 +959,7 @@ export async function createSummarySlideshow() {
                         ${renderIcon(html, 'previous', { size: 18 })}
                     </button>
 
-                <div ref=${bodyRef} class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; ${isIntro || isCompleteSlide ? 'align-items: center;' : ''} padding: 28px 32px;">
+                <div ref=${bodyRef} class="summary-slideshow-body" style="flex: 1; min-height: 0; overflow-y: ${isCompleteSlide && !isModal ? 'visible' : 'auto'}; display: flex; flex-direction: column; justify-content: center; ${isIntro || isCompleteSlide ? 'align-items: center;' : ''} padding: 28px 32px;">
                     ${isCompleteSlide ? html`
                         <div class="summary-slideshow-complete" style="text-align: center; padding: ${isNarrowViewport ? '12px' : '32px'}; max-width: 520px; width: 100%; overflow-wrap: break-word; word-break: break-word;">
                             <div class="summary-slideshow-celebration" aria-hidden="true">
@@ -958,28 +974,36 @@ export async function createSummarySlideshow() {
                                     <path d="M112 28l6 6 10-12" fill="none" stroke="#9ed8ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                             </div>
-                            <div style="font-size: ${isNarrowViewport ? '24px' : '34px'}; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; margin-bottom: 12px;">
+                            <div style="font-size: ${isNarrowViewport ? '24px' : '30px'}; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; margin-bottom: 10px;">
                                 Review complete
                             </div>
-                            <div style="font-size: ${isNarrowViewport ? '15px' : '18px'}; color: var(--text-secondary); margin-bottom: ${isNarrowViewport ? '18px' : '30px'}; line-height: 1.6;">
+                            <div style="font-size: ${isNarrowViewport ? '15px' : '17px'}; color: var(--text-secondary); margin-bottom: ${isNarrowViewport ? '14px' : '18px'}; line-height: 1.5;">
                                 You finished all ${slides.length} slides.
                             </div>
-                            <div style="font-size: ${isNarrowViewport ? '13px' : '15px'}; color: var(--text-muted); margin-bottom: ${isNarrowViewport ? '14px' : '20px'}; line-height: 1.6;">
+                            <div style="font-size: ${isNarrowViewport ? '13px' : '14px'}; color: var(--text-muted); margin-bottom: ${isNarrowViewport ? '12px' : '16px'}; line-height: 1.5;">
                                 Your commitment to higher engineering standards made this review possible.
                             </div>
-                            <div style="margin-bottom: 6px;">
-                                <span style="font-size: ${isNarrowViewport ? '22px' : '30px'}; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">${formatActualElapsed(sessionStartRef.current)}</span>
-                                <span style="font-size: 15px; color: var(--text-muted); margin-left: 8px;">actual</span>
+                            <div style="margin-bottom: 4px;">
+                                <span style="font-size: ${isNarrowViewport ? '20px' : '26px'}; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">${formatActualElapsed(sessionStartRef.current)}</span>
+                                <span style="font-size: 14px; color: var(--text-muted); margin-left: 8px;">actual</span>
                             </div>
-                            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: ${isNarrowViewport ? '20px' : '40px'};">
+                            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: ${isNarrowViewport ? '16px' : '22px'};">
                                 Planned: ${formatElapsed(slides)}
                             </div>
-                            ${isModal && html`
-                                <button class="action-btn summary-slide-btn" onClick=${handleClose} title="Close and return to review">
-                                    ${renderIcon(html, 'openReview', { size: 14 })}
-                                    Back to Review
-                                </button>
-                            `}
+                            <div style="display: flex; flex-direction: ${isNarrowViewport ? 'column' : 'row'}; gap: 10px; justify-content: center;">
+                                ${hasQuiz && html`
+                                    <button class="btn btn-primary summary-slideshow-take-quiz-btn" onClick=${handleTakeQuiz} title="Take the comprehension quiz for this review">
+                                        ${renderIcon(html, 'help', { size: 14 })}
+                                        Take the Quiz
+                                    </button>
+                                `}
+                                ${isModal && html`
+                                    <button class="action-btn summary-slide-btn" onClick=${handleClose} title="Close and return to review">
+                                        ${renderIcon(html, 'openReview', { size: 14 })}
+                                        Back to Review
+                                    </button>
+                                `}
+                            </div>
                         </div>
                     ` : isIntro
                         ? html`
