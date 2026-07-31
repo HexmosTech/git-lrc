@@ -1055,19 +1055,19 @@ export async function createSummarySlideshow() {
                 </div>
 
                 <div class="summary-slideshow-controls" style="padding: 10px 16px 12px 16px; flex-shrink: 0;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
+                    <div class="summary-slideshow-controls-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
                         <div style="display: flex; align-items: center; gap: 6px;">
                             <button class="action-btn summary-slide-btn" onClick=${prevSlide} title="Previous slide (H / K / Left Arrow)" aria-label="Previous slide" disabled=${currentSlide === 0 && !isCompleteSlide}>
                                 ${renderIcon(html, 'previous', { size: 14 })}
-                                Prev
+                                <span class="slide-btn-label">Prev</span>
                             </button>
                             <button class="action-btn summary-slide-btn" onClick=${nextSlide} title="Next slide (J / L / Right Arrow / Space)" aria-label="Next slide" disabled=${isCompleteSlide}>
                                 ${renderIcon(html, 'next', { size: 14 })}
-                                Next
+                                <span class="slide-btn-label">Next</span>
                             </button>
                             <button class="action-btn summary-slide-btn ${isAutoPlay ? 'active' : ''}" onClick=${toggleAutoPlay} title="Toggle auto-play (A)" aria-label="Toggle auto-play">
                                 ${renderIcon(html, isAutoPlay ? 'pause' : 'play', { size: 14 })}
-                                ${buildAutoplayLabel(isAutoPlay, autoPlayRemainingMs)}
+                                <span class="slide-btn-label">${buildAutoplayLabel(isAutoPlay, autoPlayRemainingMs)}</span>
                             </button>
                         </div>
 
@@ -1098,11 +1098,11 @@ export async function createSummarySlideshow() {
                             />
                             <button class="action-btn summary-slide-btn ${copied ? 'copied' : ''}" onClick=${handleCopy} title="Copy current slide (C)" aria-label="Copy current slide">
                                 ${renderIcon(html, copied ? 'copied' : 'copyLogs', { size: 14 })}
-                                ${copied ? 'Copied!' : 'Copy'}
+                                <span class="slide-btn-label">${copied ? 'Copied!' : 'Copy'}</span>
                             </button>
                             <button class="action-btn summary-slide-btn" onClick=${() => setIsHelpShown(true)} title="Show keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">
                                 ${renderIcon(html, 'help', { size: 14 })}
-                                Help
+                                <span class="slide-btn-label">Help</span>
                             </button>
                         </div>
                     </div>

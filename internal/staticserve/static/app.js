@@ -297,6 +297,7 @@ async function initApp() {
         const [slideShowOpen, setSlideShowOpen] = useState(false);
         const [embeddedSlideshowActive, setEmbeddedSlideshowActive] = useState(false);
         const [summarySlideIndex, setSummarySlideIndex] = useState(0);
+        const [sidebarOpen, setSidebarOpen] = useState(false);
         const [performanceNowMs, setPerformanceNowMs] = useState(domReadyStartMs || getPerformanceNow());
         const [commentRenderTimes, setCommentRenderTimes] = useState({});
         const [commentVotes, setCommentVotes] = useState({});
@@ -520,6 +521,7 @@ async function initApp() {
             // Always switch to files tab when clicking a file in sidebar
             setActiveTab('files');
             setActiveFileId(fileId);
+            setSidebarOpen(false);
             setExpandedFiles(prev => {
                 const next = new Set(prev);
                 next.add(fileId);
@@ -1058,19 +1060,22 @@ async function initApp() {
         };
         
         return html`
-            <${Sidebar} 
+            <${Sidebar}
                 files=${files}
                 activeFileId=${activeFileId}
                 onFileClick=${handleFileClick}
                 issueFilters=${issueFilters}
                 hiddenCommentKeys=${hiddenCommentKeys}
+                open=${sidebarOpen}
+                onClose=${() => setSidebarOpen(false)}
             />
             <div class="main-content">
                 <div class="container">
-                    <${Header} 
+                    <${Header}
                         generatedTime=${reviewData?.generatedTime || reviewData?.GeneratedTime}
                         friendlyName=${reviewData?.friendlyName || reviewData?.FriendlyName}
                         repositoryPath=${reviewData?.repositoryPath || reviewData?.RepositoryPath}
+                        onToggleSidebar=${() => setSidebarOpen(v => !v)}
                     />
                     
                     ${showLoader && html`

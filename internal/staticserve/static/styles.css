@@ -281,6 +281,66 @@ body {
   gap: var(--space-md);
 }
 
+/* Mobile app shell: below 768px there isn't room for a permanent 260px
+   sidebar next to real content, so it becomes an off-canvas drawer instead
+   — hidden by default, toggled via .sidebar.open, dismissed by tapping the
+   backdrop (rendered by JS only while open). Desktop layout is untouched
+   since none of this applies above the breakpoint. */
+.sidebar-toggle {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .sidebar-toggle {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: min(280px, 84vw);
+    z-index: 300;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.5);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 290;
+  }
+
+  .header-top-row {
+    flex-wrap: wrap;
+  }
+
+  .brand h1 {
+    white-space: normal;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .comment-nav {
+    right: 12px;
+    bottom: 16px;
+  }
+}
+
 /* Header */
 .header {
   padding: 10px 16px;
@@ -3477,6 +3537,9 @@ body {
 }
 
 .issue-filter-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 32px;
   padding: 0 12px;
   border-radius: 6px;
@@ -3495,6 +3558,9 @@ body {
 }
 
 .issue-filter-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 32px;
   padding: 0 12px;
   border-radius: 6px;
@@ -4461,5 +4527,65 @@ body {
 
   .handoff-confetti {
     display: none;
+  }
+}
+
+/* Mobile quality pass: shrink toolbar/slideshow buttons to icon-only and
+   let comment cards use the full width instead of the desktop code-column
+   indent. Placed last so it wins the cascade over the several earlier
+   max-width:720/980/1120px rules that touch the same elements. */
+@media (max-width: 640px) {
+  .summary-slideshow-controls-row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .slide-btn-label {
+    display: none;
+  }
+
+  .summary-slide-btn {
+    padding: 6px 8px;
+  }
+
+  .btn-label {
+    display: none;
+  }
+
+  .issue-filter-toolbar-actions {
+    gap: 6px;
+  }
+
+  .copy-visible-wrapper {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .issue-filter-expand-btn,
+  .issue-filter-reset-btn,
+  .copy-visible-btn {
+    padding: 0 8px;
+    gap: 4px;
+    min-width: 32px;
+    justify-content: center;
+  }
+
+  .comment-row td {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .comment-container,
+  .comment-hidden-placeholder {
+    margin: 10px 0;
+    max-width: 100%;
+  }
+
+  .send-to-agent-label {
+    display: none;
+  }
+
+  .send-to-agent-btn {
+    padding: 7px 10px;
   }
 }

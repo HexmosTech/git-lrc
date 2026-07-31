@@ -6,12 +6,13 @@ import { countFileVisibleIssues } from './issue_filter_state.mjs';
 export async function createSidebar() {
     const { html } = await waitForPreact();
     
-    return function Sidebar({ files, activeFileId, onFileClick, issueFilters, hiddenCommentKeys }) {
+    return function Sidebar({ files, activeFileId, onFileClick, issueFilters, hiddenCommentKeys, open, onClose }) {
         const totalFiles = files.length;
         const totalComments = files.reduce((sum, file) => sum + countFileVisibleIssues(file, issueFilters, hiddenCommentKeys), 0);
-        
+
         return html`
-            <div class="sidebar">
+            ${open && html`<div class="sidebar-backdrop" onClick=${onClose}></div>`}
+            <div class="sidebar ${open ? 'open' : ''}">
                 <div class="sidebar-header">
                     <h2>
                         ${renderIcon(html, 'filesTab', { size: 12, className: 'btn-icon' })}

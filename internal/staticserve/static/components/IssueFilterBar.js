@@ -128,11 +128,13 @@ export async function createIssueFilterBar() {
                             aria-expanded=${isPinnedOpen ? 'true' : 'false'}
                             title="Toggle expanded issue filters"
                         >
-                            ${isPinnedOpen ? 'Hide Filters' : 'Open Filters'}
+                            ${renderIcon(html, 'filter', { size: 13 })}
+                            <span class="btn-label">${isPinnedOpen ? 'Hide Filters' : 'Open Filters'}</span>
                         </button>
                         ${hasActiveFilters && html`
                             <button class="issue-filter-reset-btn" onClick=${onResetFilters} title="Reset all issue filters">
-                                Reset Filters
+                                ${renderIcon(html, 'x', { size: 13 })}
+                                <span class="btn-label">Reset Filters</span>
                             </button>
                         `}
                         <div class="issue-filter-votes">
@@ -158,7 +160,7 @@ export async function createIssueFilterBar() {
                                 title="Copy all visible issues to clipboard"
                             >
                                 ${renderIcon(html, buttonLabel === 'Copied!' ? 'copied' : 'copyLogs')}
-                                ${buttonLabel}
+                                <span class="btn-label">${buttonLabel}</span>
                             </button>
                             <${SendToAgentButton}
                                 visibleCount=${visibleCount}

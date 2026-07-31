@@ -385,7 +385,7 @@ export async function createHeader() {
 
     // ── header ────────────────────────────────────────────────────────────────
 
-    return function Header({ generatedTime, friendlyName, repositoryPath }) {
+    return function Header({ generatedTime, friendlyName, repositoryPath, onToggleSidebar }) {
         return html`
             <div class="header">
                 <div class="header-top-row">
@@ -394,6 +394,21 @@ export async function createHeader() {
                         <${BrandButton} friendlyName=${friendlyName} generatedTime=${generatedTime} repositoryPath=${repositoryPath} />
                     </div>
                     <div class="header-actions">
+                        ${onToggleSidebar && html`
+                            <button
+                                class="sidebar-toggle"
+                                onClick=${onToggleSidebar}
+                                title="Files"
+                                aria-label="Toggle file list"
+                                style="align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:var(--bg-tertiary);border:1px solid var(--border-medium);color:var(--text-primary);cursor:pointer;"
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="4" y1="6" x2="20" y2="6"/>
+                                    <line x1="4" y1="12" x2="20" y2="12"/>
+                                    <line x1="4" y1="18" x2="20" y2="18"/>
+                                </svg>
+                            </button>
+                        `}
                         <${UsageChip} endpoint="/api/runtime/usage-chip" />
                         <${AppFeedback} />
                     </div>

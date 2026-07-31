@@ -276,6 +276,11 @@ const ICON_SPECS = Object.freeze({
         type: 'brand-monogram',
         letter: 'C',
     },
+    filter: {
+        paths: [
+            { d: 'M22 3H2l8 9.46V19l4 2v-8.54L22 3z' },
+        ],
+    },
 });
 
 export const ICON_ALIASES = Object.freeze({
