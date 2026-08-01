@@ -5,15 +5,36 @@ import { countFileVisibleIssues } from './issue_filter_state.mjs';
 import { blastRadiusTier } from './blast_radius_sort_state.mjs';
 
 export async function createSidebar() {
-    const { html } = await waitForPreact();
+    const preact = await waitForPreact();
+    const { html, useState, useCallback } = preact;
 
     // In the whole-diff risk view a file's hunks are scattered through the
     // ranked stream, so each file expands into "Hunk n" entries that jump to
     // the corresponding block. hunkNav: FilePath -> [{targetId, expandKey,
     // hunkNum, score}] (null/empty outside that view).
+    //
+    // Each file header is collapsible when it has hunk entries (default
+    // collapsed), keeping the list scannable for big diffs. Clicking the
+    // file header still jumps to the file; the caret toggles the submenu.
     return function Sidebar({ files, activeFileId, onFileClick, onHunkClick, hunkNav, issueFilters, hiddenCommentKeys, open, onClose }) {
         const totalFiles = files.length;
         const totalComments = files.reduce((sum, file) => sum + countFileVisibleIssues(file, issueFilters, hiddenCommentKeys), 0);
+        // Set of expanded file paths; entries only apply when hunkNav is
+        // populated (whole-diff risk view). Default expanded = empty set so
+        // the hunk submenus start collapsed.
+        const [expandedFiles, setExpandedFiles] = useState(() => new Set());
+        const toggleFile = useCallback((filePath, e) => {
+            e.stopPropagation();
+            setExpandedFiles(prev => {
+                const next = new Set(prev);
+                if (next.has(filePath)) {
+                    next.delete(filePath);
+                } else {
+                    next.add(filePath);
+                }
+                return next;
+            });
+        }, []);
 
         return html`
             ${open && html`<div class="sidebar-backdrop" onClick=${onClose}></div>`}
@@ -32,13 +53,22 @@ export async function createSidebar() {
                         const fileId = filePathToId(file.FilePath);
                         const isActive = activeFileId === fileId;
                         const hunkEntries = (hunkNav && hunkNav[file.FilePath]) || [];
+                        const isExpanded = expandedFiles.has(file.FilePath);
 
                         return html`
                             <div
-                                class="sidebar-file ${isActive ? 'active' : ''}"
+                                class="sidebar-file ${isActive ? 'active' : ''} ${hunkEntries.length > 0 ? 'sidebar-file-collapsible' : ''} ${isExpanded ? 'expanded' : ''}"
                                 data-file-id="${fileId}"
                                 onClick=${() => onFileClick(fileId)}
                             >
+                                ${hunkEntries.length > 0 && html`
+                                    <span
+                                        class="sidebar-file-caret"
+                                        onClick=${(e) => toggleFile(file.FilePath, e)}
+                                        aria-expanded=${isExpanded}
+                                        title="${isExpanded ? 'Collapse hunks' : 'Expand hunks'}"
+                                    >${isExpanded ? '▾' : '▸'}</span>
+                                `}
                                 <span class="sidebar-file-name" title="${file.FilePath}">
                                     ${file.FilePath}
                                 </span>
@@ -49,7 +79,7 @@ export async function createSidebar() {
                                     `;
                                 })()}
                             </div>
-                            ${hunkEntries.length > 0 && html`
+                            ${hunkEntries.length > 0 && isExpanded && html`
                                 <div class="sidebar-hunk-list">
                                     ${hunkEntries.map(entry => html`
                                         <div

@@ -109,6 +109,14 @@ export async function createComment() {
                                     data-comment="${comment.Content}"
                                 >
                                     <div class="comment-actions">
+                                        ${typeof hunkRiskScore === 'number' && html`
+                                            <${RiskBadge}
+                                                score=${hunkRiskScore}
+                                                detail=${hunkRiskDetail}
+                                                size="large"
+                                                onOpen=${onOpenRiskPanel}
+                                            />
+                                        `}
                                         <${FeedbackPopup}
                                             type="up"
                                             vote=${vote}
@@ -149,14 +157,6 @@ export async function createComment() {
                                     <div class="comment-header">
                                         <div class="comment-header-main">
                                             <span class="comment-badge ${badgeClass}">${comment.Severity}</span>
-                                            ${typeof hunkRiskScore === 'number' && html`
-                                                <${RiskBadge}
-                                                    score=${hunkRiskScore}
-                                                    detail=${hunkRiskDetail}
-                                                    size="small"
-                                                    onOpen=${onOpenRiskPanel}
-                                                />
-                                            `}
                                             <span class="comment-location">${filePath}${lineLabel}</span>
                                             ${renderTimingLabel && html`
                                                 <span class="comment-arrival">${renderTimingLabel}</span>

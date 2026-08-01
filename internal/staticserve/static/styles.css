@@ -239,6 +239,23 @@ body {
   color: var(--text-primary);
 }
 
+/* Caret for files with an expandable hunk submenu (whole-diff risk view).
+   Clicking toggles the submenu; clicking the rest of the row still jumps
+   to the file like a normal file click. */
+.sidebar-file-caret {
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.sidebar-file-caret:hover {
+  color: var(--text-primary);
+}
+
 .sidebar-file-name {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -2329,6 +2346,25 @@ body {
 }
 .risk-badge-large .risk-badge {
   margin-right: 8px;
+  /* When rendered inside .comment-actions (right of comment, left of the
+     thumbs), make the score read prominent: bigger text, bolder, more
+     padding. This is important info the reviewer should not miss. */
+  font-size: 13px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-width: 2px;
+}
+.risk-badge-large .risk-badge .risk-badge-score {
+  font-size: 13px;
+  font-weight: 800;
+}
+.comment-actions .risk-badge-large .risk-badge {
+  margin-right: 0;
+  /* A small divider from the thumbs to its right. */
+  border-right: 2px solid transparent;
+}
+.comment-actions .risk-badge-large + * {
+  margin-left: 4px;
 }
 .risk-badge-small .risk-badge {
   padding: 1px 7px;
