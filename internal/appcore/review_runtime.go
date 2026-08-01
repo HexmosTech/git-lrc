@@ -2058,6 +2058,46 @@ func renderPretty(result *reviewmodel.DiffReviewResponse) error {
 		}
 	}
 
+	if len(result.ToolResults) > 0 {
+		hasFindings := false
+		for _, tr := range result.ToolResults {
+			if len(tr.Findings) > 0 {
+				hasFindings = true
+				break
+			}
+		}
+		if hasFindings {
+			fmt.Println("\nStatic Analysis Tool Results:")
+			for _, tr := range result.ToolResults {
+				for _, f := range tr.Findings {
+					colStr := ""
+					if f.Col > 0 {
+						colStr = fmt.Sprintf(":%d", f.Col)
+					}
+					ruleStr := ""
+					if f.Rule != "" {
+						ruleStr = fmt.Sprintf("  %s", f.Rule)
+					}
+					fmt.Printf("[%s] %s:%d%s%s  %s\n", tr.ToolName, f.File, f.Line, colStr, ruleStr, f.Message)
+				}
+			}
+		}
+	}
+
+	if len(result.ToolComments) > 0 {
+		fmt.Println("\nStatic Analysis Tool Classified Comments:")
+		for _, tc := range result.ToolComments {
+			categoryStr := tc.Category
+			if categoryStr == "" {
+				categoryStr = "tool"
+			}
+			sev := strings.ToUpper(tc.Severity)
+			if sev == "" {
+				sev = "WARNING"
+			}
+			fmt.Printf("[%s] %s:%d  %s  %s\n", categoryStr, tc.FilePath, tc.Line, sev, tc.Content)
+		}
+	}
 	fmt.Println("\n" + strings.Repeat("=", 80))
 	fmt.Printf("Review complete: %d total comment(s)\n", countTotalComments(result.Files))
 	fmt.Println(strings.Repeat("=", 80) + "\n")
