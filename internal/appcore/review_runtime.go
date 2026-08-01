@@ -1887,7 +1887,18 @@ func renderPretty(result *reviewmodel.DiffReviewResponse) error {
 			if sev == "" {
 				sev = "WARNING"
 			}
-			fmt.Printf("[%s] %s:%d  %s  %s\n", categoryStr, tc.FilePath, tc.Line, sev, tc.Content)
+			metaParts := []string{}
+			if tc.Confidence != "" {
+				metaParts = append(metaParts, fmt.Sprintf("confidence: %s", tc.Confidence))
+			}
+			if tc.Type != "" {
+				metaParts = append(metaParts, fmt.Sprintf("type: %s", tc.Type))
+			}
+			metaStr := ""
+			if len(metaParts) > 0 {
+				metaStr = fmt.Sprintf(" (%s)", strings.Join(metaParts, ", "))
+			}
+			fmt.Printf("[%s] %s:%d  %s%s\n  %s\n", categoryStr, tc.FilePath, tc.Line, sev, metaStr, tc.Content)
 		}
 	}
 
