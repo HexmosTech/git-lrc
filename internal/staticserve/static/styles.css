@@ -2366,7 +2366,7 @@ body {
     0 12px 32px rgba(0, 0, 0, 0.55),
     0 2px 8px rgba(0, 0, 0, 0.4);
   animation: riskCardIn 0.14s ease-out;
-  pointer-events: none;
+  pointer-events: auto;
   text-align: left;
   cursor: default;
   font-weight: 400;
@@ -2515,6 +2515,29 @@ body {
   color: var(--text-dim);
   border-top: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.15));
   padding-top: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.risk-card-open-btn {
+  appearance: none;
+  border: 1px solid rgba(55, 148, 255, 0.4);
+  background: rgba(55, 148, 255, 0.14);
+  color: #93c5fd;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.risk-card-open-btn:hover {
+  background: rgba(55, 148, 255, 0.26);
+  border-color: rgba(55, 148, 255, 0.6);
+  color: #bfdbfe;
 }
 
 /* "Why this score" explainability panel under a hunk header */
@@ -2523,17 +2546,158 @@ body {
   border-bottom: 1px solid var(--border-medium);
 }
 .blast-panel {
-  padding: 10px 14px;
+  padding: 10px;
   background: var(--bg-tertiary);
   font-size: 12px;
+  line-height: 1.5;
   color: var(--text-secondary);
+  /* The panel lives inside .diff-table which forces monospace for the diff
+     lines. Reset to the document's normal sans-serif stack so prose (signal
+     names, labels, descriptions) reads like the rest of the UI; code symbols
+     inside the panel opt back into monospace individually. */
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    sans-serif;
 }
 .blast-panel-scores {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-bottom: 8px;
 }
+
+/* A score chip + its info-icon help trigger. The chip proper keeps its
+   existing styling (the chip class is applied to the inner span); the wrap
+   just pairs it with the help affordance. */
+.blast-score-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+.blast-help-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: help;
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+}
+.blast-help-btn:hover,
+.blast-help-btn:focus {
+  opacity: 1;
+  color: var(--text-secondary);
+  outline: none;
+}
+/* Help popup: no border, no shadow ring. A quiet floating sheet so it
+   doesn't read as "box stacked on box" beside the chip. */
+.blast-help-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 3000;
+  margin-top: 8px;
+  width: 260px;
+  max-width: 80vw;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #1a1d23;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: auto;
+  text-align: left;
+  cursor: default;
+}
+.blast-help-popup-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.blast-help-popup-body {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* The single "How is this scored?" button + full-methodology popup.
+   Ghost link style (no box) so it doesn't pile another rectangle onto the
+   row of chip pills. */
+.blast-methodology-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+.blast-methodology-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.4;
+  border-bottom: 1px dotted transparent;
+}
+.blast-methodology-btn:hover,
+.blast-methodology-btn:focus {
+  color: var(--text-secondary);
+  border-bottom-color: var(--text-dim);
+  outline: none;
+}
+.blast-methodology-popup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 3000;
+  margin-top: 8px;
+  width: 420px;
+  max-width: min(460px, 92vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #1a1d23;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  text-align: left;
+  cursor: default;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    sans-serif;
+}
+.blast-methodology-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.blast-methodology-p {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.blast-methodology-p:last-child {
+  margin-bottom: 0;
+}
+
 .blast-score-chip {
   display: inline-flex;
   align-items: center;
@@ -2756,7 +2920,6 @@ body {
   font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--accent-green-light, #86efac);
-  font-family: var(--font-mono, monospace);
 }
 
 .blast-symbol-body {

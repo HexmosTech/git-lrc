@@ -18,6 +18,7 @@ import { blastRadiusTier, blastRadiusTierLabel, summarizeRiskDetail } from './bl
 
 const CARD_WIDTH = 300;
 const CARD_EST_HEIGHT = 330; // used only for the above/below flip decision
+const HIDE_DELAY_MS = 180; // grace period so the mouse can travel badge -> card
 
 export async function createRiskBadge() {
     const { html, useState, useRef, useCallback } = await waitForPreact();
@@ -33,14 +34,20 @@ export async function createRiskBadge() {
         `;
     }
 
-    function HoverCard({ score, detail, pos }) {
+    function HoverCard({ score, detail, pos, onOpen, onEnter, onLeave }) {
         const summary = summarizeRiskDetail(detail);
         const tier = blastRadiusTier(score);
         const style = pos.placeAbove
             ? `left: ${pos.left}px; bottom: ${pos.bottom}px;`
             : `left: ${pos.left}px; top: ${pos.top}px;`;
         return html`
-            <div class="risk-hover-card ${tier}" role="tooltip" style=${style}>
+            <div
+                class="risk-hover-card ${tier}"
+                role="tooltip"
+                style=${style}
+                onMouseEnter=${onEnter}
+                onMouseLeave=${onLeave}
+            >
                 <div class="risk-card-header">
                     <span class="risk-card-score">${Math.round(score)}</span>
                     <span class="risk-card-headline">
@@ -69,9 +76,20 @@ export async function createRiskBadge() {
                         </ul>
                     `}
                     <div class="risk-card-footer">
-                        ${summary.moreCount > 0
-                            ? `${summary.totalSignals} signals — click for the full breakdown`
-                            : 'Click for the full breakdown'}
+                        <span>${summary.moreCount > 0
+                            ? `${summary.totalSignals} signals`
+                            : 'Full breakdown'}
+                        </span>
+                        ${onOpen && html`
+                            <button
+                                class="risk-card-open-btn"
+                                type="button"
+                                onClick=${(e) => { e.stopPropagation(); onOpen(); }}
+                                title="Open the full per-symbol signal breakdown"
+                            >
+                                ${renderIcon(html, 'blastRadius', { size: 10 })} Open breakdown
+                            </button>
+                        `}
                     </div>
                 `}
                 ${!summary && html`
@@ -84,8 +102,21 @@ export async function createRiskBadge() {
     return function RiskBadge({ score, detail, size = 'small', expanded = false, onOpen }) {
         const [cardPos, setCardPos] = useState(null);
         const badgeRef = useRef(null);
+        const hideTimerRef = useRef(null);
+
+        const cancelHide = useCallback(() => {
+            if (hideTimerRef.current) {
+                clearTimeout(hideTimerRef.current);
+                hideTimerRef.current = null;
+            }
+        }, []);
+        const scheduleHide = useCallback(() => {
+            cancelHide();
+            hideTimerRef.current = setTimeout(() => setCardPos(null), HIDE_DELAY_MS);
+        }, [cancelHide]);
 
         const showCard = useCallback(() => {
+            cancelHide();
             const el = badgeRef.current;
             if (!el) return;
             const rect = el.getBoundingClientRect();
@@ -95,8 +126,13 @@ export async function createRiskBadge() {
             } else {
                 setCardPos({ left, top: rect.bottom + 8, placeAbove: false });
             }
-        }, []);
-        const hideCard = useCallback(() => setCardPos(null), []);
+        }, [cancelHide]);
+
+        const openNow = useCallback(() => {
+            cancelHide();
+            setCardPos(null);
+            if (onOpen) onOpen();
+        }, [cancelHide, onOpen]);
 
         if (typeof score !== 'number') return null;
         const tier = blastRadiusTier(score);
@@ -105,14 +141,14 @@ export async function createRiskBadge() {
             <span
                 class="risk-badge-wrap risk-badge-${size}"
                 onMouseEnter=${showCard}
-                onMouseLeave=${hideCard}
+                onMouseLeave=${scheduleHide}
             >
                 <button
                     ref=${badgeRef}
                     class="risk-badge ${tier} ${clickable ? 'clickable' : ''}"
-                    onClick=${clickable ? ((e) => { e.stopPropagation(); hideCard(); onOpen(); }) : undefined}
+                    onClick=${clickable ? ((e) => { e.stopPropagation(); openNow(); }) : undefined}
                     onFocus=${showCard}
-                    onBlur=${hideCard}
+                    onBlur=${scheduleHide}
                     aria-label="Risk score ${Math.round(score)} out of 100"
                     aria-expanded=${expanded}
                     type="button"
@@ -121,7 +157,14 @@ export async function createRiskBadge() {
                     <span class="risk-badge-score">${Math.round(score)}</span>
                     ${size === 'large' && html`<span class="risk-badge-caret">${expanded ? '▾' : '▸'}</span>`}
                 </button>
-                ${cardPos && html`<${HoverCard} score=${score} detail=${detail} pos=${cardPos} />`}
+                ${cardPos && html`<${HoverCard}
+                    score=${score}
+                    detail=${detail}
+                    pos=${cardPos}
+                    onOpen=${clickable ? openNow : undefined}
+                    onEnter=${cancelHide}
+                    onLeave=${scheduleHide}
+                />`}
             </span>
         `;
     };

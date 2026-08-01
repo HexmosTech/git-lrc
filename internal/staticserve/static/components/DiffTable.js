@@ -7,7 +7,8 @@ import { getRiskBadge } from './RiskBadge.js';
 import { getCommentRenderLabel } from './review_performance_state.mjs';
 
 export async function createDiffTable() {
-    const { html, useState } = await waitForPreact();
+    const preact = await waitForPreact();
+    const { html, useState, useEffect } = preact;
     const Comment = await getComment();
     const BlastRadiusPanel = await getBlastRadiusPanel();
     const RiskBadge = await getRiskBadge();
@@ -38,6 +39,11 @@ export async function createDiffTable() {
 
         // Which hunks' "why this score" panels are open (keyed by index).
         const [openBlastPanels, setOpenBlastPanels] = useState(() => new Set());
+        // Track which hunk index was most recently opened so an effect can
+        // scroll it into view (the panel renders below the header row, so
+        // bringing the header to the top of the viewport keeps the whole
+        // panel visible). Stale when its panel has since been closed.
+        const [lastOpenedHunkIdx, setLastOpenedHunkIdx] = useState(null);
         const toggleBlastPanel = (idx) => {
             setOpenBlastPanels(prev => {
                 const next = new Set(prev);
@@ -45,6 +51,7 @@ export async function createDiffTable() {
                     next.delete(idx);
                 } else {
                     next.add(idx);
+                    setLastOpenedHunkIdx(idx);
                 }
                 return next;
             });
@@ -55,9 +62,40 @@ export async function createDiffTable() {
                 if (prev.has(idx)) return prev;
                 const next = new Set(prev);
                 next.add(idx);
+                setLastOpenedHunkIdx(idx);
                 return next;
             });
         };
+
+        // When a blast panel opens, scroll its hunk header into view so the
+        // just-opened breakdown is actually visible. Honors the floating
+        // filter bar via the same --severity-filter-sticky-offset variable
+        // the rest of the app uses for scroll-margin-top.
+        useEffect(() => {
+            if (lastOpenedHunkIdx === null) return;
+            if (!openBlastPanels.has(lastOpenedHunkIdx)) return; // stale
+            const headerEl = document.getElementById(`hunk-${resolvedFileId}-${lastOpenedHunkIdx}`);
+            if (!headerEl) return;
+            const mainContent = document.querySelector('.main-content');
+            if (!mainContent) return;
+            // Stable offset that accounts for the floating header + the
+            // sticky severity filter bar on narrow viewports. This mirrors
+            // the calculation app.js:handleFileClick does; reading the CSS
+            // var keeps them in lock-step if the offset changes.
+            const filterOffset = (() => {
+                const v = getComputedStyle(document.documentElement)
+                    .getPropertyValue('--severity-filter-sticky-offset');
+                const n = parseFloat(v);
+                return Number.isFinite(n) ? n : 56;
+            })();
+            const headerEl2 = document.querySelector('.header');
+            const headerHeight = headerEl2 ? headerEl2.offsetHeight : 60;
+            const topOffset = headerHeight + filterOffset + 12; // +12 padding
+            const rect = headerEl.getBoundingClientRect();
+            const mainRect = mainContent.getBoundingClientRect();
+            const scrollTarget = mainContent.scrollTop + rect.top - mainRect.top - topOffset;
+            mainContent.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+        }, [lastOpenedHunkIdx, openBlastPanels, resolvedFileId]);
 
         return html`
             <table class="diff-table">
