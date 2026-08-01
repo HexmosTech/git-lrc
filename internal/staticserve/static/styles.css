@@ -306,8 +306,8 @@ body {
 }
 
 /* Risk score chip: OUTLINED (vs the solid count badge) so score and count
-   never read as the same metric. Tier classes supply the text color; the
-   higher-specificity rule below strips their solid background. */
+   never read as the same metric. Tier classes supply the text/border color;
+   this higher-specificity rule strips their solid background. */
 .sidebar-hunk .sidebar-hunk-score {
   display: inline-flex;
   align-items: center;
@@ -320,6 +320,12 @@ body {
   background: transparent;
   min-width: 34px;
   justify-content: center;
+}
+.sidebar-hunk .sidebar-hunk-score.blast-radius-high,
+.sidebar-hunk .sidebar-hunk-score.blast-radius-medium,
+.sidebar-hunk .sidebar-hunk-score.blast-radius-low,
+.sidebar-hunk .sidebar-hunk-score.blast-radius-none {
+  background: transparent;
 }
 
 /* Main Content */
@@ -2537,10 +2543,32 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+/* Emphasized combined score; tier classes (blast-radius-*) override color when present. */
 .blast-score-chip.primary {
+  font-weight: 800;
   background: rgba(55, 148, 255, 0.16);
   color: #93c5fd;
   border-color: rgba(55, 148, 255, 0.3);
+}
+.blast-score-chip.primary.blast-radius-high {
+  background: rgba(241, 76, 76, 0.22);
+  color: #fecaca;
+  border-color: rgba(241, 76, 76, 0.4);
+}
+.blast-score-chip.primary.blast-radius-medium {
+  background: rgba(204, 167, 0, 0.18);
+  color: #fef08a;
+  border-color: rgba(204, 167, 0, 0.32);
+}
+.blast-score-chip.primary.blast-radius-low {
+  background: rgba(55, 148, 255, 0.16);
+  color: #93c5fd;
+  border-color: rgba(55, 148, 255, 0.3);
+}
+.blast-score-chip.primary.blast-radius-none {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-dim);
+  border-color: rgba(148, 163, 184, 0.25);
 }
 .blast-score-chip.hygiene {
   background: rgba(148, 163, 184, 0.14);
@@ -2591,31 +2619,241 @@ body {
   color: var(--text-dim);
   font-style: italic;
 }
+
+/* Section labels inside the panel (symbols list, caller graph). */
+.blast-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin: 2px 0 6px;
+}
+
+/* Expandable chip rows (impacted packages, etc.): preview + "+N more". */
+.blast-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 0 8px;
+}
+.blast-chip-row-label {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin-bottom: 1px;
+}
+.blast-pkg-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blast-chip-more {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--accent-blue, #3794ff);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.blast-chip-more:hover {
+  background: rgba(55, 148, 255, 0.12);
+  border-style: solid;
+  border-color: rgba(55, 148, 255, 0.35);
+}
+
+/* Per-symbol cards: collapsed = identity + reach; expanded = full drill-down. */
 .blast-panel-symbols {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 .blast-symbol {
-  border-top: 1px dashed var(--border-medium);
-  padding-top: 6px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+.blast-symbol.open {
+  border-color: var(--border-medium);
+  background: rgba(0, 0, 0, 0.18);
 }
 .blast-symbol-header {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
-  margin-bottom: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.35;
+}
+.blast-symbol-header:hover {
+  background: rgba(148, 163, 184, 0.08);
+}
+.blast-symbol-toggle {
+  flex-shrink: 0;
+  width: 12px;
+  color: var(--text-dim);
+  font-size: 10px;
 }
 .blast-symbol-name {
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(360px, 55%);
 }
 .blast-symbol-kind {
+  flex-shrink: 0;
   font-size: 10px;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-dim);
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+.blast-symbol-reach {
+  flex: 1;
+  min-width: 120px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.blast-symbol-contrib {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--accent-green-light, #86efac);
+  font-family: var(--font-mono, monospace);
+}
+
+.blast-symbol-body {
+  padding: 0 10px 10px;
+  border-top: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.12));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Code-metric chips on an expanded symbol (complexity, tests, entry point…). */
+.blast-metric-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 8px;
+}
+.blast-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(55, 148, 255, 0.28);
+  background: rgba(55, 148, 255, 0.1);
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.blast-metric-chip.warn {
+  border-color: rgba(241, 76, 76, 0.35);
+  background: rgba(241, 76, 76, 0.12);
+  color: #fecaca;
+}
+
+/* Caller graph grouped by call depth. */
+.blast-callers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.blast-caller-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.blast-caller-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.blast-caller-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.blast-caller-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: none;
+}
+.blast-caller-list.expanded {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.blast-caller {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blast-caller:hover {
+  color: var(--text-primary);
+  border-color: rgba(148, 163, 184, 0.4);
 }
 
 /* Comments */
