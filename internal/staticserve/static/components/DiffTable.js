@@ -67,21 +67,25 @@ export async function createDiffTable() {
             });
         };
 
-        // When a blast panel opens, scroll its hunk header into view so the
-        // just-opened breakdown is actually visible. Honors the floating
-        // filter bar via the same --severity-filter-sticky-offset variable
-        // the rest of the app uses for scroll-margin-top.
+        // When a blast panel opens, scroll the enclosing file's header (the
+        // filename title bar) into view so both the title and the just-opened
+        // breakdown below the hunk stay visible. Falling back to the hunk
+        // header keeps the scroll working in synthetic whole-diff blocks
+        // where the file title is the next sibling above. Honors the
+        // floating filter bar via the same --severity-filter-sticky-offset
+        // variable the rest of the app uses for scroll-margin-top.
         useEffect(() => {
             if (lastOpenedHunkIdx === null) return;
             if (!openBlastPanels.has(lastOpenedHunkIdx)) return; // stale
-            const headerEl = document.getElementById(`hunk-${resolvedFileId}-${lastOpenedHunkIdx}`);
-            if (!headerEl) return;
+            const hunkHeaderEl = document.getElementById(`hunk-${resolvedFileId}-${lastOpenedHunkIdx}`);
+            if (!hunkHeaderEl) return;
+            // Walk up to the .file block and target its .file-header (the
+            // filename title). Falls back to the hunk header when the file
+            // wrapper isn't found (e.g. synthetic flat-risk blocks).
+            const fileBlockEl = hunkHeaderEl.closest('.file');
+            const targetEl = (fileBlockEl && fileBlockEl.querySelector('.file-header')) || hunkHeaderEl;
             const mainContent = document.querySelector('.main-content');
             if (!mainContent) return;
-            // Stable offset that accounts for the floating header + the
-            // sticky severity filter bar on narrow viewports. This mirrors
-            // the calculation app.js:handleFileClick does; reading the CSS
-            // var keeps them in lock-step if the offset changes.
             const filterOffset = (() => {
                 const v = getComputedStyle(document.documentElement)
                     .getPropertyValue('--severity-filter-sticky-offset');
@@ -90,8 +94,11 @@ export async function createDiffTable() {
             })();
             const headerEl2 = document.querySelector('.header');
             const headerHeight = headerEl2 ? headerEl2.offsetHeight : 60;
-            const topOffset = headerHeight + filterOffset + 12; // +12 padding
-            const rect = headerEl.getBoundingClientRect();
+            // +32px of breathing room so the file title is always fully clear
+            // of both the floating header and the sticky severity filter —
+            // avoids the recurring "half the title is hidden" trim issue.
+            const topOffset = headerHeight + filterOffset + 32;
+            const rect = targetEl.getBoundingClientRect();
             const mainRect = mainContent.getBoundingClientRect();
             const scrollTarget = mainContent.scrollTop + rect.top - mainRect.top - topOffset;
             mainContent.scrollTo({ top: scrollTarget, behavior: 'smooth' });
