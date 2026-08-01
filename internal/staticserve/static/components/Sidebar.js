@@ -2,11 +2,16 @@
 import { renderIcon } from './icons.js';
 import { waitForPreact, filePathToId } from './utils.js';
 import { countFileVisibleIssues } from './issue_filter_state.mjs';
+import { blastRadiusTier } from './blast_radius_sort_state.mjs';
 
 export async function createSidebar() {
     const { html } = await waitForPreact();
-    
-    return function Sidebar({ files, activeFileId, onFileClick, issueFilters, hiddenCommentKeys, open, onClose }) {
+
+    // In the whole-diff risk view a file's hunks are scattered through the
+    // ranked stream, so each file expands into "Hunk n" entries that jump to
+    // the corresponding block. hunkNav: FilePath -> [{targetId, expandKey,
+    // hunkNum, score}] (null/empty outside that view).
+    return function Sidebar({ files, activeFileId, onFileClick, onHunkClick, hunkNav, issueFilters, hiddenCommentKeys, open, onClose }) {
         const totalFiles = files.length;
         const totalComments = files.reduce((sum, file) => sum + countFileVisibleIssues(file, issueFilters, hiddenCommentKeys), 0);
 
@@ -26,9 +31,10 @@ export async function createSidebar() {
                     ${files.map(file => {
                         const fileId = filePathToId(file.FilePath);
                         const isActive = activeFileId === fileId;
-                        
+                        const hunkEntries = (hunkNav && hunkNav[file.FilePath]) || [];
+
                         return html`
-                            <div 
+                            <div
                                 class="sidebar-file ${isActive ? 'active' : ''}"
                                 data-file-id="${fileId}"
                                 onClick=${() => onFileClick(fileId)}
@@ -43,6 +49,30 @@ export async function createSidebar() {
                                     `;
                                 })()}
                             </div>
+                            ${hunkEntries.length > 0 && html`
+                                <div class="sidebar-hunk-list">
+                                    ${hunkEntries.map(entry => html`
+                                        <div
+                                            key=${entry.targetId}
+                                            class="sidebar-hunk"
+                                            onClick=${() => onHunkClick && onHunkClick(entry.targetId, entry.expandKey)}
+                                            title="Jump to hunk ${entry.hunkNum} of ${file.FilePath} — risk ${typeof entry.score === 'number' ? Math.round(entry.score) : '–'}/100${entry.commentCount ? `, ${entry.commentCount} comment${entry.commentCount !== 1 ? 's' : ''}` : ''}"
+                                        >
+                                            <span class="sidebar-hunk-name">Hunk ${entry.hunkNum}</span>
+                                            <span class="sidebar-hunk-meta">
+                                                ${entry.commentCount > 0 && html`
+                                                    <span class="sidebar-file-badge sidebar-hunk-comments">${entry.commentCount}</span>
+                                                `}
+                                                ${typeof entry.score === 'number' && html`
+                                                    <span class="sidebar-hunk-score ${blastRadiusTier(entry.score)}">
+                                                        ${renderIcon(html, 'blastRadius', { size: 9 })} ${Math.round(entry.score)}
+                                                    </span>
+                                                `}
+                                            </span>
+                                        </div>
+                                    `)}
+                                </div>
+                            `}
                         `;
                     })}
                 </div>

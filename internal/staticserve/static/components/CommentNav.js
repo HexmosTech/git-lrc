@@ -1,4 +1,8 @@
-// CommentNav component - floating prev/next comment navigator
+// CommentNav component - floating prev/next comment navigator.
+// Always navigates COMMENTS; the traversal order simply follows the active
+// sort view, because the comment list is built from the displayed files
+// (risk-ranked hunks => comments visited highest-risk first, diff order =>
+// natural order). No separate navigation mode is needed.
 import { renderIcon } from './icons.js';
 import { waitForPreact } from './utils.js';
 import {

@@ -1,6 +1,6 @@
 
 .PHONY: build build-win build-all build-local build-local-test run run-fake-review \
-	dev-ui bump release release-internal release-gh clean test test-go \
+	dev-ui design-ui bump release release-internal release-gh clean test test-go \
 	test-simulator test-hooks-worktree test-hooks-claude test-hooks-global \
 	test-install-local test-plugin-bootstrap test-plugin-hooks test-loop-prevention \
 	test-powershell-smoke test-live-smoke \
@@ -98,6 +98,13 @@ dev-ui: build-local-test
 	 WAIT=$${WAIT:-5s} \
 	 TMP_REPO=$${TMP_REPO:-/tmp/lrc-fake-review-repo} \
 	 scripts/fake_review.sh $(ARGS)
+
+# Serve the review UI against captured real-review fixtures (big diff, real AI
+# comments, real blast-radius data) for design iteration — edit files in
+# internal/staticserve/static/, refresh browser. Fixtures live in
+# tools/uidev/fixtures/ (re-capture with scripts/capture_design_fixture.sh).
+design-ui:
+	@go run ./tools/uidev $(if $(PORT),--port $(PORT),)
 
 use-local-backend:
 	@sed -i 's|api_url = "https://livereview.hexmos.com"|api_url = "http://localhost:8888"|' $(HOME)/.lrc.toml

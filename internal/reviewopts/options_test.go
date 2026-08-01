@@ -55,12 +55,15 @@ func TestBuildFromContextBlockingReview(t *testing.T) {
 }
 
 func TestBuildFromContextBlastRadius(t *testing.T) {
-	t.Run("requires project name", func(t *testing.T) {
+	t.Run("works without a project name (auto-derived at review time)", func(t *testing.T) {
 		ctx := newOptionsTestContext(t, []string{"--blast-radius"})
 
-		_, err := BuildFromContext(ctx, false)
-		if err == nil || err.Error() != "--blast-radius requires --blast-radius-project <name> (see `codebase-memory-mcp cli list_projects` for available project names)" {
-			t.Fatalf("BuildFromContext() error = %v, want blast-radius-project validation", err)
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if !opts.BlastRadius || opts.BlastRadiusProject != "" {
+			t.Fatalf("opts = %+v, want BlastRadius=true with empty project", opts)
 		}
 	})
 
@@ -88,7 +91,10 @@ func TestBuildFromContextBlastRadius(t *testing.T) {
 		}
 	})
 
-	t.Run("disabled by default", func(t *testing.T) {
+	// The real CLI default for --blast-radius is true (set in main.go's flag
+	// definition); this harness's raw flagset defaults it to false, which
+	// verifies BuildFromContext mirrors the flag rather than force-enabling.
+	t.Run("respects a disabled flag", func(t *testing.T) {
 		ctx := newOptionsTestContext(t, nil)
 
 		opts, err := BuildFromContext(ctx, false)
@@ -96,7 +102,7 @@ func TestBuildFromContextBlastRadius(t *testing.T) {
 			t.Fatalf("BuildFromContext() error = %v", err)
 		}
 		if opts.BlastRadius || opts.SortByBlastRadius {
-			t.Fatalf("opts = %+v, want blast-radius disabled by default", opts)
+			t.Fatalf("opts = %+v, want blast-radius mirroring the (false) flag", opts)
 		}
 	})
 }

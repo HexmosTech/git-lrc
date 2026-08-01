@@ -93,6 +93,10 @@ func (w Weights) normalized() Weights {
 type Options struct {
 	Score   score.Config
 	Weights Weights
+	// Binary optionally points at a specific codebase-memory-mcp executable
+	// (e.g. an lrc-managed install outside PATH). Empty means "resolve
+	// codebase-memory-mcp via PATH".
+	Binary string
 }
 
 // DefaultOptions returns score.Defaults() paired with DefaultWeights().
@@ -410,14 +414,15 @@ func codeMetricSignals(s symbols.Symbol, testCount int) []Signal {
 // hunks touch it, and the whole batch of touched symbols across every hunk
 // is fanned-in with a fixed small number of graph queries (see score.FanIn).
 func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Options) (*Report, error) {
-	c := client.New(project)
-	if err := c.Available(); err != nil {
-		return nil, err
-	}
-
 	o := DefaultOptions()
 	if len(opts) > 0 {
 		o = opts[0]
+	}
+
+	c := client.New(project)
+	c.Binary = o.Binary
+	if err := c.Available(); err != nil {
+		return nil, err
 	}
 	weights := o.Weights.normalized()
 	maxDepth := o.Score.MaxDepth

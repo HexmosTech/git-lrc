@@ -254,6 +254,32 @@ git lrc review --skip
 
 No AI review. No personal attestation. The git log will record `skipped`.
 
+## Blast Radius — Risk-Ranked Reviews
+
+Alongside the server-side AI review, `git lrc review` scores every hunk **locally** by how much
+damage a mistake in it could do: how many callers reach it, whether it's an HTTP handler or
+reachable from a service entry point, whether it touches auth/persistence/schema, whether a
+near-duplicate implementation exists elsewhere, and more. Scoring runs concurrently with the
+review — neither waits for the other — and the review UI opens with hunks **ranked by risk across
+the whole diff** (the classic diff-order view is one toggle away). Click any score badge to see
+exactly which signals produced it, and use the floating navigator's risk mode to jump between
+hunks from highest score down.
+
+This is powered by a local [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)
+knowledge graph. The installer sets the engine binary up automatically (into `~/.lrc/bin` only —
+no PATH edits, no agent-config changes); manage it any time with:
+
+```bash
+git lrc graph install    # install/update the engine
+git lrc graph status     # binary path, version, indexed projects
+git lrc graph uninstall  # remove it
+```
+
+The first review in a repository indexes it automatically (larger repos take a few minutes, during
+which the review proceeds normally and scores appear when ready); subsequent reviews refresh the
+index incrementally in about a second. No graph engine installed? Reviews work exactly as before —
+scoring just stays off. Disable explicitly with `--blast-radius=false`.
+
 ## Git Log Tracking
 
 Every commit gets a **review status line** appended to its git log message:

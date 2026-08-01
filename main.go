@@ -43,8 +43,8 @@ var baseFlags = []cli.Flag{
 	&cli.BoolFlag{Name: "skip", Usage: "mark review as skipped and write attestation without contacting the API", EnvVars: []string{"LRC_SKIP"}},
 	&cli.BoolFlag{Name: "force", Usage: "force rerun by removing existing attestation/hash for current tree", EnvVars: []string{"LRC_FORCE"}},
 	&cli.BoolFlag{Name: "vouch", Usage: "vouch for changes manually without running AI review (records attestation with coverage stats from prior iterations)", EnvVars: []string{"LRC_VOUCH"}},
-	&cli.BoolFlag{Name: "blast-radius", Usage: "score hunks by symbol importance using codebase-memory-mcp (requires --blast-radius-project); experimental, currently only affects --save-text output", EnvVars: []string{"LRC_BLAST_RADIUS"}},
-	&cli.StringFlag{Name: "blast-radius-project", Usage: "codebase-memory-mcp project name to score against (see `codebase-memory-mcp cli list_projects`)", EnvVars: []string{"LRC_BLAST_RADIUS_PROJECT"}},
+	&cli.BoolFlag{Name: "blast-radius", Value: true, Usage: "score hunks by blast radius using the local graph engine (default on; auto-indexes the current repo, silently skipped when the engine isn't installed - see `lrc graph install`); disable with --blast-radius=false", EnvVars: []string{"LRC_BLAST_RADIUS"}},
+	&cli.StringFlag{Name: "blast-radius-project", Usage: "override the codebase-memory-mcp project name to score against (default: auto-derived from the repo root; see `lrc graph status`)", EnvVars: []string{"LRC_BLAST_RADIUS_PROJECT"}},
 	&cli.BoolFlag{Name: "sort-by-blast-radius", Usage: "reorder hunks within each file by descending blast-radius score (implies --blast-radius)", EnvVars: []string{"LRC_SORT_BY_BLAST_RADIUS"}},
 }
 
@@ -69,6 +69,9 @@ func main() {
 		RunUninstall:                    appcore.RunUninstall,
 		RunHooksInstall:                 appcore.RunHooksInstall,
 		RunHooksUninstall:               appcore.RunHooksUninstall,
+		RunGraphInstall:                 appcore.RunGraphInstall,
+		RunGraphStatus:                  appcore.RunGraphStatus,
+		RunGraphUninstall:               appcore.RunGraphUninstall,
 		RunHooksEnable:                  appcore.RunHooksEnable,
 		RunHooksDisable:                 appcore.RunHooksDisable,
 		RunHooksStatus:                  appcore.RunHooksStatus,

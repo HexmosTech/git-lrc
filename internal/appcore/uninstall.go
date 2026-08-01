@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/HexmosTech/git-lrc/internal/graphengine"
 	"github.com/HexmosTech/git-lrc/storage"
 	"github.com/urfave/cli/v2"
 )
@@ -58,6 +59,12 @@ func runUninstall(c *cli.Context) error {
 	}
 
 	binaries, shellArtifacts := detectUninstallArtifacts(homeDir)
+	// The lrc-managed graph engine binary (~/.lrc/bin) counts as an lrc
+	// binary; a user-installed codebase-memory-mcp elsewhere on PATH is
+	// never touched.
+	if enginePath, engineErr := graphengine.InstalledBinaryPath(); engineErr == nil {
+		binaries = append(binaries, enginePath)
+	}
 	configFile := filepath.Join(homeDir, ".lrc.toml")
 
 	fmt.Printf("Running uninstall (mode: %s)\n", mode)

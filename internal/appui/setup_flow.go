@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/HexmosTech/git-lrc/internal/graphengine"
 	setuptpl "github.com/HexmosTech/git-lrc/setup"
 	"github.com/HexmosTech/git-lrc/storage"
 	"github.com/urfave/cli/v2"
@@ -145,8 +146,30 @@ func RunSetup(c *cli.Context) error {
 		slog.write("config written to ~/.lrc.toml")
 	}
 
+	ensureGraphEngine(slog)
+
 	printSetupSuccess(result)
 	return nil
+}
+
+// ensureGraphEngine best-effort installs the codebase-memory-mcp graph
+// engine binary into ~/.lrc/bin so blast-radius scoring works out of the
+// box. Idempotent (skips when already installed) and never fails setup -
+// scoring is optional enrichment, and `lrc graph install` can always be run
+// later.
+func ensureGraphEngine(slog *setupLog) {
+	if _, err := graphengine.Resolve(); err == nil {
+		slog.write("graph engine already available")
+		return
+	}
+	fmt.Printf("  %sInstalling blast-radius graph engine (%s)...%s\n", clr(cDim), graphengine.PinnedVersion, clr(cReset))
+	slog.write("installing graph engine %s", graphengine.PinnedVersion)
+	if _, err := graphengine.Install(graphengine.InstallOptions{}); err != nil {
+		slog.write("warning: graph engine install failed: %v", err)
+		fmt.Printf("  %s⚠ Could not install the graph engine%s %s(run `lrc graph install` later to enable blast-radius scoring)%s\n", clr(cYellow), clr(cReset), clr(cDim), clr(cReset))
+		return
+	}
+	fmt.Printf("  %s✅ Graph engine installed%s %s(blast-radius scoring enabled)%s\n", clr(cGreen), clr(cReset), clr(cDim), clr(cReset))
 }
 
 func cleanupSetupLog(slog *setupLog) {

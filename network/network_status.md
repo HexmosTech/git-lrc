@@ -10,8 +10,9 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 
 - Network boundary: outbound HTTP API operations and response handling in network package.
 - Modes represented: api.
-- Operation count tracked: 24 operations.
-- Severity distribution: High 10, Medium 7, Low 2.
+- Operation count tracked: 25 operations.
+- Severity distribution: High 11, Medium 7, Low 2.
+- Current diff note: added GitHubDownloadTo for downloading the codebase-memory-mcp graph-engine release archive from GitHub (host-allowlisted on every redirect hop, sha256-verified against the release checksums.txt in internal/graphengine before install).
 - Current diff note: self-hosted setup now uses LiveReview email/password auth endpoints (`/api/v1/auth/login`, `/api/v1/auth/setup-status`, `/api/v1/auth/setup`) in addition to existing cloud ensure-cloud-user setup path.
 - Current diff note: internal reviewapi helper evidence links were revalidated after git path helper additions; network inventory scope is unchanged.
 - Primary sensitive data in scope: API keys, bearer tokens, org-context headers, diff content, connector validation payloads, update manifest metadata, binary download stream.
@@ -69,6 +70,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | SelfUpdateFetchManifest | api | Update manifest metadata and checksum references | Retrieve global update manifest | Medium | Medium integrity risk if manifest source is untrusted | Compensated by controlled update source design and follow-on verification path; acceptable risk | [network/selfupdate_operations.go](selfupdate_operations.go#L32) |
 | SelfUpdateFetchReleaseManifest | api | Platform-specific release manifest | Retrieve release details for current target platform | Medium | Medium integrity risk from release metadata tampering | Compensated by expected-host model and verification pipeline assumptions; acceptable risk | [network/selfupdate_operations.go](selfupdate_operations.go#L37) |
 | SelfUpdateDownloadBinaryTo | api | Binary stream bytes for executable update artifact | Download release binary to target path | High | High integrity and supply-chain risk for executable download | Compensated by source host validation and SHA256 verification during staging in internal/selfupdate downloadVersionBinaryFromManifest; residual risk acceptable | [network/selfupdate_operations.go](selfupdate_operations.go#L62) |
+| GitHubDownloadTo | api | GitHub release archive bytes for the codebase-memory-mcp graph engine | Download pinned graph-engine release asset into lrc-managed ~/.lrc/bin staging | High | High integrity and supply-chain risk for third-party executable download | Compensated by https-only GitHub host allowlist enforced on every redirect hop and SHA256 verification against release checksums.txt in internal/graphengine Install; residual risk acceptable | [network/githubdownload.go](githubdownload.go#L58) |
 
 ## Inventory: HTTP Transport And Error Handling Utilities
 

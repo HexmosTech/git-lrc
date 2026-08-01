@@ -231,9 +231,10 @@ func (c *Client) GetArchitecture(ctx context.Context, aspects []string) (*Archit
 
 // ProjectInfo is the subset of `cli list_projects` output we care about.
 type ProjectInfo struct {
-	Name  string `json:"name"`
-	Nodes int    `json:"nodes"`
-	Edges int    `json:"edges"`
+	Name     string `json:"name"`
+	RootPath string `json:"root_path"`
+	Nodes    int    `json:"nodes"`
+	Edges    int    `json:"edges"`
 }
 
 // ListProjects returns every project codebase-memory-mcp currently has
@@ -257,6 +258,38 @@ func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
 		return nil, fmt.Errorf("blastradius/client: parsing list_projects output: %w", err)
 	}
 	return payload.Projects, nil
+}
+
+// IndexRepository creates or incrementally refreshes the knowledge-graph
+// index for the repository at repoPath, returning the project name the tool
+// derived (or reused) for it. Unlike the query methods it does NOT apply
+// c.Timeout - a first-time index of a large repository legitimately takes
+// minutes - so callers bound it via ctx instead. mode is the tool's indexing
+// mode ("fast", "moderate", "full"); empty uses the tool default.
+func (c *Client) IndexRepository(ctx context.Context, repoPath, mode string) (string, error) {
+	args := []string{"cli", "index_repository", "--repo-path", repoPath}
+	if mode != "" {
+		args = append(args, "--mode", mode)
+	}
+	cmd := exec.CommandContext(ctx, c.binary(), args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("codebase-memory-mcp cli index_repository: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+
+	var payload struct {
+		Project string `json:"project"`
+		Status  string `json:"status"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		return "", fmt.Errorf("blastradius/client: parsing index_repository output: %w", err)
+	}
+	if payload.Project == "" {
+		return "", fmt.Errorf("blastradius/client: index_repository returned no project name (status %q)", payload.Status)
+	}
+	return payload.Project, nil
 }
 
 // ProjectIndexed reports whether c.Project appears in the current

@@ -15,6 +15,8 @@
 #   - set LRC_INSTALL_HOOK_SURFACE=git|claude|all to control hook surface
 #   - default hook surface is `git` when Claude is available and plugin
 #     bootstrap is enabled; otherwise the default is `all`
+# - Graph engine controls:
+#   - set LRC_INSTALL_SKIP_GRAPH=1 to skip running `lrc graph install`
 # - Optional Claude plugin bootstrap controls:
 #   - defaults to marketplace source HexmosTech/claude-lrc
 #   - defaults to marketplace name claude-lrc
@@ -28,6 +30,7 @@ $ErrorActionPreference = "Stop"
 
 $hookSurfaceSetting = [Environment]::GetEnvironmentVariable("LRC_INSTALL_HOOK_SURFACE")
 $LRC_INSTALL_SKIP_HOOKS = if ([string]::IsNullOrWhiteSpace($env:LRC_INSTALL_SKIP_HOOKS)) { "0" } else { $env:LRC_INSTALL_SKIP_HOOKS }
+$LRC_INSTALL_SKIP_GRAPH = if ([string]::IsNullOrWhiteSpace($env:LRC_INSTALL_SKIP_GRAPH)) { "0" } else { $env:LRC_INSTALL_SKIP_GRAPH }
 $LRC_INSTALL_HOOK_SURFACE_EXPLICIT = $null -ne $hookSurfaceSetting
 $LRC_INSTALL_HOOK_SURFACE = if ([string]::IsNullOrWhiteSpace($hookSurfaceSetting)) { "all" } else { $hookSurfaceSetting }
 $LRC_INSTALL_BOOTSTRAP_CLAUDE_PLUGIN = if ([string]::IsNullOrWhiteSpace($env:LRC_INSTALL_BOOTSTRAP_CLAUDE_PLUGIN)) { "1" } else { $env:LRC_INSTALL_BOOTSTRAP_CLAUDE_PLUGIN }
@@ -538,6 +541,30 @@ if ($LRC_INSTALL_SKIP_HOOKS -eq "1") {
             @($hookInstallOutput) | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
         }
         Write-Host "You may need to run it manually: lrc hooks install --surface $resolvedHookSurface" -ForegroundColor Yellow
+    }
+}
+
+# Install the codebase-memory-mcp graph engine (blast-radius scoring) unless suppressed.
+# This only places one binary in ~/.lrc/bin - no PATH edits, no agent-config changes.
+if ($LRC_INSTALL_SKIP_GRAPH -eq "1") {
+    Write-Host "Skipping graph engine installation because LRC_INSTALL_SKIP_GRAPH=1" -ForegroundColor Yellow
+} else {
+    Write-Host -NoNewline "Running 'lrc graph install' to set up blast-radius scoring... "
+    $prevErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $null = & $INSTALL_PATH graph install 2>&1
+        $graphInstallExitCode = $LASTEXITCODE
+    } catch {
+        $graphInstallExitCode = $null
+    } finally {
+        $ErrorActionPreference = $prevErrorActionPreference
+    }
+    if ($graphInstallExitCode -eq 0) {
+        Write-Host "$OK" -ForegroundColor Green
+    } else {
+        Write-Host "(warning)" -ForegroundColor Yellow
+        Write-Host "Warning: Failed to run 'lrc graph install'. Blast-radius scoring will be disabled until you run it manually." -ForegroundColor Yellow
     }
 }
 

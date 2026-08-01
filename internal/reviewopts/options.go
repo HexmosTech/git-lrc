@@ -87,9 +87,10 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 	if opts.SortByBlastRadius {
 		opts.BlastRadius = true
 	}
-	if opts.BlastRadius && opts.BlastRadiusProject == "" {
-		return Options{}, fmt.Errorf("--blast-radius requires --blast-radius-project <name> (see `codebase-memory-mcp cli list_projects` for available project names)")
-	}
+	// BlastRadius is default-on best-effort: when no --blast-radius-project
+	// override is given, the review pipeline auto-indexes the current repo
+	// and derives the project name itself, and silently skips scoring when
+	// the graph engine binary isn't installed.
 
 	if opts.Skip || opts.Vouch {
 		opts.Precommit = false

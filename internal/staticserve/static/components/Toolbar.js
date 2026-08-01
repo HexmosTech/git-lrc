@@ -1,19 +1,26 @@
 // Toolbar component - tabs and action buttons
 import { renderIcon } from './icons.js';
 import { waitForPreact } from './utils.js';
+import { SORT_MODE_DIFF, SORT_MODE_RISK_FILE, SORT_MODE_RISK_FLAT } from './blast_radius_sort_state.mjs';
+
+const SORT_MODE_OPTIONS = [
+    { mode: SORT_MODE_RISK_FLAT, label: 'Risk Score (whole)', title: 'One ranked stream: every hunk across the whole diff ordered by risk score, highest first' },
+    { mode: SORT_MODE_RISK_FILE, label: 'Risk Score (per file)', title: 'Keep files together; order hunks inside each file by risk score' },
+    { mode: SORT_MODE_DIFF, label: 'Natural', title: 'Original diff order: files and hunks as they appear in the diff' },
+];
 
 export async function createToolbar() {
     const { html } = await waitForPreact();
-    
+
     return function Toolbar({
         activeTab,
         onTabChange,
         performanceItems,
         allExpanded,
         onToggleAll,
-        showBlastRadiusToggle,
-        sortByBlastRadius,
-        onToggleSortByBlastRadius,
+        showRiskSortControl,
+        sortMode,
+        onSortModeChange,
         eventCount,
         showEventBadge,
         onTailLog,
@@ -58,15 +65,20 @@ export async function createToolbar() {
                 
                 ${activeTab === 'files' && html`
                     <div class="tab-actions">
-                        ${showBlastRadiusToggle && html`
-                            <button
-                                class="action-btn ${sortByBlastRadius ? 'active' : ''}"
-                                onClick=${onToggleSortByBlastRadius}
-                                title="${sortByBlastRadius ? 'Show hunks in diff order' : 'Sort hunks within each file by blast radius (highest first)'}"
-                            >
-                                ${renderIcon(html, 'blastRadius')}
-                                ${sortByBlastRadius ? 'Diff Order' : 'Sort: Blast Radius'}
-                            </button>
+                        ${showRiskSortControl && html`
+                            <div class="sort-mode-group" role="group" aria-label="Order hunks by">
+                                <span class="sort-mode-label">${renderIcon(html, 'blastRadius', { size: 12 })} Order By</span>
+                                ${SORT_MODE_OPTIONS.map(opt => html`
+                                    <button
+                                        key=${opt.mode}
+                                        class="sort-mode-btn ${sortMode === opt.mode ? 'active' : ''}"
+                                        onClick=${() => onSortModeChange(opt.mode)}
+                                        title="${opt.title}"
+                                    >
+                                        ${opt.label}
+                                    </button>
+                                `)}
+                            </div>
                         `}
                         <button class="action-btn" onClick=${onToggleAll} title="${allExpanded ? 'Collapse all file blocks' : 'Expand all file blocks'}">
                             ${renderIcon(html, allExpanded ? 'collapseFiles' : 'expandFiles')}

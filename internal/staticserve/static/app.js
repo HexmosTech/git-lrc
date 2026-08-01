@@ -2,9 +2,9 @@
 // Fetches data from /api/review and updates reactively
 
 import { waitForPreact, filePathToId, transformEvent, getBadgeClass, formatIssueForCopy, getCommentVisibilityKey } from './components/utils.js';
-import { buildIssueCategoryGroups, buildIssueFacetOptions, buildIssueFilterUniverse, countIssuesByFilters, createDefaultIssueFilters, DEFAULT_SEVERITIES, getCommentFilterValue, getIssueFilterSummary, matchesIssueFilters, resetIssueFilters, toggleIssueFilterValue } from './components/issue_filter_state.mjs';
+import { buildIssueCategoryGroups, buildIssueFacetOptions, buildIssueFilterUniverse, countFileVisibleIssues, countIssuesByFilters, createDefaultIssueFilters, DEFAULT_SEVERITIES, getCommentFilterValue, getIssueFilterSummary, matchesIssueFilters, resetIssueFilters, toggleIssueFilterValue } from './components/issue_filter_state.mjs';
 import { appendStreamedCommentsToFiles, buildEventsURL, extractExternalCommentsFromEvents, extractNewEvents, inferReviewStatusFromEvents } from './components/review_stream_state.mjs';
-import { hasBlastRadiusData, sortFilesByBlastRadius } from './components/blast_radius_sort_state.mjs';
+import { attachBlastData, buildBlastLookup, flattenFilesByRisk, hasBlastRadiusData, sortFilesByBlastRadius, SORT_MODE_DIFF, SORT_MODE_RISK_FILE, SORT_MODE_RISK_FLAT } from './components/blast_radius_sort_state.mjs';
 import { getHeader } from './components/Header.js';
 import { getSidebar } from './components/Sidebar.js';
 import { getSummary } from './components/Summary.js';
@@ -144,9 +144,9 @@ function convertFilesToUIFormat(files) {
                     }
                     return line;
                 });
-                return { Header: header, Lines: lines, BlastRadius: blastRadius };
+                return { Header: header, Lines: lines, BlastRadius: blastRadius, NewStartLine: newStartLine, NewLineCount: newLineCount };
             }
-            
+
             // Parse hunk content into lines
             const content = hunk.content || hunk.Content || '';
             const contentLines = content.split('\n');
@@ -196,9 +196,9 @@ function convertFilesToUIFormat(files) {
                 lines.push(lineData);
             }
             
-            return { Header: header, Lines: lines, BlastRadius: blastRadius };
+            return { Header: header, Lines: lines, BlastRadius: blastRadius, NewStartLine: newStartLine, NewLineCount: newLineCount };
         });
-        
+
         return {
             ID: fileId,
             FilePath: filePath,
@@ -293,7 +293,11 @@ async function initApp() {
         const [allExpanded, setAllExpanded] = useState(false);
         const [activeFileId, setActiveFileId] = useState(null);
         const [issueFilters, setIssueFilters] = useState(createDefaultIssueFilters());
-        const [sortByBlastRadius, setSortByBlastRadius] = useState(false);
+        // Whole-diff risk ranking is the default view; the classic diff-order
+        // view stays reachable via the sort control. While blast data is
+        // still pending/unavailable the UI falls back to diff order.
+        const [sortMode, setSortMode] = useState(SORT_MODE_RISK_FLAT);
+        const [blastData, setBlastData] = useState({ status: 'pending', report: null });
         const [events, setEvents] = useState([]);
         const [newEventCount, setNewEventCount] = useState(0);
         const [isTailing, setIsTailing] = useState(false);
@@ -523,8 +527,55 @@ async function initApp() {
             }
         }, [allExpanded, reviewData?.Files]);
 
-        const toggleSortByBlastRadius = useCallback(() => {
-            setSortByBlastRadius(prev => !prev);
+        // Poll the local blast-radius report. Scoring runs concurrently with
+        // the review (a first-time repo index can finish after the review
+        // does), so keep polling until it lands or is declared unavailable.
+        const blastPollingRef = useRef(null);
+        useEffect(() => {
+            let cancelled = false;
+            const fetchBlast = async () => {
+                try {
+                    const url = sessionReviewID ? `/api/blastradius?r=${sessionReviewID}` : '/api/blastradius';
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        // Endpoint absent (static saved HTML) or session gone:
+                        // no blast data will ever arrive - stop polling.
+                        if (!cancelled) setBlastData({ status: 'unavailable', report: null });
+                        return true;
+                    }
+                    const data = await response.json();
+                    if (cancelled) return true;
+                    setBlastData({ status: data.status || 'unavailable', report: data.report || null });
+                    return data.status === 'ready' || data.status === 'unavailable';
+                } catch (err) {
+                    if (!cancelled) setBlastData({ status: 'unavailable', report: null });
+                    return true;
+                }
+            };
+            const start = async () => {
+                const done = await fetchBlast();
+                if (done || cancelled) return;
+                blastPollingRef.current = setInterval(async () => {
+                    if (await fetchBlast()) {
+                        if (blastPollingRef.current) {
+                            clearInterval(blastPollingRef.current);
+                            blastPollingRef.current = null;
+                        }
+                    }
+                }, 2000);
+            };
+            start();
+            return () => {
+                cancelled = true;
+                if (blastPollingRef.current) {
+                    clearInterval(blastPollingRef.current);
+                    blastPollingRef.current = null;
+                }
+            };
+        }, [sessionReviewID]);
+
+        const handleSortModeChange = useCallback((mode) => {
+            setSortMode(mode);
         }, []);
 
         // Handle sidebar file click
@@ -541,7 +592,11 @@ async function initApp() {
             
             // Scroll to file after brief delay to allow tab switch
             setTimeout(() => {
-                const fileEl = document.getElementById(fileId);
+                // In the whole-diff risk view files render as per-hunk blocks
+                // with ids like "<fileId>--hunk-N-M"; fall back to the
+                // highest-ranked (first) block for that file.
+                const fileEl = document.getElementById(fileId)
+                    || document.querySelector(`[id^="${fileId}--hunk-"]`);
                 if (fileEl) {
                     const mainContent = document.querySelector('.main-content');
                     const header = document.querySelector('.header');
@@ -571,6 +626,19 @@ async function initApp() {
                 }
             }, 100);
         }, []);
+
+        // Sidebar hunk-submenu click: expand the real file's blocks (state is
+        // keyed by the real file ID) then scroll to the specific ranked block.
+        const handleHunkClick = useCallback((targetId, expandKey) => {
+            if (expandKey) {
+                setExpandedFiles(prev => {
+                    const next = new Set(prev);
+                    next.add(expandKey);
+                    return next;
+                });
+            }
+            handleFileClick(targetId);
+        }, [handleFileClick]);
 
         const resolveSlideFileId = useCallback((filePath) => {
             const normalized = (filePath || '').trim();
@@ -826,9 +894,39 @@ async function initApp() {
         const status = reviewData?.status || 'in_progress';
         const showLoader = Boolean(reviewData) && status === 'in_progress';
         const summary = reviewData?.summary || '';
-        const filesInDiffOrder = reviewData?.Files || [];
-        const showBlastRadiusToggle = hasBlastRadiusData(filesInDiffOrder);
-        const files = sortByBlastRadius ? sortFilesByBlastRadius(filesInDiffOrder) : filesInDiffOrder;
+        // Join the locally computed blast report onto hunks by hunk key at
+        // render time - deliberately NOT stored inside reviewData, since the
+        // final backend fetch replaces files wholesale and would drop it.
+        const filesInDiffOrder = attachBlastData(reviewData?.Files || [], buildBlastLookup(blastData.report));
+        const hasBlastData = hasBlastRadiusData(filesInDiffOrder);
+        // Risk views need scores; fall back to diff order until they arrive.
+        const effectiveSortMode = hasBlastData ? sortMode : SORT_MODE_DIFF;
+        const files = effectiveSortMode === SORT_MODE_RISK_FLAT
+            ? flattenFilesByRisk(filesInDiffOrder)
+            : effectiveSortMode === SORT_MODE_RISK_FILE
+                ? sortFilesByBlastRadius(filesInDiffOrder)
+                : filesInDiffOrder;
+        // In the ranked-stream view a file's hunks are scattered, so the
+        // sidebar gets per-file "Hunk n" entries jumping to each block.
+        let hunkNav = null;
+        if (effectiveSortMode === SORT_MODE_RISK_FLAT) {
+            hunkNav = {};
+            files.forEach(entry => {
+                (hunkNav[entry.FilePath] = hunkNav[entry.FilePath] || []).push({
+                    targetId: entry.ID,
+                    expandKey: entry.ExpandKey,
+                    hunkNum: entry.SourceHunkNumber,
+                    score: entry.Hunks[0]?.BlastRadius ?? null,
+                    // Visible-comment count for THIS hunk, using the same
+                    // filter/hidden logic as the file badge so the per-hunk
+                    // numbers always sum to the file's number. Each flat
+                    // entry is a single-hunk pseudo-file, so the file-level
+                    // counter applies directly.
+                    commentCount: countFileVisibleIssues(entry, issueFilters, hiddenCommentKeys),
+                });
+            });
+            Object.values(hunkNav).forEach(list => list.sort((a, b) => a.hunkNum - b.hunkNum));
+        }
         const quiz = reviewData?.quiz || [];
         const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
         const errorSummary = reviewData?.errorSummary || '';
@@ -1075,7 +1173,9 @@ async function initApp() {
         
         return html`
             <${Sidebar}
-                files=${files}
+                files=${filesInDiffOrder}
+                hunkNav=${hunkNav}
+                onHunkClick=${handleHunkClick}
                 activeFileId=${activeFileId}
                 onFileClick=${handleFileClick}
                 issueFilters=${issueFilters}
@@ -1129,7 +1229,7 @@ async function initApp() {
                     `}
 
                     <${Stats}
-                        totalFiles=${files.length}
+                        totalFiles=${filesInDiffOrder.length}
                         totalComments=${totalComments}
                     />
                     
@@ -1147,9 +1247,9 @@ async function initApp() {
                         performanceItems=${performanceSnapshot.summaryItems}
                         allExpanded=${allExpanded}
                         onToggleAll=${toggleAll}
-                        showBlastRadiusToggle=${showBlastRadiusToggle}
-                        sortByBlastRadius=${sortByBlastRadius}
-                        onToggleSortByBlastRadius=${toggleSortByBlastRadius}
+                        showRiskSortControl=${hasBlastData}
+                        sortMode=${effectiveSortMode}
+                        onSortModeChange=${handleSortModeChange}
                         eventCount=${newEventCount}
                         showEventBadge=${activeTab !== 'events'}
                         onTailLog=${handleTailLog}
@@ -1186,8 +1286,8 @@ async function initApp() {
                                 <${FileBlock}
                                     key=${file.ID}
                                     file=${file}
-                                    expanded=${expandedFiles.has(file.ID)}
-                                    onToggle=${toggleFile}
+                                    expanded=${expandedFiles.has(file.ExpandKey || file.ID)}
+                                    onToggle=${() => toggleFile(file.ExpandKey || file.ID)}
                                     issueFilters=${issueFilters}
                                     hiddenCommentKeys=${hiddenCommentKeys}
                                     onToggleCommentVisibility=${toggleCommentVisibility}

@@ -341,6 +341,13 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		}
 	}
 
+	// Kick off blast-radius scoring now, concurrently with the server-side
+	// review below: the goroutine indexes/refreshes the repo's knowledge
+	// graph and scores every hunk while the review is submitted and polled.
+	// Results are combined when both are available; scoring never blocks or
+	// fails the review.
+	blastHandle := startBlastRadiusScoring(opts, repoRootPath, diffContent, verbose)
+
 	var fakeBaseFiles []reviewmodel.DiffReviewFileResult
 	if fakeMode {
 		fakeBaseFiles, err = parseDiffToFiles(diffContent)
@@ -544,11 +551,15 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		if parseErr != nil && verbose {
 			log.Printf("Warning: failed to parse diff for skeleton HTML: %v", parseErr)
 		}
-		annotateBlastRadius(opts, filesFromDiff, verbose)
-
 		// Initialize global review state for API-based UI
 		reviewStateMu.Lock()
 		currentReviewState = NewReviewState(reviewID, filesFromDiff, useDecisionUI, isPostCommitReview, initialMsg, config.APIURL)
+		// The concurrent blast-radius goroutine only applies scores to a
+		// non-nil currentReviewState; if it already finished before this
+		// point, fold its snapshot in now so the skeleton isn't missed.
+		if _, report, _ := blastStateSnapshot(); report != nil {
+			currentReviewState.ApplyBlastRadiusScores(blastScoresByKey(report))
+		}
 		if submitResp.FriendlyName != "" {
 			currentReviewState.FriendlyName = submitResp.FriendlyName
 		}
@@ -701,6 +712,27 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					return
 				}
 				state.ServeHTTP(w, r)
+			}))
+
+			// Local blast-radius report - the frontend polls this alongside
+			// the review data and joins scores by hunk key at render time.
+			// Served separately from /api/review so the signal-rich report
+			// neither bloats that payload nor gets lost when the frontend
+			// replaces its files with the backend's final result.
+			mux.HandleFunc("/api/blastradius", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
+				status, report, errMsg := blastStateSnapshot()
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Cache-Control", "no-cache")
+				payload := map[string]any{"status": status}
+				if errMsg != "" {
+					payload["error"] = errMsg
+				}
+				if report != nil {
+					payload["report"] = report
+				}
+				if err := json.NewEncoder(w).Encode(payload); err != nil && verbose {
+					log.Printf("failed to write blastradius response: %v", err)
+				}
 			}))
 
 			mux.HandleFunc("/api/runtime/usage-chip", requireSession(reviewID, func(w http.ResponseWriter, r *http.Request) {
@@ -1345,6 +1377,13 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		}()
 	}
 
+	// Join blast-radius scores onto the final result before any batch output
+	// renders, waiting briefly (blastResultGrace) if scoring is still
+	// running - a huge first-time index shouldn't hang a finished review.
+	if result != nil && (opts.SaveJSON != "" || opts.SaveText != "" || opts.SaveHTML != "") {
+		applyBlastRadiusFromHandle(blastHandle, result.Files)
+	}
+
 	// Save JSON response if requested
 	if jsonPath := opts.SaveJSON; jsonPath != "" {
 		if err := saveJSONResponse(jsonPath, result, verbose); err != nil {
@@ -1363,7 +1402,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	// Skip if progressive loading is active - the browser already has the skeleton HTML
 	// and will receive error/completion via the events API
 	if htmlPath := opts.SaveHTML; htmlPath != "" && !progressiveLoadingActive {
-		if err := saveHTMLOutput(htmlPath, result, verbose, useDecisionUI, isPostCommitReview, initialMsg, reviewID, config.APIURL, config.APIKey, opts); err != nil {
+		if err := saveHTMLOutput(htmlPath, result, verbose, useDecisionUI, isPostCommitReview, initialMsg, reviewID, config.APIURL, config.APIKey); err != nil {
 			return fmt.Errorf("failed to save HTML output: %w", err)
 		}
 
@@ -2113,8 +2152,6 @@ func saveTextOutput(path string, result *reviewmodel.DiffReviewResponse, verbose
 	// Use a distinctive marker that's easy to search for
 	const commentMarker = ">>>COMMENT<<<"
 
-	annotateBlastRadius(opts, result.Files, verbose)
-
 	buf.WriteString("=" + strings.Repeat("=", 79) + "\n")
 	buf.WriteString("LIVEREVIEW RESULTS - TEXT FORMAT\n")
 	buf.WriteString("=" + strings.Repeat("=", 79) + "\n")
@@ -2398,8 +2435,9 @@ func parseDiffToFiles(diffContent []byte) ([]reviewmodel.DiffReviewFileResult, e
 
 // saveHTMLOutput saves formatted HTML output with GitHub-style review UI
 
-func saveHTMLOutput(path string, result *reviewmodel.DiffReviewResponse, verbose bool, interactive bool, isPostCommitReview bool, initialMsg, reviewID, apiURL, apiKey string, opts reviewopts.Options) error {
-	annotateBlastRadius(opts, result.Files, verbose)
+func saveHTMLOutput(path string, result *reviewmodel.DiffReviewResponse, verbose bool, interactive bool, isPostCommitReview bool, initialMsg, reviewID, apiURL, apiKey string) error {
+	// Blast-radius scores (if any) were already joined onto result.Files by
+	// the caller via applyBlastRadiusFromHandle.
 
 	// Prepare template data
 	data := reviewhtml.PrepareHTMLData(result, interactive, isPostCommitReview, initialMsg, reviewID, apiURL, apiKey)

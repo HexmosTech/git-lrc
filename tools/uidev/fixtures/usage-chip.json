@@ -1,0 +1,15 @@
+{
+    "available": false,
+    "unavailable_reason": "Not authenticated. Run lrc ui to sign in and select an organization.",
+    "usage_pct": 0,
+    "blocked": false,
+    "loc_used": 0,
+    "loc_limit": 0,
+    "my_usage_loc": 0,
+    "my_operation_count": 0,
+    "my_share_pct": 0,
+    "top_members": [],
+    "can_view_team_breakdown": false,
+    "cloud_url": "https://livereview.hexmos.com",
+    "fetched_at": "2026-08-01T15:03:17Z"
+}

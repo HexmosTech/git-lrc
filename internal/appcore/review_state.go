@@ -160,6 +160,20 @@ func (rs *ReviewState) GetJSON() ([]byte, error) {
 	return json.Marshal(rs)
 }
 
+// ApplyBlastRadiusScores writes locally computed blast-radius Combined
+// scores onto matching hunks by (filePath, newStart, newLines) key. Called
+// by the concurrent scoring goroutine whenever its report lands - before or
+// after the server review completes, both orders are fine since
+// UpdateFromResult only touches Comments and preserves hunks.
+func (rs *ReviewState) ApplyBlastRadiusScores(scores map[string]float64) {
+	if len(scores) == 0 {
+		return
+	}
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	applyBlastScoresToFiles(scores, rs.Files)
+}
+
 // ServeHTTP implements http.Handler for the /api/review endpoint
 func (rs *ReviewState) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")

@@ -16,6 +16,8 @@
 #   - set LRC_INSTALL_HOOK_SURFACE=git|claude|all to control hook surface
 #   - default hook surface is `git` when Claude is available and plugin
 #     bootstrap is enabled; otherwise the default is `all`
+# - Graph engine controls:
+#   - set LRC_INSTALL_SKIP_GRAPH=1 to skip running `lrc graph install`
 # - Optional Claude plugin bootstrap controls:
 #   - defaults to marketplace source HexmosTech/claude-lrc
 #   - defaults to marketplace name claude-lrc
@@ -30,6 +32,7 @@
 set -e
 
 LRC_INSTALL_SKIP_HOOKS="${LRC_INSTALL_SKIP_HOOKS:-0}"
+LRC_INSTALL_SKIP_GRAPH="${LRC_INSTALL_SKIP_GRAPH:-0}"
 LRC_INSTALL_HOOK_SURFACE_EXPLICIT=0
 if [ "${LRC_INSTALL_HOOK_SURFACE+x}" = "x" ]; then
     LRC_INSTALL_HOOK_SURFACE_EXPLICIT=1
@@ -528,6 +531,19 @@ else
         echo -e "${GREEN}OK${NC}"
     else
         echo -e "${YELLOW}(warning)${NC} Failed to run 'lrc hooks install --surface $LRC_RESOLVED_HOOK_SURFACE'. You may need to run it manually."
+    fi
+fi
+
+# Install the codebase-memory-mcp graph engine (blast-radius scoring) unless suppressed.
+# This only places one binary in ~/.lrc/bin - no PATH edits, no agent-config changes.
+if [ "$LRC_INSTALL_SKIP_GRAPH" = "1" ]; then
+    echo -e "${YELLOW}Skipping graph engine installation because LRC_INSTALL_SKIP_GRAPH=1${NC}"
+else
+    echo -n "Running 'lrc graph install' to set up blast-radius scoring... "
+    if "$INSTALL_PATH" graph install >/dev/null 2>&1; then
+        echo -e "${GREEN}OK${NC}"
+    else
+        echo -e "${YELLOW}(warning)${NC} Failed to run 'lrc graph install'. Blast-radius scoring will be disabled until you run it manually."
     fi
 fi
 

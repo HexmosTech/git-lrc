@@ -2,10 +2,12 @@
 import { renderIcon } from './icons.js';
 import { waitForPreact, getBadgeClass, copyToClipboard } from './utils.js';
 import { getFeedbackPopup } from './FeedbackPopup.js';
+import { getRiskBadge } from './RiskBadge.js';
 
 export async function createComment() {
     const { html, useEffect, useState } = await waitForPreact();
     const FeedbackPopup = await getFeedbackPopup();
+    const RiskBadge = await getRiskBadge();
 
     const renderMetaItem = (label, value, extraClass = '') => {
         if (!value) {
@@ -19,7 +21,7 @@ export async function createComment() {
         `;
     };
 
-    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility, onFirstRender, renderTimingLabel, vote, onVote }) {
+    return function Comment({ comment, filePath, codeExcerpt, commentId, visibilityKey, isHidden, onToggleVisibility, onFirstRender, renderTimingLabel, vote, onVote, hunkRiskScore, hunkRiskDetail, onOpenRiskPanel }) {
         const [copied, setCopied] = useState(false);
 
         useEffect(() => {
@@ -147,6 +149,14 @@ export async function createComment() {
                                     <div class="comment-header">
                                         <div class="comment-header-main">
                                             <span class="comment-badge ${badgeClass}">${comment.Severity}</span>
+                                            ${typeof hunkRiskScore === 'number' && html`
+                                                <${RiskBadge}
+                                                    score=${hunkRiskScore}
+                                                    detail=${hunkRiskDetail}
+                                                    size="small"
+                                                    onOpen=${onOpenRiskPanel}
+                                                />
+                                            `}
                                             <span class="comment-location">${filePath}${lineLabel}</span>
                                             ${renderTimingLabel && html`
                                                 <span class="comment-arrival">${renderTimingLabel}</span>

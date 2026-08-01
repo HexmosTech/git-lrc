@@ -2,23 +2,16 @@
 import { waitForPreact, filePathToId, getCommentVisibilityKey, buildIssueCodeExcerpt } from './utils.js';
 import { matchesIssueFilters } from './issue_filter_state.mjs';
 import { getComment } from './Comment.js';
+import { getBlastRadiusPanel } from './BlastRadiusPanel.js';
+import { getRiskBadge } from './RiskBadge.js';
 import { getCommentRenderLabel } from './review_performance_state.mjs';
-import { renderIcon } from './icons.js';
-
-// Discrete tiers (mirroring the existing badge-info/warning/critical scheme)
-// rather than a continuous color ramp, for visual consistency with the rest
-// of the review UI.
-function blastRadiusTier(score) {
-    if (score >= 66) return 'blast-radius-high';
-    if (score >= 33) return 'blast-radius-medium';
-    if (score > 0) return 'blast-radius-low';
-    return 'blast-radius-none';
-}
 
 export async function createDiffTable() {
-    const { html } = await waitForPreact();
+    const { html, useState } = await waitForPreact();
     const Comment = await getComment();
-    
+    const BlastRadiusPanel = await getBlastRadiusPanel();
+    const RiskBadge = await getRiskBadge();
+
     return function DiffTable({
         hunks,
         filePath,
@@ -42,21 +35,54 @@ export async function createDiffTable() {
         
         // Use provided fileId or generate from filePath
         const resolvedFileId = fileId || filePathToId(filePath);
-        
+
+        // Which hunks' "why this score" panels are open (keyed by index).
+        const [openBlastPanels, setOpenBlastPanels] = useState(() => new Set());
+        const toggleBlastPanel = (idx) => {
+            setOpenBlastPanels(prev => {
+                const next = new Set(prev);
+                if (next.has(idx)) {
+                    next.delete(idx);
+                } else {
+                    next.add(idx);
+                }
+                return next;
+            });
+        };
+        // Ensure-open variant used from comment risk chips: never collapses.
+        const openBlastPanel = (idx) => {
+            setOpenBlastPanels(prev => {
+                if (prev.has(idx)) return prev;
+                const next = new Set(prev);
+                next.add(idx);
+                return next;
+            });
+        };
+
         return html`
             <table class="diff-table">
-                ${hunks.map(hunk => html`
-                    <tr>
+                ${hunks.map((hunk, hunkIdx) => html`
+                    <tr id="hunk-${resolvedFileId}-${hunkIdx}">
                         <td colspan="3" class="hunk-header">
                             ${typeof hunk.BlastRadius === 'number' && html`
-                                <span
-                                    class="blast-radius-badge ${blastRadiusTier(hunk.BlastRadius)}"
-                                    title="Blast radius: this hunk touches symbols with ${hunk.BlastRadius.toFixed(1)}/100 relative importance in this review"
-                                >${renderIcon(html, 'blastRadius', { size: 11 })} ${Math.round(hunk.BlastRadius)}</span>
+                                <${RiskBadge}
+                                    score=${hunk.BlastRadius}
+                                    detail=${hunk.BlastDetail || null}
+                                    size="large"
+                                    expanded=${openBlastPanels.has(hunkIdx)}
+                                    onOpen=${hunk.BlastDetail ? (() => toggleBlastPanel(hunkIdx)) : undefined}
+                                />
                             `}
                             ${hunk.Header}
                         </td>
                     </tr>
+                    ${hunk.BlastDetail && openBlastPanels.has(hunkIdx) && html`
+                        <tr class="blast-panel-row">
+                            <td colspan="3">
+                                <${BlastRadiusPanel} detail=${hunk.BlastDetail} />
+                            </td>
+                        </tr>
+                    `}
                     ${hunk.Lines.map((line, idx) => {
                         // Build line-numbered code context for per-issue copy.
                         const codeExcerpt = buildIssueCodeExcerpt(hunk.Lines, idx, 1);
@@ -95,6 +121,9 @@ export async function createDiffTable() {
                                         renderTimingLabel=${renderTimingLabel}
                                         vote=${commentVotes && commentVotes[visibilityKey] || null}
                                         onVote=${onVote}
+                                        hunkRiskScore=${typeof hunk.BlastRadius === 'number' ? hunk.BlastRadius : null}
+                                        hunkRiskDetail=${hunk.BlastDetail || null}
+                                        onOpenRiskPanel=${hunk.BlastDetail ? (() => openBlastPanel(hunkIdx)) : undefined}
                                     />
                                 `;
                             })}

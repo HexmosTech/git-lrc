@@ -42,6 +42,9 @@ type Handlers struct {
 	RunUninstall                    cli.ActionFunc
 	RunHooksInstall                 cli.ActionFunc
 	RunHooksUninstall               cli.ActionFunc
+	RunGraphInstall                 cli.ActionFunc
+	RunGraphStatus                  cli.ActionFunc
+	RunGraphUninstall               cli.ActionFunc
 	RunHooksEnable                  cli.ActionFunc
 	RunHooksDisable                 cli.ActionFunc
 	RunHooksStatus                  cli.ActionFunc
@@ -222,6 +225,33 @@ func BuildApp(version, buildTime, gitCommit, reviewMode string, baseFlags, debug
 							},
 						},
 						Action: h.RunHooksStatus,
+					},
+				},
+			},
+			{
+				Name:  "graph",
+				Usage: "Manage the local codebase-memory-mcp graph engine used for blast-radius scoring",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "install",
+						Usage: "Download and install the graph engine binary into ~/.lrc/bin (no PATH or agent-config changes)",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "force",
+								Usage: "reinstall even if the pinned version is already installed",
+							},
+						},
+						Action: h.RunGraphInstall,
+					},
+					{
+						Name:   "status",
+						Usage:  "Show the graph engine binary location, version, and indexed projects",
+						Action: h.RunGraphStatus,
+					},
+					{
+						Name:   "uninstall",
+						Usage:  "Remove the lrc-managed graph engine binary",
+						Action: h.RunGraphUninstall,
 					},
 				},
 			},

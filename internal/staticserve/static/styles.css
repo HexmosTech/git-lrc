@@ -260,6 +260,68 @@ body {
   text-align: center;
 }
 
+/* Per-hunk submenu under a file (whole-diff risk view): each entry jumps to
+   that hunk's block in the ranked stream. */
+.sidebar-hunk-list {
+  padding: 0 0 4px 0;
+}
+
+.sidebar-hunk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 12px 3px 26px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 12px;
+  border-left: 2px solid transparent;
+}
+
+.sidebar-hunk:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-left-color: var(--accent-blue);
+}
+
+.sidebar-hunk-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-hunk-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+/* Comment count on a hunk row: same solid-blue language as the file badge
+   (these are the numbers that add up to the file's badge). */
+.sidebar-hunk-comments {
+  font-size: 9px;
+  padding: 1px 5px;
+  min-width: 16px;
+}
+
+/* Risk score chip: OUTLINED (vs the solid count badge) so score and count
+   never read as the same metric. Tier classes supply the text color; the
+   higher-specificity rule below strips their solid background. */
+.sidebar-hunk .sidebar-hunk-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+  min-width: 34px;
+  justify-content: center;
+}
+
 /* Main Content */
 .main-content {
   flex: 1;
@@ -2226,6 +2288,335 @@ body {
   color: #fecaca;
   border: 1px solid rgba(241, 76, 76, 0.4);
 }
+.blast-radius-badge.clickable {
+  cursor: pointer;
+}
+.blast-radius-badge.clickable:hover {
+  filter: brightness(1.25);
+}
+
+/* ============================================================
+   Risk Assessment badges + hover cards
+   The risk score travels with every hunk and every comment; the
+   pill shows the number, hover/focus reveals the assessment card,
+   click opens the full signal breakdown panel.
+   ============================================================ */
+.risk-badge-wrap {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  border: 1px solid transparent;
+  cursor: default;
+  transition: filter 0.1s ease, box-shadow 0.15s ease;
+}
+.risk-badge-large .risk-badge {
+  margin-right: 8px;
+}
+.risk-badge-small .risk-badge {
+  padding: 1px 7px;
+  font-size: 10px;
+}
+.risk-badge.clickable {
+  cursor: pointer;
+}
+.risk-badge.clickable:hover {
+  filter: brightness(1.3);
+}
+.risk-badge-wrap:hover .risk-badge,
+.risk-badge-wrap:focus-within .risk-badge {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+.risk-badge-caret {
+  font-size: 9px;
+  opacity: 0.85;
+}
+
+/* The hover card renders position:fixed at viewport coordinates (set inline
+   by RiskBadge from the badge's measured rect) so it can never be clipped by
+   table rows, overflow containers, or stacking contexts. */
+.risk-hover-card {
+  position: fixed;
+  z-index: 3000;
+  width: 300px;
+  max-width: min(320px, 80vw);
+  padding: 12px 14px;
+  background: #1a1d23;
+  border: 1px solid var(--border-medium);
+  border-top: 3px solid var(--text-dim);
+  border-radius: 8px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+  animation: riskCardIn 0.14s ease-out;
+  pointer-events: none;
+  text-align: left;
+  cursor: default;
+  font-weight: 400;
+}
+@keyframes riskCardIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .risk-hover-card { animation: none; }
+}
+.risk-hover-card.blast-radius-high {
+  border-top-color: #f14c4c;
+  background: #1a1d23;
+  color: inherit;
+}
+.risk-hover-card.blast-radius-medium {
+  border-top-color: #cca700;
+  background: #1a1d23;
+  color: inherit;
+}
+.risk-hover-card.blast-radius-low {
+  border-top-color: #3794ff;
+  background: #1a1d23;
+  color: inherit;
+}
+.risk-hover-card.blast-radius-none {
+  border-top-color: rgba(148, 163, 184, 0.6);
+  background: #1a1d23;
+  color: inherit;
+}
+
+.risk-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.risk-card-score {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.risk-card-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.risk-card-tier {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.risk-hover-card.blast-radius-high .risk-card-tier { color: #fecaca; }
+.risk-hover-card.blast-radius-medium .risk-card-tier { color: #fef08a; }
+.risk-hover-card.blast-radius-low .risk-card-tier { color: #93c5fd; }
+.risk-card-kicker {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+
+.risk-card-dims {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.risk-card-dim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.risk-card-dim-label {
+  width: 92px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.risk-card-dim-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  overflow: hidden;
+}
+.risk-card-dim-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3794ff, #f14c4c);
+}
+.risk-card-dim-value {
+  width: 24px;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.risk-card-hygiene {
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.risk-card-signals {
+  list-style: none;
+  margin: 0 0 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.risk-card-signal {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.risk-card-signal-pts {
+  min-width: 34px;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-green-light, #86efac);
+}
+.risk-card-signal.negative .risk-card-signal-pts {
+  color: #fca5a5;
+}
+.risk-card-signal-name {
+  color: var(--text-secondary);
+}
+
+.risk-card-footer {
+  font-size: 10px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.15));
+  padding-top: 7px;
+}
+
+/* "Why this score" explainability panel under a hunk header */
+.blast-panel-row td {
+  padding: 0;
+  border-bottom: 1px solid var(--border-medium);
+}
+.blast-panel {
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.blast-panel-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.blast-score-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-medium);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.blast-score-chip.primary {
+  background: rgba(55, 148, 255, 0.16);
+  color: #93c5fd;
+  border-color: rgba(55, 148, 255, 0.3);
+}
+.blast-score-chip.hygiene {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-dim);
+}
+.blast-signal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.blast-signal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.4;
+}
+.blast-signal-points {
+  min-width: 42px;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.blast-signal.positive .blast-signal-points {
+  color: var(--accent-green-light, #86efac);
+}
+.blast-signal.negative .blast-signal-points {
+  color: #fca5a5;
+}
+.blast-signal-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.blast-signal-detail {
+  color: var(--text-dim);
+}
+.blast-signal-category {
+  margin-left: auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.blast-signal-empty {
+  color: var(--text-dim);
+  font-style: italic;
+}
+.blast-panel-symbols {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.blast-symbol {
+  border-top: 1px dashed var(--border-medium);
+  padding-top: 6px;
+}
+.blast-symbol-header {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.blast-symbol-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+}
+.blast-symbol-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
 
 /* Comments */
 .comment-row {
@@ -2822,6 +3213,59 @@ body {
   background: rgba(76, 175, 80, 0.3);
   border-color: rgba(76, 175, 80, 0.5);
   color: var(--accent-green-light);
+}
+
+/* Segmented "Order By" control (risk ranking vs natural diff order):
+   one bordered panel with a label and connected option buttons. */
+.sort-mode-group {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+  border-radius: 3px;
+  overflow: hidden;
+  color: var(--text-secondary);
+}
+
+.sort-mode-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  border-right: 1px solid var(--border-medium);
+  user-select: none;
+}
+
+.sort-mode-btn {
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-right: 1px solid var(--border-medium);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  transition: all 0.1s ease;
+}
+
+.sort-mode-btn:last-child {
+  border-right: none;
+}
+
+.sort-mode-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.sort-mode-btn.active {
+  background: rgba(76, 175, 80, 0.2);
+  color: var(--accent-green-light);
+  font-weight: 600;
 }
 
 .action-btn svg {
