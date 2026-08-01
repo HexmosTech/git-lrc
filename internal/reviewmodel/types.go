@@ -94,6 +94,18 @@ type ReviewCoverageResponse struct {
 	Envelope *PlanUsageEnvelope     `json:"envelope,omitempty"`
 }
 
+// ToolComment is a flat comment from a static analysis tool, including the file path.
+type ToolComment struct {
+	FilePath   string `json:"file_path"`
+	Line       int    `json:"line"`
+	Content    string `json:"content"`
+	Severity   string `json:"severity"`
+	Confidence string `json:"confidence,omitempty"`
+	Type       string `json:"type,omitempty"`
+	Category   string `json:"category"`
+}
+}
+
 // DiffReviewResponse models the response from GET /api/v1/diff-review/:id.
 type DiffReviewResponse struct {
 	Status       string                 `json:"status"`
