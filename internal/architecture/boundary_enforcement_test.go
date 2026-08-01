@@ -103,6 +103,13 @@ func scanForPatternViolations(t *testing.T, repoRoot string, rules []patternRule
 			if name == ".git" || name == "node_modules" || name == "vendor" {
 				return filepath.SkipDir
 			}
+			if path == filepath.Join(repoRoot, "blastradius") {
+				// blastradius is a separate, portable Go module (its own go.mod)
+				// with no dependency on git-lrc's internal packages by design -
+				// it doesn't participate in this module's storage/network
+				// boundary conventions.
+				return filepath.SkipDir
+			}
 			return nil
 		}
 

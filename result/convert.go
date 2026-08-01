@@ -36,8 +36,9 @@ func ConvertToJSONData(data *HTMLTemplateData) *JSONTemplateData {
 				}
 			}
 			hunks[j] = JSONHunkData{
-				Header: hunk.Header,
-				Lines:  lines,
+				Header:      hunk.Header,
+				Lines:       lines,
+				BlastRadius: hunk.BlastRadius,
 			}
 		}
 		files[i] = JSONFileData{

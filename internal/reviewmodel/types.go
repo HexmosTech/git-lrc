@@ -92,6 +92,11 @@ type DiffReviewHunk struct {
 	NewStartLine int    `json:"new_start_line"`
 	NewLineCount int    `json:"new_line_count"`
 	Content      string `json:"content"`
+	// BlastRadius is a local-only, opt-in enrichment (see --blast-radius):
+	// a 0-100 score of how "important" the symbols touched by this hunk are,
+	// relative to the other hunks in the same review. Never set by the
+	// LiveReview backend; nil unless --blast-radius was used.
+	BlastRadius *float64 `json:"blast_radius,omitempty"`
 }
 
 type DiffReviewComment struct {

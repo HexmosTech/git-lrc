@@ -11,6 +11,9 @@ export async function createToolbar() {
         performanceItems,
         allExpanded,
         onToggleAll,
+        showBlastRadiusToggle,
+        sortByBlastRadius,
+        onToggleSortByBlastRadius,
         eventCount,
         showEventBadge,
         onTailLog,
@@ -55,6 +58,16 @@ export async function createToolbar() {
                 
                 ${activeTab === 'files' && html`
                     <div class="tab-actions">
+                        ${showBlastRadiusToggle && html`
+                            <button
+                                class="action-btn ${sortByBlastRadius ? 'active' : ''}"
+                                onClick=${onToggleSortByBlastRadius}
+                                title="${sortByBlastRadius ? 'Show hunks in diff order' : 'Sort hunks within each file by blast radius (highest first)'}"
+                            >
+                                ${renderIcon(html, 'blastRadius')}
+                                ${sortByBlastRadius ? 'Diff Order' : 'Sort: Blast Radius'}
+                            </button>
+                        `}
                         <button class="action-btn" onClick=${onToggleAll} title="${allExpanded ? 'Collapse all file blocks' : 'Expand all file blocks'}">
                             ${renderIcon(html, allExpanded ? 'collapseFiles' : 'expandFiles')}
                             ${allExpanded ? 'Collapse All' : 'Expand All'}

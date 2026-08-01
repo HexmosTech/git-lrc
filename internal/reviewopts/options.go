@@ -43,6 +43,9 @@ type Options struct {
 	Force                 bool
 	Vouch                 bool
 	InitialMsg            string
+	BlastRadius           bool
+	BlastRadiusProject    string
+	SortByBlastRadius     bool
 }
 
 func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
@@ -76,6 +79,16 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		SaveJSON:              c.String("save-json"),
 		SaveText:              c.String("save-text"),
 		InitialMsg:            initialMsg,
+		BlastRadius:           c.Bool("blast-radius"),
+		BlastRadiusProject:    c.String("blast-radius-project"),
+		SortByBlastRadius:     c.Bool("sort-by-blast-radius"),
+	}
+
+	if opts.SortByBlastRadius {
+		opts.BlastRadius = true
+	}
+	if opts.BlastRadius && opts.BlastRadiusProject == "" {
+		return Options{}, fmt.Errorf("--blast-radius requires --blast-radius-project <name> (see `codebase-memory-mcp cli list_projects` for available project names)")
 	}
 
 	if opts.Skip || opts.Vouch {

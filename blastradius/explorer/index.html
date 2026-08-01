@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>blastradius explorer</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 1.5rem 2rem 4rem;
+    max-width: 1100px;
+    margin-inline: auto;
+    background: Canvas;
+    color: CanvasText;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 0.15rem; }
+  h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+  .meta { color: GrayText; font-size: 0.85rem; margin-bottom: 1rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .panel {
+    border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 1.1rem;
+  }
+  .explain p { margin: 0.4rem 0; font-size: 0.88rem; line-height: 1.5; }
+  .explain .method-row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    margin: 0.5rem 0;
+  }
+  .method-tag {
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+  }
+  .method-calls { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #93c5fd; }
+  .method-text-references { background: color-mix(in srgb, #a855f7 18%, transparent); color: #d8b4fe; }
+  .explain-example {
+    font-size: 0.82rem;
+    color: GrayText;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed color-mix(in srgb, CanvasText 15%, transparent);
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding: 0.7rem 1rem;
+  }
+  .toolbar label { font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
+  .toolbar select {
+    font: inherit;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+    background: Canvas;
+    color: CanvasText;
+  }
+  .btn {
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+    background: color-mix(in srgb, CanvasText 4%, transparent);
+    color: CanvasText;
+    cursor: pointer;
+  }
+  .btn:hover { background: color-mix(in srgb, CanvasText 10%, transparent); }
+
+  .tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .tab-btn {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+    background: transparent;
+    color: CanvasText;
+    cursor: pointer;
+  }
+  .tab-btn.active { background: color-mix(in srgb, #3b82f6 20%, transparent); border-color: #3b82f6; font-weight: 600; }
+
+  .stat-row { display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: 0.82rem; color: GrayText; margin-bottom: 0.8rem; }
+  .stat-row b { color: CanvasText; }
+
+  .pkg-chip-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.4rem; }
+  .pkg-chip {
+    font-size: 0.72rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 0.12rem 0.5rem;
+    border-radius: 5px;
+    background: color-mix(in srgb, CanvasText 8%, transparent);
+    border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+  }
+
+  #empty { color: GrayText; padding: 3rem 0; text-align: center; }
+  .file-block { margin-bottom: 1.4rem; }
+  .file-path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 0.4rem 0.6rem;
+    background: color-mix(in srgb, CanvasText 6%, transparent);
+    border-radius: 6px 6px 0 0;
+  }
+  .hunk {
+    border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+    border-top: none;
+    padding: 0.6rem 0.9rem;
+  }
+  .file-block .hunk:last-child, .flat-list .hunk:last-child { border-radius: 0 0 6px 6px; }
+  .flat-list .hunk { border-radius: 6px; margin-bottom: 0.6rem; border-top: 1px solid color-mix(in srgb, CanvasText 15%, transparent); }
+  .flat-list .hunk-file-path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+    color: GrayText;
+    margin-bottom: 0.3rem;
+  }
+
+  .hunk-head { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; }
+  .hunk-header-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82rem;
+    color: GrayText;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .score-badge {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    min-width: 3.4rem;
+    text-align: center;
+  }
+  .score-badge-mini {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 0.08rem 0.4rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .badge-group { display: flex; align-items: center; gap: 0.3rem; flex: 0 0 auto; }
+  .bar-track { width: 70px; height: 6px; border-radius: 999px; background: color-mix(in srgb, CanvasText 10%, transparent); overflow: hidden; flex: 0 0 auto; }
+  .bar-fill { height: 100%; border-radius: 999px; }
+  .stat-chip-row { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.4rem; }
+  .stat-chip {
+    font-size: 0.72rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 0.08rem 0.45rem;
+    border-radius: 5px;
+    background: color-mix(in srgb, CanvasText 6%, transparent);
+    color: GrayText;
+  }
+  .stat-chip b { color: CanvasText; font-weight: 600; }
+  .entry-point-chip {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.08rem 0.45rem;
+    border-radius: 5px;
+    background: color-mix(in srgb, #f97316 18%, transparent);
+    color: #fdba74;
+  }
+  .toggle-caret { font-size: 0.7rem; color: GrayText; transition: transform 0.15s ease; flex: 0 0 auto; }
+  .toggle-caret.open { transform: rotate(90deg); }
+
+  .diff-content { margin-top: 0.6rem; overflow-x: auto; border: 1px solid color-mix(in srgb, CanvasText 12%, transparent); border-radius: 6px; }
+  .diff-content-table { border-collapse: collapse; width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+  .diff-content-table td.line-num { width: 1%; white-space: nowrap; text-align: right; padding: 0 0.6rem; color: color-mix(in srgb, CanvasText 35%, transparent); user-select: none; font-variant-numeric: tabular-nums; }
+  .diff-content-table td.line-content { padding: 0 0.6rem; white-space: pre; }
+  tr.diff-add { background: color-mix(in srgb, #22c55e 12%, transparent); }
+  tr.diff-add td.line-content { color: #86efac; }
+  tr.diff-del { background: color-mix(in srgb, #ef4444 12%, transparent); }
+  tr.diff-del td.line-content { color: #fca5a5; }
+  tr.diff-context td.line-content { color: color-mix(in srgb, CanvasText 75%, transparent); }
+
+  .symbols { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px dashed color-mix(in srgb, CanvasText 15%, transparent); display: none; font-size: 0.82rem; }
+  .symbols.open { display: block; }
+  .symbol-card { border: 1px solid color-mix(in srgb, CanvasText 12%, transparent); border-radius: 6px; padding: 0.5rem 0.7rem; margin-bottom: 0.5rem; }
+  .symbol-card:last-child { margin-bottom: 0; }
+  .symbol-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .symbol-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+  .label-chip { font-size: 0.7rem; padding: 0.05rem 0.4rem; border-radius: 4px; background: color-mix(in srgb, CanvasText 10%, transparent); }
+  .symbol-stats { font-size: 0.78rem; color: GrayText; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .caller-list { margin-top: 0.4rem; font-size: 0.78rem; }
+  .caller-list summary { cursor: pointer; color: GrayText; }
+  .caller-row { display: flex; gap: 0.5rem; padding: 0.1rem 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .caller-depth { flex: 0 0 auto; color: GrayText; min-width: 4.5rem; }
+
+  .signal-list { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+  .signal-row { display: flex; align-items: baseline; gap: 0.55rem; font-size: 0.8rem; }
+  .signal-points {
+    flex: 0 0 auto;
+    min-width: 3.6rem;
+    text-align: right;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+  .signal-positive .signal-points { color: #4ade80; }
+  .signal-negative .signal-points { color: #f87171; }
+  .signal-name { flex: 0 0 auto; font-weight: 600; }
+  .signal-detail { color: GrayText; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<h1>blastradius explorer</h1>
+<div class="meta" id="meta">Load a report (or set of reports) produced by <code>blastradius score</code>.</div>
+
+<div class="panel explain">
+  <h2>How is this scored?</h2>
+  <p>Every hunk gets <b>two independent scores</b>, each normalized 0-100 <i>within this diff</i> (100 = the riskiest/hardest hunk in <i>this</i> diff, not a universal scale), plus a <b>Combined</b> score that blends them (default 60% blast radius / 40% review priority) into one ranking number. All three are shown - Combined to sort by, the other two to see <i>why</i>.</p>
+  <div class="method-row">
+    <span class="method-tag" style="background:color-mix(in srgb, #f59e0b 18%, transparent); color:#fcd34d;">blast radius</span>
+    <p>How broadly the change could ripple outward - who/what breaks, including <i>outside</i> the codebase. Built from: transitive caller count (up to 3 hops, decayed, square-root-compressed so one "hub" symbol can't swallow the scale); being an <b>HTTP handler</b> (real route method+path, via the graph's Route nodes) or being <b>reached from one</b> within the same call walk; a repo-wide <b>hotspot</b>/<b>architectural layer</b> check (is this symbol a known top-fan-in node, or in the tool's "core"/"api" layer, independent of this diff); <b>implementing (or defining) a widely-reused interface</b> - a plugin-style extensibility point where every implementer/consumer matters; callers spread across many packages; and lightweight keyword-on-path heuristics for <b>auth, persistence (writes data), config, build system, and schema</b> files.</p>
+  </div>
+  <div class="method-row">
+    <span class="method-tag" style="background:color-mix(in srgb, #6366f1 18%, transparent); color:#a5b4fc;">review priority</span>
+    <p>How much attention <i>this specific hunk</i> deserves from a reviewer. Primarily: a <b>near-duplicate implementation exists elsewhere</b> in the codebase (did you remember to fix it in both places? - weighted higher when the duplicate lives in a different file) and <b>missing test coverage</b>. Supplemented by lighter code-metric signals (cyclomatic/cognitive complexity, loop nesting, fan-out) - these are secondary, not the primary driver, since intrinsic code complexity alone doesn't predict customer impact.</p>
+  </div>
+  <p class="explain-example">Each hunk's file also gets a small <b>file co-change coupling</b> bonus (folded into blast radius) from git history: files that have historically changed together even without a code reference between them. Separately, <b>hygiene signals</b> - formatting-only, comments-only, generated code, logging-only, test-only-file, dead-code removal (verified against real repo-wide caller counts, not just this diff) - <i>multiply</i> the final Combined score down (shown as a "×0.xx" badge) rather than adding a point, since a trivial change to a critical function should still rank low. <b>Impacted packages</b> (shown per-symbol/hunk, ranked diff-wide below) are the packages/directories a symbol's blast radius reaches.</p>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="toolbar panel">
+  <label>Report file: <input type="file" id="fileInput" accept="application/json"></label>
+  <label>Sort:
+    <select id="sortMode">
+      <option value="diff">Diff order</option>
+      <option value="file" selected>Combined score (within each file)</option>
+      <option value="global">Combined score (whole diff, ignore file boundaries)</option>
+    </select>
+  </label>
+  <button class="btn" id="expandAllBtn" type="button">Expand all</button>
+  <button class="btn" id="collapseAllBtn" type="button">Collapse all</button>
+</div>
+
+<div id="empty">No report loaded yet.</div>
+<div id="statHeader"></div>
+<div id="reportBody"></div>
+
+<script>
+let reportSet = null; // { reports: [{ label, data }, ...] }
+let activeTabIndex = 0;
+let forceOpen = null; // true = force all open, false = force all closed, null = per-hunk default
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      reportSet = parsed.reports ? parsed : { reports: [{ label: file.name, data: parsed }] };
+      activeTabIndex = 0;
+      forceOpen = true;
+      render();
+    } catch (err) {
+      alert('Could not parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('sortMode').addEventListener('change', render);
+document.getElementById('expandAllBtn').addEventListener('click', () => { forceOpen = true; render(); });
+document.getElementById('collapseAllBtn').addEventListener('click', () => { forceOpen = false; render(); });
+
+function blastColor(norm) {
+  if (norm <= 0) return 'color-mix(in srgb, CanvasText 25%, transparent)';
+  const hue = 45 - (norm / 100) * 45; // 45 (amber) -> 0 (red)
+  return `hsl(${hue}, 80%, 45%)`;
+}
+
+function priorityColor(norm) {
+  if (norm <= 0) return 'color-mix(in srgb, CanvasText 25%, transparent)';
+  const hue = 255 - (norm / 100) * 35; // indigo -> blue
+  return `hsl(${hue}, 70%, 58%)`;
+}
+
+function render() {
+  const emptyEl = document.getElementById('empty');
+  const tabsEl = document.getElementById('tabs');
+  const statEl = document.getElementById('statHeader');
+  const bodyEl = document.getElementById('reportBody');
+  const metaEl = document.getElementById('meta');
+  tabsEl.innerHTML = '';
+  statEl.innerHTML = '';
+  bodyEl.innerHTML = '';
+
+  if (!reportSet || !reportSet.reports || reportSet.reports.length === 0) {
+    emptyEl.style.display = 'block';
+    metaEl.textContent = 'Load a report (or set of reports) produced by blastradius score.';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  reportSet.reports.forEach((entry, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (i === activeTabIndex ? ' active' : '');
+    const hunkCount = (entry.data.Files || []).reduce((n, f) => n + (f.Hunks || []).length, 0);
+    btn.textContent = `${entry.label} (${hunkCount})`;
+    btn.addEventListener('click', () => { activeTabIndex = i; render(); });
+    tabsEl.appendChild(btn);
+  });
+
+  const entry = reportSet.reports[activeTabIndex] || reportSet.reports[0];
+  const report = entry.data;
+  const totalHunks = (report.Files || []).reduce((n, f) => n + (f.Hunks || []).length, 0);
+  metaEl.textContent = `${entry.label} · project: ${report.Project} · generated: ${report.GeneratedAt} · ${(report.Files || []).length} files · ${totalHunks} hunks`;
+
+  renderStatHeader(statEl, report);
+
+  const sortMode = document.getElementById('sortMode').value;
+  if (sortMode === 'global') {
+    bodyEl.appendChild(renderFlatList(report));
+  } else {
+    bodyEl.appendChild(renderByFile(report, sortMode === 'file'));
+  }
+}
+
+function renderStatHeader(container, report) {
+  const topPkgs = (report.ImpactedPackages || []).slice(0, 12);
+  if (topPkgs.length === 0) return;
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  panel.innerHTML = '<h2>Impacted areas (ranked by number of hunks reaching them)</h2>';
+  const row = document.createElement('div');
+  row.className = 'pkg-chip-row';
+  topPkgs.forEach(p => {
+    const chip = document.createElement('span');
+    chip.className = 'pkg-chip';
+    chip.textContent = `${p.Package} · ${p.HunkCount} hunk${p.HunkCount === 1 ? '' : 's'}`;
+    row.appendChild(chip);
+  });
+  panel.appendChild(row);
+  container.appendChild(panel);
+}
+
+function renderByFile(report, sortWithinFile) {
+  const wrap = document.createElement('div');
+  for (const file of (report.Files || [])) {
+    const hunks = [...(file.Hunks || [])];
+    if (sortWithinFile) hunks.sort((a, b) => b.Combined - a.Combined);
+
+    const block = document.createElement('div');
+    block.className = 'file-block';
+    const pathEl = document.createElement('div');
+    pathEl.className = 'file-path';
+    pathEl.textContent = file.Path;
+    block.appendChild(pathEl);
+    for (const hunk of hunks) block.appendChild(renderHunk(hunk, null));
+    wrap.appendChild(block);
+  }
+  return wrap;
+}
+
+function renderFlatList(report) {
+  const wrap = document.createElement('div');
+  wrap.className = 'flat-list';
+  const all = [];
+  for (const file of (report.Files || [])) {
+    for (const hunk of (file.Hunks || [])) all.push({ hunk, path: file.Path });
+  }
+  all.sort((a, b) => b.hunk.Combined - a.hunk.Combined);
+  for (const { hunk, path } of all) wrap.appendChild(renderHunk(hunk, path));
+  return wrap;
+}
+
+function renderHunk(hunk, filePathIfFlat) {
+  const el = document.createElement('div');
+  el.className = 'hunk';
+
+  if (filePathIfFlat) {
+    const fp = document.createElement('div');
+    fp.className = 'hunk-file-path';
+    fp.textContent = filePathIfFlat;
+    el.appendChild(fp);
+  }
+
+  const head = document.createElement('div');
+  head.className = 'hunk-head';
+
+  const caret = document.createElement('div');
+  caret.className = 'toggle-caret';
+  caret.textContent = '▸';
+  head.appendChild(caret);
+
+  const badgeGroup = document.createElement('div');
+  badgeGroup.className = 'badge-group';
+
+  const badge = document.createElement('div');
+  badge.className = 'score-badge';
+  badge.textContent = hunk.Combined.toFixed(0);
+  badge.title = `Combined score: ${hunk.Combined.toFixed(1)}/100 (blends blast radius + review priority)`;
+  badge.style.color = blastColor(hunk.Combined);
+  badge.style.background = 'color-mix(in srgb, ' + blastColor(hunk.Combined) + ' 15%, transparent)';
+  badgeGroup.appendChild(badge);
+
+  const blastMini = document.createElement('span');
+  blastMini.className = 'score-badge-mini';
+  blastMini.textContent = 'B ' + hunk.BlastRadiusRaw.toFixed(1);
+  blastMini.title = `Blast radius: ${hunk.BlastRadiusRaw.toFixed(2)} raw, ${hunk.BlastRadiusNorm.toFixed(1)}/100 normalized`;
+  blastMini.style.color = blastColor(hunk.BlastRadiusNorm);
+  blastMini.style.borderColor = blastColor(hunk.BlastRadiusNorm);
+  badgeGroup.appendChild(blastMini);
+
+  const priorityMini = document.createElement('span');
+  priorityMini.className = 'score-badge-mini';
+  priorityMini.textContent = 'P ' + hunk.ReviewPriorityRaw.toFixed(1);
+  priorityMini.title = `Review priority: ${hunk.ReviewPriorityRaw.toFixed(2)} raw, ${hunk.ReviewPriorityNorm.toFixed(1)}/100 normalized`;
+  priorityMini.style.color = priorityColor(hunk.ReviewPriorityNorm);
+  priorityMini.style.borderColor = priorityColor(hunk.ReviewPriorityNorm);
+  badgeGroup.appendChild(priorityMini);
+
+  if (hunk.HygieneMultiplier < 1) {
+    const dampener = document.createElement('span');
+    dampener.className = 'score-badge-mini';
+    dampener.textContent = '×' + hunk.HygieneMultiplier.toFixed(2);
+    dampener.title = `Dampened to ${(hunk.HygieneMultiplier * 100).toFixed(0)}% of its undampened score - see the negative signal below for why (formatting-only, generated code, etc.)`;
+    dampener.style.color = '#f87171';
+    dampener.style.borderColor = '#f87171';
+    badgeGroup.appendChild(dampener);
+  }
+
+  head.appendChild(badgeGroup);
+
+  const track = document.createElement('div');
+  track.className = 'bar-track';
+  const fill = document.createElement('div');
+  fill.className = 'bar-fill';
+  fill.style.width = Math.max(hunk.Combined, 2) + '%';
+  fill.style.background = blastColor(hunk.Combined);
+  track.appendChild(fill);
+  head.appendChild(track);
+
+  const headerText = document.createElement('div');
+  headerText.className = 'hunk-header-text';
+  headerText.textContent = hunk.Header;
+  head.appendChild(headerText);
+
+  el.appendChild(head);
+
+  if (hunk.Content) el.appendChild(renderDiffContent(hunk.Content, hunk.Header));
+
+  const symbolsEl = document.createElement('div');
+  symbolsEl.className = 'symbols';
+  const isOpen = forceOpen === null ? true : forceOpen;
+  if (isOpen) symbolsEl.classList.add('open');
+  caret.classList.toggle('open', isOpen);
+
+  if (hunk.Signals && hunk.Signals.length > 0) {
+    symbolsEl.appendChild(renderSignalList(hunk.Signals));
+  }
+
+  if (hunk.Symbols && hunk.Symbols.length > 0) {
+    hunk.Symbols.forEach(s => symbolsEl.appendChild(renderSymbolCard(s)));
+    if (hunk.ImpactedPackages && hunk.ImpactedPackages.length > 0) {
+      const row = document.createElement('div');
+      row.className = 'pkg-chip-row';
+      row.style.marginTop = '0.5rem';
+      hunk.ImpactedPackages.forEach(p => {
+        const chip = document.createElement('span');
+        chip.className = 'pkg-chip';
+        chip.textContent = p;
+        row.appendChild(chip);
+      });
+      symbolsEl.appendChild(row);
+    }
+  } else {
+    symbolsEl.textContent = 'No known symbols touched by this hunk.';
+  }
+  el.appendChild(symbolsEl);
+
+  head.addEventListener('click', () => {
+    const nowOpen = symbolsEl.classList.toggle('open');
+    caret.classList.toggle('open', nowOpen);
+  });
+
+  return el;
+}
+
+function renderSymbolCard(s) {
+  const card = document.createElement('div');
+  card.className = 'symbol-card';
+
+  const head = document.createElement('div');
+  head.className = 'symbol-head';
+
+  const methodTag = document.createElement('span');
+  methodTag.className = 'method-tag method-' + s.Method;
+  methodTag.textContent = s.Method;
+  head.appendChild(methodTag);
+
+  const name = document.createElement('span');
+  name.className = 'symbol-name';
+  name.textContent = s.Name;
+  head.appendChild(name);
+
+  const label = document.createElement('span');
+  label.className = 'label-chip';
+  label.textContent = s.Label;
+  head.appendChild(label);
+
+  if (s.IsEntryPoint) {
+    const ep = document.createElement('span');
+    ep.className = 'entry-point-chip';
+    ep.textContent = '🌐 entry point';
+    ep.title = 'HTTP/CLI entry point - external contract risk not visible to internal call-graph fan-in';
+    head.appendChild(ep);
+  }
+
+  const stats = document.createElement('span');
+  stats.className = 'symbol-stats';
+  stats.textContent = `blast ${s.BlastRadiusRaw.toFixed(2)} · priority ${s.ReviewPriorityRaw.toFixed(2)}`;
+  head.appendChild(stats);
+
+  card.appendChild(head);
+
+  if (s.Signals && s.Signals.length > 0) {
+    card.appendChild(renderSignalList(s.Signals));
+  }
+
+  if (s.Callers && s.Callers.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'caller-list';
+    details.open = true;
+    const summary = document.createElement('summary');
+    summary.textContent = `${s.Callers.length} caller${s.Callers.length === 1 ? '' : 's'} (who reaches this symbol, and from how far)`;
+    details.appendChild(summary);
+    s.Callers.forEach(c => {
+      const row = document.createElement('div');
+      row.className = 'caller-row';
+      const depthLabel = c.Depth === 1 ? 'direct' : `${c.Depth} hops`;
+      row.innerHTML = `<span class="caller-depth">${depthLabel} (×${c.Weight.toFixed(2)})</span><span>${escapeHtml(shortName(c.QualifiedName))}</span>`;
+      details.appendChild(row);
+    });
+    card.appendChild(details);
+  }
+
+  return card;
+}
+
+// renderSignalList renders every independently-detected Signal contributing
+// to a score, most-significant first, so "why did this rank the way it did"
+// is always a literal list next to the number, not a hidden formula.
+function renderSignalList(signals) {
+  const sorted = [...signals].sort((a, b) => Math.abs(b.Points) - Math.abs(a.Points));
+  const wrap = document.createElement('div');
+  wrap.className = 'signal-list';
+  sorted.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'signal-row ' + (s.Points < 0 ? 'signal-negative' : 'signal-positive');
+    const sign = s.Points >= 0 ? '+' : '';
+    row.innerHTML = `<span class="signal-points">${sign}${s.Points.toFixed(2)}</span><span class="signal-name">${escapeHtml(s.Name)}</span><span class="signal-detail">${escapeHtml(s.Detail || '')}</span>`;
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
+function shortName(qualifiedName) {
+  const parts = (qualifiedName || '').split('.');
+  return parts.length > 1 ? parts.slice(1).join('.') : qualifiedName;
+}
+
+function parseHunkHeader(header) {
+  const m = /@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(header || '');
+  if (!m) return { oldStart: 1, newStart: 1 };
+  return { oldStart: parseInt(m[1], 10) || 1, newStart: parseInt(m[3], 10) || 1 };
+}
+
+function renderDiffContent(content, header) {
+  const { oldStart, newStart } = parseHunkHeader(header);
+  const wrap = document.createElement('div');
+  wrap.className = 'diff-content';
+  const table = document.createElement('table');
+  table.className = 'diff-content-table';
+
+  let oldLine = oldStart;
+  let newLine = newStart;
+  for (const line of content.split('\n')) {
+    if (!line || line.startsWith('@@')) continue;
+
+    let cls = 'diff-context';
+    let oldNum = '';
+    let newNum = '';
+    if (line.startsWith('+')) {
+      cls = 'diff-add';
+      newNum = newLine++;
+    } else if (line.startsWith('-')) {
+      cls = 'diff-del';
+      oldNum = oldLine++;
+    } else {
+      oldNum = oldLine++;
+      newNum = newLine++;
+    }
+
+    const tr = document.createElement('tr');
+    tr.className = cls;
+    tr.innerHTML = `<td class="line-num">${oldNum}</td><td class="line-num">${newNum}</td><td class="line-content">${escapeHtml(line)}</td>`;
+    table.appendChild(tr);
+  }
+
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>

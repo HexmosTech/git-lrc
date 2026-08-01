@@ -4,6 +4,7 @@
 import { waitForPreact, filePathToId, transformEvent, getBadgeClass, formatIssueForCopy, getCommentVisibilityKey } from './components/utils.js';
 import { buildIssueCategoryGroups, buildIssueFacetOptions, buildIssueFilterUniverse, countIssuesByFilters, createDefaultIssueFilters, DEFAULT_SEVERITIES, getCommentFilterValue, getIssueFilterSummary, matchesIssueFilters, resetIssueFilters, toggleIssueFilterValue } from './components/issue_filter_state.mjs';
 import { appendStreamedCommentsToFiles, buildEventsURL, extractExternalCommentsFromEvents, extractNewEvents, inferReviewStatusFromEvents } from './components/review_stream_state.mjs';
+import { hasBlastRadiusData, sortFilesByBlastRadius } from './components/blast_radius_sort_state.mjs';
 import { getHeader } from './components/Header.js';
 import { getSidebar } from './components/Sidebar.js';
 import { getSummary } from './components/Summary.js';
@@ -117,9 +118,13 @@ function convertFilesToUIFormat(files) {
             const oldLineCount = hunk.old_line_count || hunk.oldLineCount || hunk.OldLineCount || 0;
             const newStartLine = hunk.new_start_line || hunk.newStartLine || hunk.NewStartLine || 1;
             const newLineCount = hunk.new_line_count || hunk.newLineCount || hunk.NewLineCount || 0;
-            const header = hunk.header || hunk.Header || 
+            const header = hunk.header || hunk.Header ||
                 `@@ -${oldStartLine},${oldLineCount} +${newStartLine},${newLineCount} @@`;
-            
+            // blast_radius (raw /api/review JSON) or BlastRadius (server-templated
+            // JSONHunkData) - null/undefined when --blast-radius wasn't used.
+            const blastRadiusRaw = hunk.blast_radius ?? hunk.BlastRadius;
+            const blastRadius = typeof blastRadiusRaw === 'number' ? blastRadiusRaw : null;
+
             // If hunk already has Lines array (pre-processed), use it
             if (hunk.Lines) {
                 // Merge comments into existing lines
@@ -139,7 +144,7 @@ function convertFilesToUIFormat(files) {
                     }
                     return line;
                 });
-                return { Header: header, Lines: lines };
+                return { Header: header, Lines: lines, BlastRadius: blastRadius };
             }
             
             // Parse hunk content into lines
@@ -191,7 +196,7 @@ function convertFilesToUIFormat(files) {
                 lines.push(lineData);
             }
             
-            return { Header: header, Lines: lines };
+            return { Header: header, Lines: lines, BlastRadius: blastRadius };
         });
         
         return {
@@ -288,6 +293,7 @@ async function initApp() {
         const [allExpanded, setAllExpanded] = useState(false);
         const [activeFileId, setActiveFileId] = useState(null);
         const [issueFilters, setIssueFilters] = useState(createDefaultIssueFilters());
+        const [sortByBlastRadius, setSortByBlastRadius] = useState(false);
         const [events, setEvents] = useState([]);
         const [newEventCount, setNewEventCount] = useState(0);
         const [isTailing, setIsTailing] = useState(false);
@@ -516,7 +522,11 @@ async function initApp() {
                 setAllExpanded(true);
             }
         }, [allExpanded, reviewData?.Files]);
-        
+
+        const toggleSortByBlastRadius = useCallback(() => {
+            setSortByBlastRadius(prev => !prev);
+        }, []);
+
         // Handle sidebar file click
         const handleFileClick = useCallback((fileId, lineNumber = null) => {
             // Always switch to files tab when clicking a file in sidebar
@@ -816,7 +826,9 @@ async function initApp() {
         const status = reviewData?.status || 'in_progress';
         const showLoader = Boolean(reviewData) && status === 'in_progress';
         const summary = reviewData?.summary || '';
-        const files = reviewData?.Files || [];
+        const filesInDiffOrder = reviewData?.Files || [];
+        const showBlastRadiusToggle = hasBlastRadiusData(filesInDiffOrder);
+        const files = sortByBlastRadius ? sortFilesByBlastRadius(filesInDiffOrder) : filesInDiffOrder;
         const quiz = reviewData?.quiz || [];
         const totalComments = files.reduce((sum, file) => sum + (file.CommentCount || 0), 0);
         const errorSummary = reviewData?.errorSummary || '';
@@ -1135,6 +1147,9 @@ async function initApp() {
                         performanceItems=${performanceSnapshot.summaryItems}
                         allExpanded=${allExpanded}
                         onToggleAll=${toggleAll}
+                        showBlastRadiusToggle=${showBlastRadiusToggle}
+                        sortByBlastRadius=${sortByBlastRadius}
+                        onToggleSortByBlastRadius=${toggleSortByBlastRadius}
                         eventCount=${newEventCount}
                         showEventBadge=${activeTab !== 'events'}
                         onTailLog=${handleTailLog}

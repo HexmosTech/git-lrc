@@ -35,6 +35,11 @@ const ICON_SPECS = Object.freeze({
             { d: 'M20 12H4' },
         ],
     },
+    blastRadius: {
+        paths: [
+            { d: 'M13 2 3 14h9l-1 8 10-12h-9l1-8z' },
+        ],
+    },
     arrowDown: {
         paths: [
             { d: 'M19 14l-7 7' },

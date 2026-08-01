@@ -81,8 +81,9 @@ func prepareHunkData(hunk reviewmodel.DiffReviewHunk, commentsByLine map[int][]r
 	lines := parseHunkLines(hunk, commentsByLine, filePath)
 
 	return HTMLHunkData{
-		Header: header,
-		Lines:  lines,
+		Header:      header,
+		Lines:       lines,
+		BlastRadius: hunk.BlastRadius,
 	}
 }
 

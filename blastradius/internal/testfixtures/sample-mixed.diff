@@ -1,0 +1,562 @@
+commit b969d1221e86d43fe5e312b46df8fcc0f73e409c
+Author: Lince Mathew <linz07m@gmail.com>
+Date:   Fri Jun 26 21:30:34 2026 +0530
+
+    Disable Self-Hosted Quota and Restrict User Access
+    
+    LiveReview Pre-Commit Check: ran (iter:2, coverage:0%)
+
+diff --git a/internal/api/middleware/selfhosted_enforcement.go b/internal/api/middleware/selfhosted_enforcement.go
+index 93a7f51..da8a3b3 100644
+--- a/internal/api/middleware/selfhosted_enforcement.go
++++ b/internal/api/middleware/selfhosted_enforcement.go
+@@ -81,7 +81,7 @@ func isAdminOrOwner(db *sql.DB, userID int64) (bool, error) {
+ 			SELECT 1 FROM user_roles ur
+ 			JOIN roles r ON ur.role_id = r.id
+ 			WHERE ur.user_id = $1 
+-			AND r.name IN ('admin', 'owner')
++			AND r.name IN ('admin', 'owner', 'super_admin')
+ 		)
+ 	`, userID).Scan(&hasAdminRole)
+ 
+@@ -149,11 +149,8 @@ func InvalidateSeatAssignmentCache() {
+ func EnforceSelfHostedLicense(db *sql.DB, licenseService *license.Service) echo.MiddlewareFunc {
+ 	return func(next echo.HandlerFunc) echo.HandlerFunc {
+ 		return func(c echo.Context) error {
+-			// CRITICAL: Only enforce in self-hosted mode
+-			// In cloud mode, use subscription-based enforcement instead
+-			if isCloudMode() {
+-				return next(c)
+-			}
++			// TEMPORARILY DISABLED: Seat enforcement is bypassed for all self-hosted APIs
++			return next(c)
+ 
+ 			userID, ok := selfHostedLicenseUserID(c)
+ 			if !ok {
+diff --git a/internal/api/prompts.go b/internal/api/prompts.go
+index cebd46f..6fb07b3 100644
+--- a/internal/api/prompts.go
++++ b/internal/api/prompts.go
+@@ -261,8 +261,8 @@ func (s *Server) CreatePromptChunk(c echo.Context) error {
+ 		}
+ 	} else {
+ 		req.Type = "user"
+-		if !(pc.IsOwner || pc.IsMember || pc.IsSuperAdmin) {
+-			return c.JSON(http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
++		if !(pc.IsOwner || pc.IsSuperAdmin) {
++			return c.JSON(http.StatusForbidden, map[string]string{"error": "owner or super admin required to customize prompts"})
+ 		}
+ 	}
+ 
+diff --git a/internal/api/quota_handler.go b/internal/api/quota_handler.go
+index c7662f4..bd06506 100644
+--- a/internal/api/quota_handler.go
++++ b/internal/api/quota_handler.go
+@@ -6,6 +6,7 @@ import (
+ 	"strings"
+ 
+ 	"github.com/labstack/echo/v4"
++	apimiddleware "github.com/livereview/internal/api/middleware"
+ 	"github.com/livereview/internal/api/plancode"
+ 	"github.com/livereview/internal/license"
+ 	"github.com/livereview/pkg/models"
+@@ -81,14 +82,17 @@ func (h *QuotaStatusHandler) GetQuotaStatus(c echo.Context) error {
+ 	planType := resolveQuotaPlanType(envelopeTmp.PlanCode, contextPlanType)
+ 
+ 	// Call CheckPreflight with 0 RequiredLOC to just get the current threshold/blocking state
+-	accountingService := license.NewLOCAccountingService(h.db)
+-	preflightResult, err := accountingService.CheckPreflight(c.Request().Context(), license.LOCPreflightInput{
+-		OrgID:       orgID,
+-		RequiredLOC: 0,
+-		PlanCode:    license.PlanType(planType),
+-	})
+-	if err == nil {
+-		applyPreflightToEnvelopeContext(c, preflightResult)
++	// Only run preflight in Cloud Mode
++	if apimiddleware.IsCloudMode() {
++		accountingService := license.NewLOCAccountingService(h.db)
++		preflightResult, err := accountingService.CheckPreflight(c.Request().Context(), license.LOCPreflightInput{
++			OrgID:       orgID,
++			RequiredLOC: 0,
++			PlanCode:    license.PlanType(planType),
++		})
++		if err == nil {
++			applyPreflightToEnvelopeContext(c, preflightResult)
++		}
+ 	}
+ 
+ 	// Now build the final envelope with the preflight state included
+@@ -104,7 +108,10 @@ func (h *QuotaStatusHandler) GetQuotaStatus(c echo.Context) error {
+ 	}
+ 
+ 	// Determine if user can trigger reviews
+-	if isFreeTier {
++	if !apimiddleware.IsCloudMode() {
++		// Unlimited reviews in self-hosted mode
++		status.CanTriggerReviews = true
++	} else if isFreeTier {
+ 		// On free plan, only org creator can trigger reviews AND must be under daily limit
+ 		status.CanTriggerReviews = isOrgCreator && (dailyLimitPtr == nil || dailyUsed < *dailyLimitPtr)
+ 	} else {
+diff --git a/internal/api/review_service.go b/internal/api/review_service.go
+index a3061b9..0846439 100644
+--- a/internal/api/review_service.go
++++ b/internal/api/review_service.go
+@@ -70,38 +70,41 @@ func (s *Server) TriggerReviewV2(c echo.Context) error {
+ 	log.Printf("[DEBUG] TriggerReviewV2: Starting review request handling")
+ 
+ 	// LOC Quota preflight check — block before creating any DB records
+-	orgID, orgOK := c.Get("org_id").(int64)
+-	planCode := license.PlanFree30K
+-	if planCtx, ok := c.Get(apimiddleware.PlanContextKey).(apimiddleware.PlanContext); ok && planCtx.PlanType != "" {
+-		planCode = planCtx.PlanType
+-	}
+-	if orgOK && orgID > 0 {
+-		accountingService := license.NewLOCAccountingService(s.db)
+-		preflightResult, pfErr := accountingService.CheckPreflight(context.Background(), license.LOCPreflightInput{
+-			OrgID:       orgID,
+-			RequiredLOC: 0, // unknown at this point, just check current state
+-			PlanCode:    planCode,
+-		})
+-		if pfErr != nil {
+-			log.Printf("[WARN] LOC preflight check failed for org=%d: %v", orgID, pfErr)
+-		} else {
+-			applyPreflightToEnvelopeContext(c, preflightResult)
+-			if preflightResult.Blocked {
+-				errorCode := "quota_exceeded"
+-				errorMessage := "monthly LOC quota exceeded for this organization"
+-				if preflightResult.BlockReason == "trial_readonly" {
+-					errorCode = "trial_readonly"
+-					errorMessage = "trial period ended; review operations are read-only until plan update"
++	// Only run LOC quota preflight in Cloud Mode
++	if apimiddleware.IsCloudMode() {
++		orgID, orgOK := c.Get("org_id").(int64)
++		planCode := license.PlanFree30K
++		if planCtx, ok := c.Get(apimiddleware.PlanContextKey).(apimiddleware.PlanContext); ok && planCtx.PlanType != "" {
++			planCode = planCtx.PlanType
++		}
++		if orgOK && orgID > 0 {
++			accountingService := license.NewLOCAccountingService(s.db)
++			preflightResult, pfErr := accountingService.CheckPreflight(context.Background(), license.LOCPreflightInput{
++				OrgID:       orgID,
++				RequiredLOC: 0, // unknown at this point, just check current state
++				PlanCode:    planCode,
++			})
++			if pfErr != nil {
++				log.Printf("[WARN] LOC preflight check failed for org=%d: %v", orgID, pfErr)
++			} else {
++				applyPreflightToEnvelopeContext(c, preflightResult)
++				if preflightResult.Blocked {
++					errorCode := "quota_exceeded"
++					errorMessage := "monthly LOC quota exceeded for this organization"
++					if preflightResult.BlockReason == "trial_readonly" {
++						errorCode = "trial_readonly"
++						errorMessage = "trial period ended; review operations are read-only until plan update"
++					}
++					log.Printf("[INFO] TriggerReviewV2: LOC quota blocked for org=%d, used=%d, limit=%d",
++						orgID, preflightResult.LOCUsedMonth, preflightResult.LOCLimitMonth)
++					return JSONWithEnvelope(c, http.StatusForbidden, map[string]interface{}{
++						"error":         errorMessage,
++						"error_code":    errorCode,
++						"loc_remaining": preflightResult.LOCRemainingMonth,
++						"usage_percent": preflightResult.UsagePercent,
++						"upgrade_url":   defaultUpgradeURL,
++					})
+ 				}
+-				log.Printf("[INFO] TriggerReviewV2: LOC quota blocked for org=%d, used=%d, limit=%d",
+-					orgID, preflightResult.LOCUsedMonth, preflightResult.LOCLimitMonth)
+-				return JSONWithEnvelope(c, http.StatusForbidden, map[string]interface{}{
+-					"error":         errorMessage,
+-					"error_code":    errorCode,
+-					"loc_remaining": preflightResult.LOCRemainingMonth,
+-					"usage_percent": preflightResult.UsagePercent,
+-					"upgrade_url":   defaultUpgradeURL,
+-				})
+ 			}
+ 		}
+ 	}
+@@ -116,30 +119,32 @@ func (s *Server) TriggerReviewV2(c echo.Context) error {
+ 		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+ 	}
+ 
+-	quotaModule := license.NewQuotaModule(s.db)
+-	quotaPreflight, err := quotaModule.PreflightCheck(c.Request().Context(), license.QuotaPreflightInput{
+-		OrgID:       ctx.orgID,
+-		RequiredLOC: 1,
+-		PlanCode:    ctx.planCode,
+-	})
+-	if err != nil {
+-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: fmt.Sprintf("failed quota preflight: %v", err)})
+-	}
+-	if quotaPreflight.Blocked {
+-		errorCode := "quota_exceeded"
+-		errorMessage := "monthly LOC quota exceeded for this operation"
+-		if quotaPreflight.BlockReason == "trial_readonly" {
+-			errorCode = "trial_readonly"
+-			errorMessage = "trial period ended; review operations are read-only until plan update"
+-		}
+-		return JSONWithEnvelope(c, http.StatusForbidden, map[string]interface{}{
+-			"error":         errorMessage,
+-			"error_code":    errorCode,
+-			"required_loc":  1,
+-			"loc_remaining": quotaPreflight.LOCRemainingMonth,
+-			"usage_percent": quotaPreflight.UsagePercent,
+-			"upgrade_url":   defaultUpgradeURL,
++	if apimiddleware.IsCloudMode() {
++		quotaModule := license.NewQuotaModule(s.db)
++		quotaPreflight, err := quotaModule.PreflightCheck(c.Request().Context(), license.QuotaPreflightInput{
++			OrgID:       ctx.orgID,
++			RequiredLOC: 1,
++			PlanCode:    ctx.planCode,
+ 		})
++		if err != nil {
++			return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: fmt.Sprintf("failed quota preflight: %v", err)})
++		}
++		if quotaPreflight.Blocked {
++			errorCode := "quota_exceeded"
++			errorMessage := "monthly LOC quota exceeded for this operation"
++			if quotaPreflight.BlockReason == "trial_readonly" {
++				errorCode = "trial_readonly"
++				errorMessage = "trial period ended; review operations are read-only until plan update"
++			}
++			return JSONWithEnvelope(c, http.StatusForbidden, map[string]interface{}{
++				"error":         errorMessage,
++				"error_code":    errorCode,
++				"required_loc":  1,
++				"loc_remaining": quotaPreflight.LOCRemainingMonth,
++				"usage_percent": quotaPreflight.UsagePercent,
++				"upgrade_url":   defaultUpgradeURL,
++			})
++		}
+ 	}
+ 
+ 	// Phase 2: Prepare authentication (URL validation, token lookup, OAuth refresh)
+diff --git a/internal/api/system_settings.go b/internal/api/system_settings.go
+index ff8d7ee..e180332 100644
+--- a/internal/api/system_settings.go
++++ b/internal/api/system_settings.go
+@@ -5,6 +5,7 @@ import (
+ 	"encoding/json"
+ 	"errors"
+ 	"net/http"
++	"strings"
+ 
+ 	"github.com/labstack/echo/v4"
+ 	"github.com/livereview/internal/api/auth"
+@@ -14,7 +15,13 @@ import (
+ )
+ 
+ 
+-func validateSMTPSettings(settings models.SMTPSettings) error {
++func validateSMTPSettings(settings *models.SMTPSettings) error {
++	settings.Host = strings.TrimSpace(settings.Host)
++	settings.Username = strings.TrimSpace(settings.Username)
++	settings.Password = strings.TrimSpace(settings.Password)
++	settings.Sender = strings.TrimSpace(settings.Sender)
++	settings.SenderName = strings.TrimSpace(settings.SenderName)
++
+ 	if settings.Host == "" {
+ 		return errors.New("SMTP Host is required")
+ 	}
+@@ -56,7 +63,7 @@ func (s *Server) UpdateSMTPSettings(c echo.Context) error {
+ 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+ 	}
+ 
+-	if err := validateSMTPSettings(settings); err != nil {
++	if err := validateSMTPSettings(&settings); err != nil {
+ 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+ 	}
+ 
+@@ -87,7 +94,7 @@ func (s *Server) TestSMTPSettings(c echo.Context) error {
+ 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+ 	}
+ 
+-	if err := validateSMTPSettings(settings); err != nil {
++	if err := validateSMTPSettings(&settings); err != nil {
+ 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+ 	}
+ 
+diff --git a/internal/api/users/handlers.go b/internal/api/users/handlers.go
+index 8eb942e..a58201a 100644
+--- a/internal/api/users/handlers.go
++++ b/internal/api/users/handlers.go
+@@ -161,6 +161,13 @@ func (uh *UserHandlers) UpdateUser(c echo.Context) error {
+ 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+ 	}
+ 
++	// Security: Only super admins can update passwords
++	if req.Password != nil && *req.Password != "" {
++		if !permCtx.IsSuperAdmin {
++			return echo.NewHTTPError(http.StatusForbidden, "Permission denied: only super admins can change user passwords")
++		}
++	}
++
+ 	// Update user
+ 	user, err := uh.userService.UpdateUserInOrg(permCtx.OrgID, userID, permCtx.User.ID, req)
+ 	if err != nil {
+diff --git a/internal/api/users/user_service.go b/internal/api/users/user_service.go
+index bcd4492..49c5469 100644
+--- a/internal/api/users/user_service.go
++++ b/internal/api/users/user_service.go
+@@ -69,6 +69,7 @@ type UpdateUserRequest struct {
+ 	LastName  *string `json:"last_name"`
+ 	IsActive  *bool   `json:"is_active"`
+ 	RoleID    *int64  `json:"role_id"`
++	Password  *string `json:"password,omitempty"`
+ }
+ 
+ // CreateUserInOrg creates a new user in the specified organization
+@@ -388,6 +389,17 @@ func (us *UserService) UpdateUserInOrg(orgID, userID, updatedByUserID int64, req
+ 		}
+ 	}
+ 
++	if req.Password != nil && *req.Password != "" {
++		hashedPassword, hashErr := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
++		if hashErr != nil {
++			return nil, fmt.Errorf("failed to hash password: %w", hashErr)
++		}
++		setParts = append(setParts, fmt.Sprintf("password_hash = $%d", argIndex))
++		args = append(args, string(hashedPassword))
++		auditDetails["password_changed"] = true
++		argIndex++
++	}
++
+ 	err := us.store.WithTx(func(tx *sql.Tx) error {
+ 		// Update user if there are changes
+ 		if len(setParts) > 1 { // More than just updated_at
+diff --git a/ui/src/api/users.ts b/ui/src/api/users.ts
+index 0f8f873..974e915 100644
+--- a/ui/src/api/users.ts
++++ b/ui/src/api/users.ts
+@@ -70,6 +70,7 @@ export interface UpdateUserPayload {
+   first_name?: string;
+   last_name?: string;
+   role_id?: number;
++  password?: string;
+ }
+ 
+ export const updateOrgUser = async (
+diff --git a/ui/src/components/UIPrimitives.tsx b/ui/src/components/UIPrimitives.tsx
+index 0f201fa..8bb83c7 100644
+--- a/ui/src/components/UIPrimitives.tsx
++++ b/ui/src/components/UIPrimitives.tsx
+@@ -216,6 +216,7 @@ export const Input: React.FC<InputProps> = ({
+             className
+           )}
+           aria-invalid={error ? 'true' : 'false'}
++          autoComplete={props.autoComplete || 'off'}
+           {...props}
+         />
+         {icon && iconPosition === 'right' && (
+diff --git a/ui/src/components/UserManagement/UserForm.tsx b/ui/src/components/UserManagement/UserForm.tsx
+index 30123c3..7dca989 100644
+--- a/ui/src/components/UserManagement/UserForm.tsx
++++ b/ui/src/components/UserManagement/UserForm.tsx
+@@ -59,6 +59,12 @@ const UserForm: React.FC = () => {
+     }
+   ).refine(
+     (data) => {
++      if (isEditMode) {
++        if (data.password) {
++          return data.password.length >= 8;
++        }
++        return true;
++      }
+       if (!isEditMode && !existsGlobally) {
+         return data.password && data.password.length >= 8;
+       }
+@@ -70,6 +76,12 @@ const UserForm: React.FC = () => {
+     }
+   ).refine(
+     (data) => {
++      if (isEditMode) {
++        if (data.password || data.password_confirmation) {
++          return data.password === data.password_confirmation;
++        }
++        return true;
++      }
+       if (!isEditMode && !existsGlobally) {
+         return data.password === data.password_confirmation;
+       }
+@@ -85,6 +97,7 @@ const UserForm: React.FC = () => {
+   const [createdUser, setCreatedUser] = useState<Member | null>(null);
+   const [loading, setLoading] = useState(false);
+   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
++  const [showPassword, setShowPassword] = useState(false);
+ 
+   const {
+     register,
+@@ -184,11 +197,15 @@ const UserForm: React.FC = () => {
+ 
+     try {
+       if (isEditMode && user) {
+-        const updatedUser = await updateOrgUser(currentOrgId.toString(), user.id.toString(), {
++        const payload: any = {
+           first_name: data.firstName,
+           last_name: data.lastName,
+           role_id: roleNameToId(data.role),
+-        });
++        };
++        if (data.password) {
++          payload.password = data.password;
++        }
++        const updatedUser = await updateOrgUser(currentOrgId.toString(), user.id.toString(), payload);
+         toast.success(`User ${updatedUser.email} updated successfully!`);
+         dispatch(loadUserOrganizations());
+       } else {
+@@ -250,7 +267,7 @@ const UserForm: React.FC = () => {
+           </p>
+         </div>
+ 
+-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 bg-gray-800 p-8 rounded-lg">
++        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 bg-gray-800 p-8 rounded-lg" autoComplete="off">
+           <Input
+             label="Email Address"
+             id="email"
+@@ -303,26 +320,47 @@ const UserForm: React.FC = () => {
+             required
+           />
+ 
+-          {!isEditMode && !existsGlobally && (
++          {(!isEditMode && !existsGlobally) || (isEditMode && currentUserRole === 'super_admin') ? (
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <Input
+-                label="Password"
++                label={isEditMode ? "New Password" : "Password"}
+                 id="password"
+-                type="password"
++                type={showPassword ? "text" : "password"}
++                autoComplete="new-password"
+                 {...register('password')}
+                 error={errors.password?.message}
+-                required
++                required={!isEditMode}
++                iconPosition="right"
++                icon={
++                  <button
++                    type="button"
++                    onClick={() => setShowPassword(!showPassword)}
++                    className="pointer-events-auto text-gray-400 hover:text-white focus:outline-none"
++                  >
++                    {showPassword ? (
++                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
++                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
++                      </svg>
++                    ) : (
++                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
++                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
++                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
++                      </svg>
++                    )}
++                  </button>
++                }
+               />
+               <Input
+-                label="Confirm Password"
++                label={isEditMode ? "Confirm New Password" : "Confirm Password"}
+                 id="password_confirmation"
+-                type="password"
++                type={showPassword ? "text" : "password"}
++                autoComplete="new-password"
+                 {...register('password_confirmation')}
+                 error={errors.password_confirmation?.message}
+-                required
++                required={!isEditMode}
+               />
+             </div>
+-          )}
++          ) : null}
+ 
+           <div className="flex justify-end space-x-4 pt-4">
+             <Button
+diff --git a/ui/src/pages/Prompts/index.tsx b/ui/src/pages/Prompts/index.tsx
+index fd1d7e8..fd565aa 100644
+--- a/ui/src/pages/Prompts/index.tsx
++++ b/ui/src/pages/Prompts/index.tsx
+@@ -4,6 +4,7 @@ import promptsService from '../../services/prompts';
+ import type { CatalogEntry, VariablesResponse } from '../../types/prompts';
+ import LicenseUpgradeDialog from '../../components/License/LicenseUpgradeDialog';
+ import { useHasLicenseFor } from '../../hooks/useLicenseTier';
++import { useOrgContext } from '../../hooks/useOrgContext';
+ 
+ const DEFAULT_PROMPT_KEY = 'code_review';
+ 
+@@ -19,6 +20,10 @@ const PromptsPage: React.FC = () => {
+   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
+   const hasTeamLicense = useHasLicenseFor('team');
+ 
++  const { currentOrg } = useOrgContext();
++  const currentUserRole = currentOrg?.role;
++  const canEdit = currentUserRole === 'owner' || currentUserRole === 'super_admin';
++
+   const hasStyleVar = useMemo(() => variables?.variables.some(v => v.name === 'style_guide'), [variables]);
+   const hasSecurityVar = useMemo(() => variables?.variables.some(v => v.name === 'security_guidelines'), [variables]);
+ 
+@@ -132,16 +137,19 @@ const PromptsPage: React.FC = () => {
+               <p className="text-xs text-slate-400 mt-1">Guidance appended to code review prompts to enforce consistency and clarity.</p>
+             </div>
+             <textarea
+-              className="w-full min-h-[12rem] bg-slate-800 border border-slate-700 rounded p-3 text-slate-200 resize-y"
++              className="w-full min-h-[12rem] bg-slate-800 border border-slate-700 rounded p-3 text-slate-200 resize-y disabled:opacity-50 disabled:cursor-not-allowed"
+               placeholder="Add style guidance to help reviewers focus on consistency and clarity"
+               value={styleGuide}
+               onChange={(e) => setStyleGuide(e.target.value)}
++              disabled={!canEdit}
+             />
+-            <div className="mt-3 flex justify-end">
+-              <Button onClick={() => saveChunk('style')} isLoading={saving === 'style'}>
+-                Save
+-              </Button>
+-            </div>
++            {canEdit && (
++              <div className="mt-3 flex justify-end">
++                <Button onClick={() => saveChunk('style')} isLoading={saving === 'style'}>
++                  Save
++                </Button>
++              </div>
++            )}
+           </Card>
+         )}
+ 
+@@ -152,16 +160,19 @@ const PromptsPage: React.FC = () => {
+               <p className="text-xs text-slate-400 mt-1">Security checklist injected into prompts to improve vulnerability detection.</p>
+             </div>
+             <textarea
+-              className="w-full min-h-[12rem] bg-slate-800 border border-slate-700 rounded p-3 text-slate-200 resize-y"
++              className="w-full min-h-[12rem] bg-slate-800 border border-slate-700 rounded p-3 text-slate-200 resize-y disabled:opacity-50 disabled:cursor-not-allowed"
+               placeholder="Add security checklists and policies to elevate review quality"
+               value={securityGuide}
+               onChange={(e) => setSecurityGuide(e.target.value)}
++              disabled={!canEdit}
+             />
+-            <div className="mt-3 flex justify-end">
+-              <Button onClick={() => saveChunk('security')} isLoading={saving === 'security'}>
+-                Save
+-              </Button>
+-            </div>
++            {canEdit && (
++              <div className="mt-3 flex justify-end">
++                <Button onClick={() => saveChunk('security')} isLoading={saving === 'security'}>
++                  Save
++                </Button>
++              </div>
++            )}
+           </Card>
+         )}
+       </div>
+diff --git a/ui/src/pages/Reviews/NewReview.tsx b/ui/src/pages/Reviews/NewReview.tsx
+index 207b73c..08ec2f3 100644
+--- a/ui/src/pages/Reviews/NewReview.tsx
++++ b/ui/src/pages/Reviews/NewReview.tsx
+@@ -216,9 +216,9 @@ const NewReview: React.FC = () => {
+           setError(errorData.message || err.message || 'Failed to trigger review. Please try again later.');
+         }
+       } else if (err?.status === 403) {
+-        // LOC quota exceeded (from new backend enforcement)
++        // LOC quota exceeded or Seat Assignment Error
+         const errorData = err?.data || err;
+-        setError(errorData.error || 'Monthly LOC quota exceeded. Upgrade your plan or wait for reset.');
++        setError(errorData.error || errorData.message || 'Monthly LOC quota exceeded. Upgrade your plan or wait for reset.');
+       } else if (err?.status === 429) {
+         const trialReadOnly = Boolean(err?.data?.envelope?.trial_readonly);
+         if (trialReadOnly) {

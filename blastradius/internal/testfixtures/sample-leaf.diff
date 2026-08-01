@@ -1,0 +1,20 @@
+commit 4ed5804571c56c3f8a7a18cfb89d978f8154c670
+Author: Lince Mathew <linz07m@gmail.com>
+Date:   Tue May 12 21:55:16 2026 +0530
+
+    added log for email invitation
+    
+    LiveReview Pre-Commit Check: ran (iter:2, coverage:0%)
+
+diff --git a/network/email/invitation.go b/network/email/invitation.go
+index 471d04a..0d2d95e 100644
+--- a/network/email/invitation.go
++++ b/network/email/invitation.go
+@@ -29,6 +29,7 @@ func getParseAppID() string {
+ func SendInvitationEmail(params InvitationParams) error {
+ 	baseURL := os.Getenv("FW_PARSE_BASE_URL")
+ 	if baseURL == "" {
++		fmt.Println("[Invitation] FW_PARSE_BASE_URL not set, skipping invitation");
+ 		return nil
+ 	}
+ 	apiURL := fmt.Sprintf("%s/parse/functions/userInvitation", baseURL)

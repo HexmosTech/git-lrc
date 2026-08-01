@@ -2194,6 +2194,39 @@ body {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.blast-radius-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+.blast-radius-none {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-dim);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+.blast-radius-low {
+  background: rgba(55, 148, 255, 0.16);
+  color: #93c5fd;
+  border: 1px solid rgba(55, 148, 255, 0.3);
+}
+.blast-radius-medium {
+  background: rgba(204, 167, 0, 0.18);
+  color: #fef08a;
+  border: 1px solid rgba(204, 167, 0, 0.32);
+}
+.blast-radius-high {
+  background: rgba(241, 76, 76, 0.22);
+  color: #fecaca;
+  border: 1px solid rgba(241, 76, 76, 0.4);
+}
+
 /* Comments */
 .comment-row {
   background: rgba(59, 130, 246, 0.05);

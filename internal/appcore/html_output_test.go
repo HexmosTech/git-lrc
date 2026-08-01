@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/HexmosTech/git-lrc/internal/reviewmodel"
+	"github.com/HexmosTech/git-lrc/internal/reviewopts"
 )
 
 // TestHTMLOutputConsistency tests that refactored HTML generation produces identical output
@@ -79,7 +80,7 @@ func TestHTMLOutputConsistency(t *testing.T) {
 
 	// Generate HTML using the current implementation
 	outputPath := filepath.Join(tmpDir, "output.html")
-	err := saveHTMLOutput(outputPath, result, false, false, false, "", "", "", "")
+	err := saveHTMLOutput(outputPath, result, false, false, false, "", "", "", "", reviewopts.Options{})
 	if err != nil {
 		t.Fatalf("Failed to generate HTML: %v", err)
 	}
@@ -180,7 +181,7 @@ func TestHTMLTemplateWithEmptyData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			outputPath := filepath.Join(tmpDir, tt.name+".html")
-			err := saveHTMLOutput(outputPath, tt.result, false, false, false, "", "", "", "")
+			err := saveHTMLOutput(outputPath, tt.result, false, false, false, "", "", "", "", reviewopts.Options{})
 			if err != nil {
 				t.Errorf("Failed to generate HTML for %s: %v", tt.name, err)
 			}

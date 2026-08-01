@@ -3,6 +3,17 @@ import { waitForPreact, filePathToId, getCommentVisibilityKey, buildIssueCodeExc
 import { matchesIssueFilters } from './issue_filter_state.mjs';
 import { getComment } from './Comment.js';
 import { getCommentRenderLabel } from './review_performance_state.mjs';
+import { renderIcon } from './icons.js';
+
+// Discrete tiers (mirroring the existing badge-info/warning/critical scheme)
+// rather than a continuous color ramp, for visual consistency with the rest
+// of the review UI.
+function blastRadiusTier(score) {
+    if (score >= 66) return 'blast-radius-high';
+    if (score >= 33) return 'blast-radius-medium';
+    if (score > 0) return 'blast-radius-low';
+    return 'blast-radius-none';
+}
 
 export async function createDiffTable() {
     const { html } = await waitForPreact();
@@ -36,7 +47,15 @@ export async function createDiffTable() {
             <table class="diff-table">
                 ${hunks.map(hunk => html`
                     <tr>
-                        <td colspan="3" class="hunk-header">${hunk.Header}</td>
+                        <td colspan="3" class="hunk-header">
+                            ${typeof hunk.BlastRadius === 'number' && html`
+                                <span
+                                    class="blast-radius-badge ${blastRadiusTier(hunk.BlastRadius)}"
+                                    title="Blast radius: this hunk touches symbols with ${hunk.BlastRadius.toFixed(1)}/100 relative importance in this review"
+                                >${renderIcon(html, 'blastRadius', { size: 11 })} ${Math.round(hunk.BlastRadius)}</span>
+                            `}
+                            ${hunk.Header}
+                        </td>
                     </tr>
                     ${hunk.Lines.map((line, idx) => {
                         // Build line-numbered code context for per-issue copy.

@@ -544,6 +544,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		if parseErr != nil && verbose {
 			log.Printf("Warning: failed to parse diff for skeleton HTML: %v", parseErr)
 		}
+		annotateBlastRadius(opts, filesFromDiff, verbose)
 
 		// Initialize global review state for API-based UI
 		reviewStateMu.Lock()
@@ -1353,7 +1354,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 	// Save formatted text output if requested
 	if textPath := opts.SaveText; textPath != "" {
-		if err := saveTextOutput(textPath, result, verbose); err != nil {
+		if err := saveTextOutput(textPath, result, verbose, opts); err != nil {
 			return fmt.Errorf("failed to save text output: %w", err)
 		}
 	}
@@ -1362,7 +1363,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	// Skip if progressive loading is active - the browser already has the skeleton HTML
 	// and will receive error/completion via the events API
 	if htmlPath := opts.SaveHTML; htmlPath != "" && !progressiveLoadingActive {
-		if err := saveHTMLOutput(htmlPath, result, verbose, useDecisionUI, isPostCommitReview, initialMsg, reviewID, config.APIURL, config.APIKey); err != nil {
+		if err := saveHTMLOutput(htmlPath, result, verbose, useDecisionUI, isPostCommitReview, initialMsg, reviewID, config.APIURL, config.APIKey, opts); err != nil {
 			return fmt.Errorf("failed to save HTML output: %w", err)
 		}
 
@@ -2106,11 +2107,13 @@ func saveJSONResponse(path string, result *reviewmodel.DiffReviewResponse, verbo
 }
 
 // saveTextOutput saves formatted text output with special markers for easy comment navigation
-func saveTextOutput(path string, result *reviewmodel.DiffReviewResponse, verbose bool) error {
+func saveTextOutput(path string, result *reviewmodel.DiffReviewResponse, verbose bool, opts reviewopts.Options) error {
 	var buf bytes.Buffer
 
 	// Use a distinctive marker that's easy to search for
 	const commentMarker = ">>>COMMENT<<<"
+
+	annotateBlastRadius(opts, result.Files, verbose)
 
 	buf.WriteString("=" + strings.Repeat("=", 79) + "\n")
 	buf.WriteString("LIVEREVIEW RESULTS - TEXT FORMAT\n")
@@ -2137,12 +2140,16 @@ func saveTextOutput(path string, result *reviewmodel.DiffReviewResponse, verbose
 			buf.WriteString(fmt.Sprintf("FILE %d/%d: %s\n", fileIdx+1, len(result.Files), file.FilePath))
 			buf.WriteString(strings.Repeat("=", 80) + "\n")
 
-			if len(file.Comments) == 0 {
+			if len(file.Comments) == 0 && !opts.BlastRadius {
 				buf.WriteString("\n  No comments for this file.\n")
 				continue
 			}
 
-			buf.WriteString(fmt.Sprintf("\n  %d comment(s) on this file\n\n", len(file.Comments)))
+			if len(file.Comments) > 0 {
+				buf.WriteString(fmt.Sprintf("\n  %d comment(s) on this file\n\n", len(file.Comments)))
+			} else {
+				buf.WriteString("\n  No comments for this file (hunks shown below for blast-radius scores).\n\n")
+			}
 
 			// Create a map of line numbers to comments for easy lookup
 			commentsByLine := make(map[int][]reviewmodel.DiffReviewComment)
@@ -2151,13 +2158,22 @@ func saveTextOutput(path string, result *reviewmodel.DiffReviewResponse, verbose
 			}
 
 			// Process each hunk and insert comments inline
-			for hunkIdx, hunk := range file.Hunks {
+			hunks := file.Hunks
+			if opts.SortByBlastRadius {
+				hunks = sortedHunksByBlastRadius(hunks)
+			}
+			for hunkIdx, hunk := range hunks {
 				if hunkIdx > 0 {
 					buf.WriteString("\n")
 				}
 
+				scoreLabel := ""
+				if hunk.BlastRadius != nil {
+					scoreLabel = fmt.Sprintf(" [blast radius: %.1f]", *hunk.BlastRadius)
+				}
+
 				// Parse and render the hunk with line numbers
-				renderHunkWithComments(&buf, hunk, commentsByLine, commentMarker)
+				renderHunkWithComments(&buf, hunk, commentsByLine, commentMarker, scoreLabel)
 			}
 		}
 	}
@@ -2178,13 +2194,16 @@ func saveTextOutput(path string, result *reviewmodel.DiffReviewResponse, verbose
 	return nil
 }
 
-// renderHunkWithComments renders a diff hunk with line numbers and inline comments
-func renderHunkWithComments(buf *bytes.Buffer, hunk reviewmodel.DiffReviewHunk, commentsByLine map[int][]reviewmodel.DiffReviewComment, marker string) {
+// renderHunkWithComments renders a diff hunk with line numbers and inline comments.
+// scoreLabel, if non-empty, is appended to the hunk header line (e.g. a
+// " [blast radius: 87.3]" annotation) - it is pre-formatted by the caller so
+// this low-level renderer stays independent of the scoring feature.
+func renderHunkWithComments(buf *bytes.Buffer, hunk reviewmodel.DiffReviewHunk, commentsByLine map[int][]reviewmodel.DiffReviewComment, marker string, scoreLabel string) {
 	// Write hunk header
 	buf.WriteString(strings.Repeat("-", 80) + "\n")
-	buf.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n",
+	buf.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@%s\n",
 		hunk.OldStartLine, hunk.OldLineCount,
-		hunk.NewStartLine, hunk.NewLineCount))
+		hunk.NewStartLine, hunk.NewLineCount, scoreLabel))
 	buf.WriteString(strings.Repeat("-", 80) + "\n")
 
 	// Parse the hunk content line by line
@@ -2379,7 +2398,9 @@ func parseDiffToFiles(diffContent []byte) ([]reviewmodel.DiffReviewFileResult, e
 
 // saveHTMLOutput saves formatted HTML output with GitHub-style review UI
 
-func saveHTMLOutput(path string, result *reviewmodel.DiffReviewResponse, verbose bool, interactive bool, isPostCommitReview bool, initialMsg, reviewID, apiURL, apiKey string) error {
+func saveHTMLOutput(path string, result *reviewmodel.DiffReviewResponse, verbose bool, interactive bool, isPostCommitReview bool, initialMsg, reviewID, apiURL, apiKey string, opts reviewopts.Options) error {
+	annotateBlastRadius(opts, result.Files, verbose)
+
 	// Prepare template data
 	data := reviewhtml.PrepareHTMLData(result, interactive, isPostCommitReview, initialMsg, reviewID, apiURL, apiKey)
 

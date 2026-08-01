@@ -4,6 +4,7 @@ go 1.25.12
 
 require (
 	charm.land/bubbletea/v2 v2.0.2
+	github.com/HexmosTech/blastradius v0.0.0-00010101000000-000000000000
 	github.com/gofrs/flock v0.13.0
 	github.com/knadh/koanf/parsers/toml v0.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
@@ -50,3 +51,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/HexmosTech/blastradius => ./blastradius

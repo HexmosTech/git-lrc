@@ -1,0 +1,293 @@
+// Package client talks to a locally installed codebase-memory-mcp binary via
+// its one-shot "cli" subcommand mode (not the MCP stdio server), following the
+// same exec.Command-based external-tool pattern already used elsewhere for
+// shelling out to CLIs. See https://github.com/DeusData/codebase-memory-mcp.
+package client
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os/exec"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const defaultBinary = "codebase-memory-mcp"
+
+// DefaultTimeout bounds a single CLI invocation so a slow/unresponsive graph
+// query can never hang a caller indefinitely.
+const DefaultTimeout = 30 * time.Second
+
+// Client runs codebase-memory-mcp's "cli <tool>" one-shot mode against a
+// single already-indexed project.
+type Client struct {
+	// Binary is the executable name or path. Defaults to "codebase-memory-mcp"
+	// (resolved via PATH) when empty.
+	Binary string
+	// Project is the codebase-memory-mcp project name to query (see
+	// list_projects). Required for every call.
+	Project string
+	// Timeout bounds each individual CLI invocation. Defaults to
+	// DefaultTimeout when zero.
+	Timeout time.Duration
+}
+
+// New returns a Client for the given already-indexed project name, using the
+// default binary name and timeout.
+func New(project string) *Client {
+	return &Client{Project: project}
+}
+
+func (c *Client) binary() string {
+	if c.Binary != "" {
+		return c.Binary
+	}
+	return defaultBinary
+}
+
+func (c *Client) timeout() time.Duration {
+	if c.Timeout > 0 {
+		return c.Timeout
+	}
+	return DefaultTimeout
+}
+
+// Available reports whether the codebase-memory-mcp binary can be found on
+// PATH. Callers should check this before relying on the client and degrade
+// gracefully (skip scoring) rather than failing outright when it's absent.
+func (c *Client) Available() error {
+	_, err := exec.LookPath(c.binary())
+	if err != nil {
+		return fmt.Errorf("codebase-memory-mcp not found on PATH: %w", err)
+	}
+	return nil
+}
+
+// run executes `<binary> cli <tool> --flag value ...` and returns raw stdout.
+// stderr (the tool logs informational lines there, e.g. "level=info msg=...")
+// is captured separately so it never corrupts the JSON stdout payload, and is
+// folded into the returned error only on failure.
+func (c *Client) run(ctx context.Context, tool string, args ...string) ([]byte, error) {
+	if c.Project == "" {
+		return nil, fmt.Errorf("blastradius/client: Project is required")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, c.timeout())
+	defer cancel()
+
+	fullArgs := append([]string{"cli", tool, "--project", c.Project}, args...)
+	cmd := exec.CommandContext(ctx, c.binary(), fullArgs...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("codebase-memory-mcp cli %s: timed out after %s", tool, c.timeout())
+		}
+		return nil, fmt.Errorf("codebase-memory-mcp cli %s: %w: %s", tool, err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.Bytes(), nil
+}
+
+// QueryResult is the raw response shape of `cli query_graph`: a set of named
+// columns and rows whose values are, per observed behavior of the tool,
+// always JSON strings (even for numeric/boolean Cypher results).
+type QueryResult struct {
+	Columns []string   `json:"columns"`
+	Rows    [][]string `json:"rows"`
+	Total   int        `json:"total"`
+}
+
+// QueryGraph runs a read-only Cypher query against the project's knowledge
+// graph via `cli query_graph --query <cypher>`. maxRows <= 0 leaves the
+// tool's own default/ceiling in place.
+func (c *Client) QueryGraph(ctx context.Context, cypher string, maxRows int) (*QueryResult, error) {
+	args := []string{"--query", cypher}
+	if maxRows > 0 {
+		args = append(args, "--max-rows", strconv.Itoa(maxRows))
+	}
+	out, err := c.run(ctx, "query_graph", args...)
+	if err != nil {
+		return nil, err
+	}
+	var result QueryResult
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("blastradius/client: parsing query_graph output: %w", err)
+	}
+	return &result, nil
+}
+
+// CodeUsage is a text-based occurrence summary for a symbol name, used as a
+// fallback importance signal for symbols with no CALLS edges of their own
+// (structs, interfaces, types) - the knowledge graph only models call
+// relationships, not "this function references type X" relationships.
+type CodeUsage struct {
+	// TotalMatches is the raw grep-style hit count across the project.
+	TotalMatches int
+	// Directories lists every directory containing at least one match,
+	// sorted - a cheap proxy for "which parts of the codebase this symbol
+	// reaches", since we already pay for the search either way.
+	Directories []string
+}
+
+// SearchCodeUsage runs `cli search_code --mode files` for pattern and
+// summarizes the result.
+func (c *Client) SearchCodeUsage(ctx context.Context, pattern string) (*CodeUsage, error) {
+	out, err := c.run(ctx, "search_code", "--pattern", pattern, "--mode", "files", "--limit", "1")
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		TotalGrepMatches int            `json:"total_grep_matches"`
+		Directories      map[string]int `json:"directories"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("blastradius/client: parsing search_code output: %w", err)
+	}
+	dirs := make([]string, 0, len(result.Directories))
+	for d := range result.Directories {
+		dirs = append(dirs, strings.TrimSuffix(d, "/"))
+	}
+	sort.Strings(dirs)
+	return &CodeUsage{TotalMatches: result.TotalGrepMatches, Directories: dirs}, nil
+}
+
+// ArchitectureEntryPoint is one entry in get_architecture's "entry_points"
+// aspect - a real, cross-language entry point (main functions, extension
+// activate/deactivate hooks, script mains), not just the is_entry_point
+// property on individual nodes.
+type ArchitectureEntryPoint struct {
+	Name          string `json:"name"`
+	QualifiedName string `json:"qualified_name"`
+	File          string `json:"file"`
+}
+
+// ArchitectureHotspot is one entry in the "hotspots" aspect: a repo-wide
+// top-fan-in symbol, precomputed by the tool.
+type ArchitectureHotspot struct {
+	Name          string `json:"name"`
+	QualifiedName string `json:"qualified_name"`
+	FanIn         int    `json:"fan_in"`
+}
+
+// ArchitectureLayer is one entry in the "layers" aspect: a package
+// classified as "api" (has HTTP routes), "entry" (only outbound calls),
+// "core" (high fan-in), or "internal".
+type ArchitectureLayer struct {
+	Name   string `json:"name"` // package name
+	Layer  string `json:"layer"`
+	Reason string `json:"reason"`
+}
+
+// ArchitectureCluster is one Louvain community-detection cluster from the
+// "clusters" aspect - a real, detected functional module, not just a
+// directory grouping.
+type ArchitectureCluster struct {
+	ID       int      `json:"id"`
+	Label    string   `json:"label"`
+	Members  int      `json:"members"`
+	Cohesion float64  `json:"cohesion"`
+	TopNodes []string `json:"top_nodes"`
+	Packages []string `json:"packages"`
+}
+
+// ArchitectureContext is the response shape of `cli get_architecture`,
+// limited to the fields blastradius uses.
+type ArchitectureContext struct {
+	Project     string                   `json:"project"`
+	TotalNodes  int                      `json:"total_nodes"`
+	TotalEdges  int                      `json:"total_edges"`
+	EntryPoints []ArchitectureEntryPoint `json:"entry_points"`
+	Hotspots    []ArchitectureHotspot    `json:"hotspots"`
+	Layers      []ArchitectureLayer      `json:"layers"`
+	Clusters    []ArchitectureCluster    `json:"clusters"`
+}
+
+// GetArchitecture runs `cli get_architecture --aspects a --aspects b ...`
+// (confirmed live: the --aspects array flag is passed by repeating it once
+// per value, not comma-joined or JSON-encoded). Meant to be called once per
+// report and cached - this is architecture-wide, not per-hunk/symbol.
+func (c *Client) GetArchitecture(ctx context.Context, aspects []string) (*ArchitectureContext, error) {
+	var args []string
+	for _, a := range aspects {
+		args = append(args, "--aspects", a)
+	}
+	out, err := c.run(ctx, "get_architecture", args...)
+	if err != nil {
+		return nil, err
+	}
+	var result ArchitectureContext
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("blastradius/client: parsing get_architecture output: %w", err)
+	}
+	return &result, nil
+}
+
+// ProjectInfo is the subset of `cli list_projects` output we care about.
+type ProjectInfo struct {
+	Name  string `json:"name"`
+	Nodes int    `json:"nodes"`
+	Edges int    `json:"edges"`
+}
+
+// ListProjects returns every project codebase-memory-mcp currently has
+// indexed, regardless of c.Project.
+func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout())
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, c.binary(), "cli", "list_projects")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("codebase-memory-mcp cli list_projects: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+
+	var payload struct {
+		Projects []ProjectInfo `json:"projects"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		return nil, fmt.Errorf("blastradius/client: parsing list_projects output: %w", err)
+	}
+	return payload.Projects, nil
+}
+
+// ProjectIndexed reports whether c.Project appears in the current
+// list_projects output.
+func (c *Client) ProjectIndexed(ctx context.Context) (bool, error) {
+	projects, err := c.ListProjects(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, p := range projects {
+		if p.Name == c.Project {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// CypherString renders a Go string as a single-quoted Cypher string literal,
+// escaping backslashes and single quotes.
+func CypherString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	return "'" + s + "'"
+}
+
+// CypherStringList renders a slice of Go strings as a Cypher list literal,
+// e.g. []string{"a","b"} -> "['a','b']".
+func CypherStringList(items []string) string {
+	parts := make([]string, len(items))
+	for i, it := range items {
+		parts[i] = CypherString(it)
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}

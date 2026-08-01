@@ -31,6 +31,9 @@ type HTMLFileData struct {
 type HTMLHunkData struct {
 	Header string
 	Lines  []HTMLLineData
+	// BlastRadius mirrors reviewmodel.DiffReviewHunk.BlastRadius: nil unless
+	// --blast-radius was used.
+	BlastRadius *float64
 }
 
 type HTMLLineData struct {
@@ -84,8 +87,9 @@ type JSONFileData struct {
 }
 
 type JSONHunkData struct {
-	Header string         `json:"Header"`
-	Lines  []JSONLineData `json:"Lines"`
+	Header      string         `json:"Header"`
+	Lines       []JSONLineData `json:"Lines"`
+	BlastRadius *float64       `json:"BlastRadius,omitempty"`
 }
 
 type JSONLineData struct {

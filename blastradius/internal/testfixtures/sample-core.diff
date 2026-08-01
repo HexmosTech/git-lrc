@@ -1,0 +1,118 @@
+commit e5e2f2ad9611d8df43032fa0849ed32110f157d7
+Author: Lince Mathew <linz07m@gmail.com>
+Date:   Sat Jun 20 21:44:58 2026 +0530
+
+    Centralize User API Key Generation and Database Access
+    
+    LiveReview Pre-Commit Check: ran (iter:1, coverage:0%)
+
+diff --git a/internal/api/users/user_service.go b/internal/api/users/user_service.go
+index a4c8ab7..0dd1ee8 100644
+--- a/internal/api/users/user_service.go
++++ b/internal/api/users/user_service.go
+@@ -21,7 +21,6 @@ type APIKeyGenerator func(userID, orgID int64) (string, error)
+ // UserService handles core user management operations
+ type UserService struct {
+ 	store           *storageusers.UserStore
+-	db              *sql.DB
+ 	apiKeyGenerator APIKeyGenerator
+ }
+ 
+@@ -29,7 +28,6 @@ type UserService struct {
+ func NewUserService(db *sql.DB, apiKeyGenerator APIKeyGenerator) *UserService {
+ 	return &UserService{
+ 		store:           storageusers.NewUserStore(db),
+-		db:              db,
+ 		apiKeyGenerator: apiKeyGenerator,
+ 	}
+ }
+@@ -138,6 +136,18 @@ func (us *UserService) CreateUserInOrg(orgID, createdByUserID int64, req CreateU
+ 			return fmt.Errorf("failed to update user default organization: %w", err)
+ 		}
+ 
++		// Generate onboarding API key if generator is configured
++		if us.apiKeyGenerator != nil {
++			newKey, err := us.apiKeyGenerator(userID, orgID)
++			if err != nil {
++				return fmt.Errorf("failed to generate onboarding API key: %w", err)
++			}
++			_, err = us.store.TxExec(tx, `UPDATE users SET onboarding_api_key = $1 WHERE id = $2`, newKey, userID)
++			if err != nil {
++				return fmt.Errorf("failed to update onboarding API key in db: %w", err)
++			}
++		}
++
+ 		// Add audit trail
+ 		err = us.addUserAuditLog(tx, orgID, userID, createdByUserID, "created", map[string]interface{}{
+ 			"role_id": req.RoleID,
+@@ -160,21 +170,6 @@ func (us *UserService) CreateUserInOrg(orgID, createdByUserID int64, req CreateU
+ 		return nil, err
+ 	}
+ 
+-	// Generate onboarding API key if generator is configured and key is empty
+-	if us.apiKeyGenerator != nil && user.OnboardingAPIKey == "" {
+-		newKey, err := us.apiKeyGenerator(user.ID, orgID)
+-		if err != nil {
+-			log.Printf("[Invitation] Error generating onboarding API key for user %d: %v", user.ID, err)
+-		} else {
+-			_, err = us.db.Exec(`UPDATE users SET onboarding_api_key = $1 WHERE id = $2`, newKey, user.ID)
+-			if err != nil {
+-				log.Printf("[Invitation] Error updating onboarding_api_key in db for user %d: %v", user.ID, err)
+-			} else {
+-				user.OnboardingAPIKey = newKey
+-			}
+-		}
+-	}
+-
+ 	// Send invitation email asynchronously
+ 	go us.sendInvitation(user, createdByUserID)
+ 
+diff --git a/storage/users/user_store.go b/storage/users/user_store.go
+index 7341882..b2dd432 100644
+--- a/storage/users/user_store.go
++++ b/storage/users/user_store.go
+@@ -18,6 +18,10 @@ func (s *UserStore) Query(query string, args ...interface{}) (*sql.Rows, error)
+ 	return s.db.Query(query, args...)
+ }
+ 
++func (s *UserStore) Exec(query string, args ...interface{}) (sql.Result, error) {
++	return s.db.Exec(query, args...)
++}
++
+ func (s *UserStore) TxQueryRow(tx *sql.Tx, query string, args ...interface{}) *sql.Row {
+ 	return tx.QueryRow(query, args...)
+ }
+diff --git a/ui/src/components/UserManagement/UserList.tsx b/ui/src/components/UserManagement/UserList.tsx
+index 5496e96..984f55c 100644
+--- a/ui/src/components/UserManagement/UserList.tsx
++++ b/ui/src/components/UserManagement/UserList.tsx
+@@ -111,11 +111,11 @@ export const UserList: React.FC<UserListProps> = ({
+         const url = URL.createObjectURL(blob);
+         const link = document.createElement('a');
+         link.setAttribute('href', url);
+-        link.setAttribute('download', 'credentials.csv');
++        link.setAttribute('download', 'git-lrc-setup.csv');
+         document.body.appendChild(link);
+         link.click();
+         document.body.removeChild(link);
+-        toast.success(`credentials.csv downloaded successfully for ${selectedUsers.size} user(s)!`);
++        toast.success(`git-lrc-setup.csv downloaded successfully for ${selectedUsers.size} user(s)!`);
+     };
+ 
+     // Loading state
+@@ -199,13 +199,14 @@ export const UserList: React.FC<UserListProps> = ({
+                                 onClick={handleDownloadSelectedCredentials}
+                                 disabled={loading}
+                                 className="flex items-center"
++                                title="Download the git-lrc installation details for the users"
+                                 icon={
+                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                     </svg>
+                                 }
+                             >
+-                                Download Credentials
++                                Download Onboarding Commands
+                             </Button>
+                         )}
+                         {onRefresh && (
