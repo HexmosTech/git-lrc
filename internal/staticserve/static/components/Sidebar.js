@@ -13,9 +13,11 @@ export async function createSidebar() {
     // the corresponding block. hunkNav: FilePath -> [{targetId, expandKey,
     // hunkNum, score}] (null/empty outside that view).
     //
-    // Each file header is collapsible when it has hunk entries (default
-    // collapsed), keeping the list scannable for big diffs. Clicking the
-    // file header still jumps to the file; the caret toggles the submenu.
+    // Collapsibility model: the whole file row toggles its hunk submenu.
+    // Clicking the row also jumps to the file (so the click always does
+    // something visible, even before expansion). The caret is a visual
+    // affordance only, not a tiny separate click target — it is too small
+    // to hit reliably, so it never has its own onClick handler.
     return function Sidebar({ files, activeFileId, onFileClick, onHunkClick, hunkNav, issueFilters, hiddenCommentKeys, open, onClose }) {
         const totalFiles = files.length;
         const totalComments = files.reduce((sum, file) => sum + countFileVisibleIssues(file, issueFilters, hiddenCommentKeys), 0);
@@ -23,18 +25,23 @@ export async function createSidebar() {
         // populated (whole-diff risk view). Default expanded = empty set so
         // the hunk submenus start collapsed.
         const [expandedFiles, setExpandedFiles] = useState(() => new Set());
-        const toggleFile = useCallback((filePath, e) => {
-            e.stopPropagation();
-            setExpandedFiles(prev => {
-                const next = new Set(prev);
-                if (next.has(filePath)) {
-                    next.delete(filePath);
-                } else {
-                    next.add(filePath);
-                }
-                return next;
-            });
-        }, []);
+        const handleFileRowClick = useCallback((file, e) => {
+            const hasHunks = !!(hunkNav && (hunkNav[file.FilePath] || []).length);
+            if (hasHunks) {
+                // Toggle the submenu; jump to the file either way so the
+                // click never feels dead.
+                setExpandedFiles(prev => {
+                    const next = new Set(prev);
+                    if (next.has(file.FilePath)) {
+                        next.delete(file.FilePath);
+                    } else {
+                        next.add(file.FilePath);
+                    }
+                    return next;
+                });
+            }
+            onFileClick(filePathToId(file.FilePath));
+        }, [hunkNav, onFileClick]);
 
         return html`
             ${open && html`<div class="sidebar-backdrop" onClick=${onClose}></div>`}
@@ -59,15 +66,13 @@ export async function createSidebar() {
                             <div
                                 class="sidebar-file ${isActive ? 'active' : ''} ${hunkEntries.length > 0 ? 'sidebar-file-collapsible' : ''} ${isExpanded ? 'expanded' : ''}"
                                 data-file-id="${fileId}"
-                                onClick=${() => onFileClick(fileId)}
+                                onClick=${(e) => handleFileRowClick(file, e)}
+                                aria-expanded=${hunkEntries.length > 0 ? isExpanded : undefined}
                             >
                                 ${hunkEntries.length > 0 && html`
-                                    <span
-                                        class="sidebar-file-caret"
-                                        onClick=${(e) => toggleFile(file.FilePath, e)}
-                                        aria-expanded=${isExpanded}
-                                        title="${isExpanded ? 'Collapse hunks' : 'Expand hunks'}"
-                                    >${isExpanded ? '▾' : '▸'}</span>
+                                    <span class="sidebar-file-caret" aria-hidden="true">
+                                        ${isExpanded ? '▾' : '▸'}
+                                    </span>
                                 `}
                                 <span class="sidebar-file-name" title="${file.FilePath}">
                                     ${file.FilePath}

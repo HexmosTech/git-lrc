@@ -240,20 +240,27 @@ body {
 }
 
 /* Caret for files with an expandable hunk submenu (whole-diff risk view).
-   Clicking toggles the submenu; clicking the rest of the row still jumps
-   to the file like a normal file click. */
+   The caret is a VISUAL affordance only — clicking anywhere on the row
+   toggles the submenu. Sized large enough to read at a glance, colored to
+   contrast with the row, and rotated when expanded for a clear state cue. */
 .sidebar-file-caret {
   flex-shrink: 0;
-  width: 12px;
+  width: 14px;
   text-align: center;
-  font-size: 10px;
-  color: var(--text-dim);
-  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-secondary);
   user-select: none;
   transition: transform 0.12s ease, color 0.12s ease;
+  opacity: 0.85;
 }
-.sidebar-file-caret:hover {
+.sidebar-file-collapsible:hover .sidebar-file-caret {
   color: var(--text-primary);
+  opacity: 1;
+}
+.sidebar-file-collapsible.expanded .sidebar-file-caret {
+  /* Subtle visual cue when expanded, beyond the glyph flip. */
+  color: var(--accent-blue, #3794ff);
 }
 
 .sidebar-file-name {
