@@ -113,15 +113,44 @@ func startBlastRadiusScoring(opts reviewopts.Options, repoRootPath string, diffC
 	return h
 }
 
+// autoInstallGraphEngine is a one-time, best-effort background download of
+// the codebase-memory-mcp binary into ~/.lrc/bin. It exists so existing lrc
+// users who upgrade get scoring on their next review without needing to know
+// about `lrc graph install` — the engine appears spontaneously, just like the
+// install scripts do for new users. Failures are reported but never block
+// the review.
+func autoInstallGraphEngine(verbose bool) error {
+	res, err := graphengine.Install(graphengine.InstallOptions{})
+	if err != nil {
+		return err
+	}
+	if res.Skipped {
+		if verbose {
+			log.Printf("blast-radius: engine already installed at %s (version %s)", res.Path, res.Version)
+		}
+	} else {
+		log.Printf("blast-radius: auto-installed graph engine %s into %s", res.Version, res.Path)
+	}
+	return nil
+}
+
 // computeBlastRadiusReport does the actual work: binary resolution, project
 // auto-derivation via index_repository (which creates or incrementally
 // refreshes the index and returns the project name), and scoring.
 func computeBlastRadiusReport(opts reviewopts.Options, repoRootPath string, diffContent []byte, verbose bool) (*blastradius.Report, error) {
 	binary, err := graphengine.Resolve()
-	if err != nil {
-		if errors.Is(err, graphengine.ErrNotInstalled) {
+	if errors.Is(err, graphengine.ErrNotInstalled) {
+		if verbose {
+			log.Print("blast-radius: engine not found, attempting one-time install into ~/.lrc/bin")
+		}
+		if instErr := autoInstallGraphEngine(verbose); instErr != nil {
+			return nil, fmt.Errorf("graph engine not installed; run `lrc graph install` to enable blast-radius scoring (auto-install failed: %v)", instErr)
+		}
+		binary, err = graphengine.Resolve()
+		if err != nil {
 			return nil, fmt.Errorf("graph engine not installed; run `lrc graph install` to enable blast-radius scoring")
 		}
+	} else if err != nil {
 		return nil, err
 	}
 
