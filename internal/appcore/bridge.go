@@ -463,7 +463,15 @@ func pickServePort(preferredPort int) (net.Listener, int, error) {
 		lastPort = 65535
 	}
 
+	announced := false
 	for candidate := preferredPort; candidate <= lastPort; candidate++ {
+		// Reaching a second candidate means the preferred port was taken, so the scan
+		// may run for a second or two. Say so once, before the wait.
+		if candidate > preferredPort && !announced {
+			fmt.Println("Finding port to run the review")
+			announced = true
+		}
+
 		if runtime.GOOS == "windows" {
 			lnLocal, errLocal := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
 			lnAll, errAll := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", candidate))
