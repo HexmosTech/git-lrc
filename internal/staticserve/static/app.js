@@ -331,6 +331,33 @@ async function initApp() {
             activeTabRef.current = activeTab;
         }, [activeTab]);
 
+        // Every in-page navigation (file click, comment next/prev) pushes a
+        // browser-history state so the back button works: pressing back after
+        // a jump returns to the previous scroll position and highlight. The
+        // popstate listener restores state by calling the handler again with
+        // pushState=false — the handler does the work but does not re-push.
+        const navRef = useRef(null);
+        navRef.current = { onFileClick: null, onNavigateComment: null };
+        useEffect(() => {
+            const onPopState = (e) => {
+                if (!e.state || !e.state.lrc) return;
+                const { kind, ...args } = e.state.lrc;
+                if (kind === 'file' && navRef.current.onFileClick) {
+                    navRef.current.onFileClick(args.fileId, args.lineNumber, false);
+                } else if (kind === 'comment' && navRef.current.onNavigateComment) {
+                    navRef.current.onNavigateComment(args.commentId, args.fileId, false);
+                } else if (kind === 'hunk') {
+                    // Scroll to the hunk header; the hash '#hunk-<fileId>-<idx>'
+                    // is already visible. The panel state is transient — we
+                    // just land at the right scroll position.
+                    const el = document.getElementById(args.elementId);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            };
+            window.addEventListener('popstate', onPopState);
+            return () => window.removeEventListener('popstate', onPopState);
+        }, []);
+
         const commitReviewData = useCallback((updater) => {
             setReviewData(prev => {
                 const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -579,7 +606,10 @@ async function initApp() {
         }, []);
 
         // Handle sidebar file click
-        const handleFileClick = useCallback((fileId, lineNumber = null) => {
+        const handleFileClick = useCallback((fileId, lineNumber = null, pushState = true) => {
+            if (pushState) {
+                history.pushState({ lrc: { kind: 'file', fileId, lineNumber } }, '', fileId ? ('#file-' + encodeURIComponent(fileId)) : location.href);
+            }
             // Always switch to files tab when clicking a file in sidebar
             setActiveTab('files');
             setActiveFileId(fileId);
@@ -626,6 +656,7 @@ async function initApp() {
                 }
             }, 100);
         }, []);
+        navRef.current.onFileClick = handleFileClick;
 
         // Sidebar hunk-submenu click: expand the real file's blocks (state is
         // keyed by the real file ID) then scroll to the specific ranked block.
@@ -717,7 +748,10 @@ async function initApp() {
         }, []);
         
         // Navigate to comment
-        const navigateToComment = useCallback((commentId, fileId) => {
+        const navigateToComment = useCallback((commentId, fileId, pushState = true) => {
+            if (pushState) {
+                history.pushState({ lrc: { kind: 'comment', commentId, fileId } }, '', '#comment-' + encodeURIComponent(commentId));
+            }
             // Switch to files tab first
             setActiveTab('files');
             
@@ -749,6 +783,7 @@ async function initApp() {
                 }
             }, 100);
         }, [getVisibleTopContentOffset]);
+        navRef.current.onNavigateComment = navigateToComment;
         
         // Tab change
         const handleTabChange = useCallback((tab) => {

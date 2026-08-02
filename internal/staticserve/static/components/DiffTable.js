@@ -102,6 +102,12 @@ export async function createDiffTable() {
             const mainRect = mainContent.getBoundingClientRect();
             const scrollTarget = mainContent.scrollTop + rect.top - mainRect.top - topOffset;
             mainContent.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+            const anchor = '#hunk-' + encodeURIComponent(resolvedFileId) + '-' + lastOpenedHunkIdx;
+            history.pushState(
+                { lrc: { kind: 'hunk', fileId: resolvedFileId, hunkIdx: lastOpenedHunkIdx, elementId: 'hunk-' + resolvedFileId + '-' + lastOpenedHunkIdx } },
+                '',
+                anchor
+            );
         }, [lastOpenedHunkIdx, openBlastPanels, resolvedFileId]);
 
         return html`
