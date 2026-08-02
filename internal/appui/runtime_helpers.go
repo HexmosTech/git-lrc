@@ -12,10 +12,20 @@ func highlightURL(url string) string {
 	return "\033[36m" + url + "\033[0m"
 }
 
-func pickServePort(preferredPort, maxTries int) (net.Listener, int, error) {
-	for i := 0; i < maxTries; i++ {
-		candidate := preferredPort + i
+// maxServePort is the highest port pickServePort will try. 49151 ends the IANA
+// registered range; above it is the dynamic range the kernel hands to outgoing
+// connections.
+const maxServePort = 49151
 
+// pickServePort binds the first free port at or after preferredPort, scanning up to
+// maxServePort. A busy port is skipped, never fatal — only a fully occupied range errors.
+func pickServePort(preferredPort int) (net.Listener, int, error) {
+	lastPort := maxServePort
+	if preferredPort > lastPort {
+		lastPort = 65535
+	}
+
+	for candidate := preferredPort; candidate <= lastPort; candidate++ {
 		if runtime.GOOS == "windows" {
 			lnLocal, errLocal := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
 			lnAll, errAll := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", candidate))
@@ -40,7 +50,7 @@ func pickServePort(preferredPort, maxTries int) (net.Listener, int, error) {
 		}
 	}
 
-	return nil, 0, fmt.Errorf("no available port found starting from %d", preferredPort)
+	return nil, 0, fmt.Errorf("no available port found in range %d-%d", preferredPort, lastPort)
 }
 
 func openURL(url string) error {

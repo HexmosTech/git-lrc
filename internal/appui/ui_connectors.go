@@ -42,7 +42,7 @@ func RunUI(c *cli.Context) error {
 		return err
 	}
 
-	ln, port, err := pickServePort(defaultUIPort, 20)
+	ln, port, err := pickServePort(defaultUIPort)
 	if err != nil {
 		return fmt.Errorf("failed to reserve UI port: %w", err)
 	}

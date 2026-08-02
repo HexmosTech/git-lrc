@@ -574,7 +574,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		reviewStateMu.Unlock()
 
 		// Start serving immediately in background
-		serveListener, selectedPort, err := pickServePort(opts.Port, 10)
+		serveListener, selectedPort, err := pickServePort(opts.Port)
 		if err != nil {
 			return fmt.Errorf("failed to find available port: %w", err)
 		}
@@ -1425,7 +1425,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		if !progressiveLoadingActive {
 			var selectedPort int
 			var err error
-			nonProgressiveListener, selectedPort, err = pickServePort(opts.Port, 10)
+			nonProgressiveListener, selectedPort, err = pickServePort(opts.Port)
 			if err != nil {
 				return fmt.Errorf("failed to find available port: %w", err)
 			}
