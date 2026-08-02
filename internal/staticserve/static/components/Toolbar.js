@@ -4,9 +4,9 @@ import { waitForPreact } from './utils.js';
 import { SORT_MODE_DIFF, SORT_MODE_RISK_FILE, SORT_MODE_RISK_FLAT } from './blast_radius_sort_state.mjs';
 
 const SORT_MODE_OPTIONS = [
-    { mode: SORT_MODE_RISK_FLAT, label: 'Risk Score (whole)', title: 'One ranked stream: every hunk across the whole diff ordered by risk score, highest first' },
-    { mode: SORT_MODE_RISK_FILE, label: 'Risk Score (per file)', title: 'Keep files together; order hunks inside each file by risk score' },
-    { mode: SORT_MODE_DIFF, label: 'Natural', title: 'Original diff order: files and hunks as they appear in the diff' },
+    { mode: SORT_MODE_RISK_FLAT, label: 'Score: Whole', title: 'One ranked stream: every hunk across the whole diff ordered by risk score, highest first' },
+    { mode: SORT_MODE_RISK_FILE, label: 'Score: Per file', title: 'Keep files together; order hunks inside each file by risk score' },
+    { mode: SORT_MODE_DIFF, label: 'Diff order', title: 'Original diff order: files and hunks as they appear in the diff' },
 ];
 
 export async function createToolbar() {

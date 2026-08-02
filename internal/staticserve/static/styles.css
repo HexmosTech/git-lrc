@@ -3581,11 +3581,12 @@ body {
 .toolbar-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-md);
+  flex-wrap: nowrap;
+  gap: var(--space-sm);
   padding: var(--space-sm) 0;
   margin-bottom: var(--space-md);
   border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
 }
 
 .toolbar-performance {
@@ -3674,26 +3675,26 @@ body {
 .sort-mode-label {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
+  gap: 4px;
+  padding: 5px 8px;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text-dim);
   border-right: 1px solid var(--border-medium);
   user-select: none;
+  white-space: nowrap;
 }
 
 .sort-mode-btn {
-  padding: 6px 12px;
+  padding: 5px 10px;
   background: transparent;
   color: var(--text-secondary);
   border: none;
   border-right: 1px solid var(--border-medium);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
   transition: all 0.1s ease;
 }
 
