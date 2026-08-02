@@ -1,0 +1,13 @@
+# git-lrc gitleaks config
+# Extends default rules with allowlist for known false positives.
+
+title = "git-lrc gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "False positives in captured review fixtures (Go module hashes)"
+  paths = [
+    "tools/uidev/fixtures/",
+  ]
