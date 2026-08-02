@@ -254,20 +254,66 @@ git lrc review --skip
 
 No AI review. No personal attestation. The git log will record `skipped`.
 
-## Blast Radius — Risk-Ranked Reviews
+## Risk-Scored Review View
 
-Alongside the server-side AI review, `git lrc review` scores every hunk **locally** by how much
-damage a mistake in it could do: how many callers reach it, whether it's an HTTP handler or
-reachable from a service entry point, whether it touches auth/persistence/schema, whether a
-near-duplicate implementation exists elsewhere, and more. Scoring runs concurrently with the
-review — neither waits for the other — and the review UI opens with hunks **ranked by risk across
-the whole diff** (the classic diff-order view is one toggle away). Click any score badge to see
-exactly which signals produced it, and use the floating navigator's risk mode to jump between
-hunks from highest score down.
+Huge diffs are hard to triage — 500 lines across 10 files, and every hunk looks equally
+important. The Risk-Scored View ranks every hunk by **blast radius** (how far a mistake could
+ripple through the codebase) and **customer impact potential** (how close it is to a
+production-facing surface), so the riskiest changes are always first.
 
-This is powered by a local [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)
-knowledge graph. The installer sets the engine binary up automatically (into `~/.lrc/bin` only —
-no PATH edits, no agent-config changes); manage it any time with:
+![Score badge with breakdown — every signal that produced the score is visible](./gfx/risk-scored-view-1.png)
+
+### Benefit to Engineering Leaders (CTO / VP Eng / Tech Lead)
+
+- **Sensitive code gets more attention.** Route handlers, auth modules, persistence layers,
+  and widely-reused interfaces are elevated regardless of how many callers they have — the
+  tool understands architectural importance, not just fan-in counts.
+- **Review consistency across teams.** Every reviewer sees the same risk ranking — not one
+  engineer's hunch about what "looks important" vs another's.
+- **Quantified review debt per commit.** A diff where most hunks rank highly is a diff that
+  deserves more time; a diff that's mostly low-risk hunks can be skimmed with confidence.
+
+![Risk-sorted view — entire diff ranked by risk, file boundaries dissolved](./gfx/risk-scored-view-2.png)
+
+### Benefit to Engineers
+
+- **Never accidentally miss an important piece of code.** When a 500-line diff arrives with
+  10 hunks, the highest-risk one is at the top — not buried in the middle of the diff where
+  it's easy to skim over.
+- **More efficient review.** Start with what matters most; the low-risk formatting or
+  logging-only changes sort to the bottom with a visible hygiene dampener (×0.05) so you
+  can handle them last or skip them.
+- **Understand *why* a hunk is risky, not just *that* it is risky.** Click any score badge
+  to see every contributing signal — caller chains, HTTP routes, duplicate implementations,
+  missing tests, architectural-layer classification, and the exact points each contributed.
+
+### How Scoring Works (Briefly)
+
+Every hunk gets two independent 0-100 scores, each built from labeled Signals:
+
+**Blast Radius** — how far the change can propagate:
+- Transitive callers up to 3 hops (decay-weighted, sqrt-compressed so one hub symbol
+  cannot swallow the scale)
+- Being an HTTP handler or CLI entry point, or being reachable from one
+- Repo-wide hotspot and architectural-layer checks (is this symbol a known top-fan-in
+  node, or in the "core" / "api" layer?)
+- Implementing or defining a widely-reused interface
+- File co-change coupling from git history (files that historically change together
+  even without a code reference between them)
+- Lightweight path-keyword heuristics for auth, persistence, config, build, and schema
+
+**Review Priority** — how much attention this hunk needs:
+- A near-duplicate implementation exists elsewhere (did you fix it in both places?)
+- Missing direct test coverage
+- Cyclomatic complexity, loop depth, and fan-out (supplementary signals)
+
+**Combined** blends Blast Radius and Review Priority at 60/40 into the final ranking
+number used for sorting.
+
+Scoring runs locally against a [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)
+knowledge graph, concurrently with the server-side AI review — neither waits for the other.
+The engine binary is auto-installed into `~/.lrc/bin` only (no PATH edits, no agent-config
+changes). Manage it any time with:
 
 ```bash
 git lrc graph install    # install/update the engine
@@ -275,10 +321,11 @@ git lrc graph status     # binary path, version, indexed projects
 git lrc graph uninstall  # remove it
 ```
 
-The first review in a repository indexes it automatically (larger repos take a few minutes, during
-which the review proceeds normally and scores appear when ready); subsequent reviews refresh the
-index incrementally in about a second. No graph engine installed? Reviews work exactly as before —
-scoring just stays off. Disable explicitly with `--blast-radius=false`.
+The first review in a repository indexes it automatically (larger repos take a few minutes,
+during which the review proceeds normally and scores appear when ready); subsequent reviews
+refresh the index incrementally in about a second. Reviews work exactly as before without
+the engine — scoring stays off. Disable explicitly with `--blast-radius=false`.
+
 
 ## Git Log Tracking
 
