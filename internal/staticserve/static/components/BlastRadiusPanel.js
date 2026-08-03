@@ -90,7 +90,6 @@ export async function createBlastRadiusPanel() {
                         <span class="blast-signal-points">${(s.Points || 0) >= 0 ? '+' : ''}${(s.Points || 0).toFixed(1)}</span>
                         <span class="blast-signal-name">${s.Name}</span>
                         ${s.Detail && html`<span class="blast-signal-detail">${s.Detail}</span>`}
-                        <span class="blast-signal-category">${s.Category}</span>
                     </li>
                 `)}
             </ul>
