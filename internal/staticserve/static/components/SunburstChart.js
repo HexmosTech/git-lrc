@@ -6,7 +6,7 @@ function arcTween(a, arcGen) {
     return t => arcGen(i(t));
 }
 
-function renderSunburst(svgEl, symbol, width, height, tooltipEl) {
+function renderSunburst(svgEl, symbol, width, height, tooltipEl, _hoveredCaller, onHoverCaller) {
     const d3 = window.d3;
     const radius = Math.min(width, height) / 2;
 
@@ -92,6 +92,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl) {
                 ? `<strong>&#8627;</strong> ${b.qualifiedName}<br><span style="color:#9a8070;font-size:10px">intermediate &middot; depth ${d.depth}</span>`
                 : `<strong>${b.name}</strong><br><span style="color:#baa090;font-size:10px">${b.qualifiedName}</span><br><span style="color:#8a7060;font-size:10px">${b.depth === 1 ? 'Direct caller' : b.depth + ' hops away'}</span>`;
             tooltipEl.style.display = 'block'; tooltipEl.style.opacity = '1';
+            if (onHoverCaller && b.qualifiedName) onHoverCaller(b.qualifiedName);
         })
         .on('mousemove', function (event) {
             tooltipEl.style.left = (event.clientX + 16) + 'px';
@@ -102,6 +103,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl) {
                 .style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78))
                 .attr('stroke', '#4a0000').attr('stroke-width', 0.7).attr('filter', null);
             tooltipEl.style.display = 'none'; tooltipEl.style.opacity = '0';
+            if (onHoverCaller) onHoverCaller(null);
         });
 
     const centerR = radius * 0.08;
@@ -120,7 +122,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl) {
 
 export async function createSunburstChart() {
     const { html, useState, useRef, useEffect } = await waitForPreact();
-    function SunburstChart({ symbol, width, height }) {
+    function SunburstChart({ symbol, width, height, hoveredCaller, onHoverCaller }) {
         const svgRef = useRef(null); const tooltipRef = useRef(null);
         const [d3Ready, setD3Ready] = useState(typeof window.d3 !== 'undefined');
         useEffect(() => {
@@ -133,13 +135,34 @@ export async function createSunburstChart() {
             if (!d3Ready || !symbol || !svgRef.current || !tooltipRef.current) return;
             const el = svgRef.current;
             const tt = tooltipRef.current;
-            // Force layout so SVG has final dimensions before D3 renders.
             el.getBoundingClientRect();
             const t = setTimeout(() => {
-                if (el && tt) renderSunburst(el, symbol, width, height, tt);
+                if (el && tt) renderSunburst(el, symbol, width, height, tt, null, onHoverCaller);
             }, 60);
             return () => clearTimeout(t);
         }, [d3Ready, symbol, width, height]);
+
+        useEffect(() => {
+            if (!d3Ready || !svgRef.current) return;
+            const svg = window.d3.select(svgRef.current);
+            const arcs = svg.selectAll('path.sunburst-arc');
+            if (hoveredCaller) {
+                arcs.filter(function (d) {
+                    return d && d.data && d.data.qualifiedName === hoveredCaller;
+                }).interrupt().transition().duration(100)
+                    .style('opacity', 1)
+                    .attr('stroke', '#fff7e0').attr('stroke-width', 1.8)
+                    .attr('filter', 'drop-shadow(0 0 10px rgba(255,152,0,0.5)) drop-shadow(0 0 20px rgba(255,100,0,0.3))');
+                arcs.filter(function (d) {
+                    return !d || !d.data || d.data.qualifiedName !== hoveredCaller;
+                }).interrupt().transition().duration(100)
+                    .style('opacity', 0.12);
+            } else {
+                arcs.interrupt().transition().duration(150)
+                    .style('opacity', d => (d && d.data && d.data.isLeaf ? 0.92 : 0.78))
+                    .attr('stroke', '#4a0000').attr('stroke-width', 0.7).attr('filter', null);
+            }
+        }, [hoveredCaller, d3Ready]);
         if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
             return html`<div class="viz-container-sq"><div class="viz-empty">${symbol && symbol.Method === 'text-references' ? 'Text reference method — no call graph available' : 'No callers in the dependency graph'}</div></div>`;
         }

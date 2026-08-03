@@ -3064,9 +3064,12 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.blast-caller:hover {
+.blast-caller:hover,
+.blast-caller.highlighted {
   color: var(--text-primary);
-  border-color: rgba(148, 163, 184, 0.4);
+  border-color: var(--accent-orange);
+  background: rgba(255, 87, 34, 0.15);
+  box-shadow: 0 0 4px rgba(255, 87, 34, 0.2);
 }
 
 /* Two-column blast panel layout: details (left) + sunburst chart (right) */

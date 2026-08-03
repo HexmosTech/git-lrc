@@ -1,7 +1,7 @@
 import { waitForPreact } from './utils.js';
 import { buildHierarchy, DEPTH_COLORS } from './callgraph-utils.js';
 
-function renderFlameGraph(svgEl, symbol, width, height, tooltipEl) {
+function renderFlameGraph(svgEl, symbol, width, height, tooltipEl, _hoveredCaller, onHoverCaller) {
     const d3 = window.d3;
     const PAD_L = 4;
     const PAD_R = 4;
@@ -111,6 +111,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipEl) {
                 ? `<strong>&#8627;</strong> ${n.qualifiedName}<br><span style="color:#8a7060;font-size:10px">intermediate</span>`
                 : `<strong>${n.name}</strong><br><span style="color:#baa090;font-size:10px">${n.qualifiedName}</span><br><span style="color:#8a7060;font-size:10px">${n.depth === 1 ? 'Direct caller' : n.depth + ' hops away'}</span>`;
             tooltipEl.style.display = 'block'; tooltipEl.style.opacity = '1';
+            if (onHoverCaller && n.qualifiedName) onHoverCaller(n.qualifiedName);
         })
             .on('mousemove', function (event) {
                 tooltipEl.style.left = (event.clientX + 14) + 'px';
@@ -120,6 +121,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipEl) {
                 d3.select(this).interrupt().transition().duration(100)
                     .style('opacity', 0.92).attr('filter', null);
                 tooltipEl.style.display = 'none'; tooltipEl.style.opacity = '0';
+                if (onHoverCaller) onHoverCaller(null);
             });
 
         for (const bar of bars) {
@@ -152,7 +154,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipEl) {
 
 export async function createFlameGraph() {
     const { html, useState, useRef, useEffect } = await waitForPreact();
-    function FlameGraph({ symbol, width, height }) {
+    function FlameGraph({ symbol, width, height, hoveredCaller, onHoverCaller }) {
         const svgRef = useRef(null); const tooltipRef = useRef(null);
         const [d3Ready, setD3Ready] = useState(typeof window.d3 !== 'undefined');
         useEffect(() => {
@@ -167,10 +169,30 @@ export async function createFlameGraph() {
             const tt = tooltipRef.current;
             el.getBoundingClientRect();
             const t = setTimeout(() => {
-                if (el && tt) renderFlameGraph(el, symbol, width, height, tt);
+                if (el && tt) renderFlameGraph(el, symbol, width, height, tt, null, onHoverCaller);
             }, 60);
             return () => clearTimeout(t);
         }, [d3Ready, symbol, width, height]);
+
+        useEffect(() => {
+            if (!d3Ready || !svgRef.current) return;
+            const svg = window.d3.select(svgRef.current);
+            const bars = svg.selectAll('rect.flame-bar');
+            if (hoveredCaller) {
+                bars.filter(function (d) {
+                    return d && d.node && d.node.qualifiedName === hoveredCaller;
+                }).interrupt().transition().duration(100)
+                    .style('opacity', 1)
+                    .attr('filter', 'drop-shadow(0 0 8px rgba(255,152,0,0.5)) drop-shadow(0 0 16px rgba(255,80,0,0.25)) brightness(1.12)');
+                bars.filter(function (d) {
+                    return !d || !d.node || d.node.qualifiedName !== hoveredCaller;
+                }).interrupt().transition().duration(100)
+                    .style('opacity', 0.15);
+            } else {
+                bars.interrupt().transition().duration(150)
+                    .style('opacity', 0.92).attr('filter', null);
+            }
+        }, [hoveredCaller, d3Ready]);
         if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
             return html`<div class="viz-container-fg"><div class="viz-empty">${symbol && symbol.Method === 'text-references' ? 'Text reference method — no call graph available' : 'No callers in the dependency graph'}</div></div>`;
         }

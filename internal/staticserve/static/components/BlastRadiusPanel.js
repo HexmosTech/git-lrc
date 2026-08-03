@@ -206,7 +206,7 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    function CallerGroup({ depth, callers }) {
+    function CallerGroup({ depth, callers, hoveredCaller, onHoverCaller }) {
         const [showAll, setShowAll] = useState(false);
         const visible = showAll ? callers : callers.slice(0, CALLERS_PREVIEW);
         const hidden = callers.length - visible.length;
@@ -218,7 +218,13 @@ export async function createBlastRadiusPanel() {
                 </div>
                 <div class="blast-caller-list ${showAll ? 'expanded' : ''}">
                     ${visible.map((c) => html`
-                        <span key=${c.QualifiedName} class="blast-caller" title="${c.QualifiedName}">
+                        <span
+                            key=${c.QualifiedName}
+                            class="blast-caller ${hoveredCaller === c.QualifiedName ? 'highlighted' : ''}"
+                            title="${c.QualifiedName}"
+                            onMouseEnter=${() => onHoverCaller(c.QualifiedName)}
+                            onMouseLeave=${() => onHoverCaller(null)}
+                        >
                             ${shortName(c.QualifiedName)}
                         </span>
                     `)}
@@ -274,7 +280,7 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    function SymbolDetail({ sym }) {
+    function SymbolDetail({ sym, hoveredCaller, onHoverCaller }) {
         const callerGroups = groupCallersByDepth(sym.Callers);
         const totalCallers = (sym.Callers || []).length;
         return html`
@@ -289,7 +295,7 @@ export async function createBlastRadiusPanel() {
                     <div class="blast-callers">
                         <div class="blast-section-title">Reached from ${totalCallers} caller${totalCallers !== 1 ? 's' : ''}</div>
                         ${callerGroups.map(([depth, callers]) => html`
-                            <${CallerGroup} key=${depth} depth=${depth} callers=${callers} />
+                            <${CallerGroup} key=${depth} depth=${depth} callers=${callers} hoveredCaller=${hoveredCaller} onHoverCaller=${onHoverCaller} />
                         `)}
                     </div>
                 `}
@@ -311,6 +317,7 @@ export async function createBlastRadiusPanel() {
         const symbols = [...(detail.Symbols || [])].sort((a, b) => (b.BlastRadiusRaw || 0) - (a.BlastRadiusRaw || 0));
         const [selectedIdx, setSelectedIdx] = useState(0);
         const [vizMode, setVizMode] = useState('sunburst');
+        const [hoveredCaller, setHoveredCaller] = useState(null);
 
         return html`
             <div class="blast-panel">
@@ -358,7 +365,7 @@ export async function createBlastRadiusPanel() {
                                 selectedIdx=${selectedIdx}
                                 onSelect=${(idx) => setSelectedIdx(idx)}
                             />
-                            <${SymbolDetail} sym=${symbols[selectedIdx]} />
+                            <${SymbolDetail} sym=${symbols[selectedIdx]} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />
                         </div>
                         <div class="blast-panel-right">
                             <div class="blast-viz-toggle">
@@ -371,8 +378,8 @@ export async function createBlastRadiusPanel() {
                             </div>
                             <div class="blast-viz-wrapper">
                                 ${vizMode === 'sunburst'
-                                    ? html`<${SunburstChart} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} />`
-                                    : html`<${FlameGraph} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} />`
+                                    ? html`<${SunburstChart} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
+                                    : html`<${FlameGraph} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
                                 }
                             </div>
                         </div>
