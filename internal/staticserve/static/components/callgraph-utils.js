@@ -68,11 +68,11 @@ export function buildHierarchy(symbol) {
 }
 
 export const DEPTH_COLORS = {
-    0: { base: '#4a0000', light: '#7f0000' },
-    1: { base: '#e65100', light: '#ff9800' },
-    2: { base: '#ff8f00', light: '#ffb300' },
-    3: { base: '#ffb300', light: '#ffd54f' },
-    4: { base: '#ffd54f', light: '#fff9c4' },
+    0: { base: '#990000', light: '#e60000' },
+    1: { base: '#ff1744', light: '#ff616f' },
+    2: { base: '#ff5722', light: '#ff8a65' },
+    3: { base: '#ffab00', light: '#ffe082' },
+    4: { base: '#ffd600', light: '#ffff8d' },
 };
 
 export function interpolateColor(c1, c2, t) {

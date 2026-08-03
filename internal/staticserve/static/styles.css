@@ -4759,6 +4759,7 @@ body {
 .issue-filter-bar:focus-within,
 .issue-filter-bar.expanded {
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+  outline: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .issue-filter-main-row {
@@ -4958,6 +4959,7 @@ body {
     opacity 0.18s ease,
     transform 0.18s ease,
     padding-top 0.18s ease;
+  transition-delay: 0.5s;
   padding-top: 0;
 }
 
@@ -4974,6 +4976,7 @@ body {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.4) rgba(255, 255, 255, 0.04);
+  transition-delay: 0s;
 }
 
 .issue-filter-details-header {

@@ -93,7 +93,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipEl) {
 
         const gradId = depthGradientId(depth + 1);
         merged.attr('fill', `url(#${gradId})`).attr('rx', 0).attr('ry', 0).attr('cursor', 'pointer')
-            .attr('stroke', '#1a0a00').attr('stroke-width', 1.5);
+            .attr('stroke', '#3d0000').attr('stroke-width', 1.5);
 
         if (animate) {
             merged.interrupt().transition().duration(300).delay((d, i) => i * 8)
@@ -134,12 +134,12 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipEl) {
 
     renderLevel(root.children, 0, 0, usableW, rootY - BAR_GAP, true);
 
-    ensureGradient('fg-grad-root', '#2d0000', '#6a1000');
+    ensureGradient('fg-grad-root', '#7a0000', '#b30000');
     const rootG = g.append('g');
     rootG.append('rect')
         .attr('x', 0).attr('y', rootY).attr('width', usableW).attr('height', BAR_H)
-        .attr('fill', 'url(#fg-grad-root)').attr('rx', 2).attr('ry', 2)
-        .attr('stroke', '#4a1000').attr('stroke-width', 0.5)
+        .attr('fill', 'url(#fg-grad-root)').attr('rx', 0).attr('ry', 0)
+        .attr('stroke', '#6b0000').attr('stroke-width', 1)
         .attr('filter', 'drop-shadow(0 0 6px rgba(255,80,0,0.2)) drop-shadow(0 3px 8px rgba(0,0,0,0.4))');
 
     rootG.append('text')

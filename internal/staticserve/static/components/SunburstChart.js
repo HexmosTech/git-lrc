@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, getDepthColor } from './callgraph-utils.js';
+import { buildHierarchy, getDepthColor, DEPTH_COLORS } from './callgraph-utils.js';
 
 function arcTween(a, arcGen) {
     const i = window.d3.interpolate({ x0: a.x0, x1: a.x0 }, a);
@@ -16,6 +16,19 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl) {
         .attr('width', width).attr('height', height)
         .attr('viewBox', `0 0 ${width} ${height}`)
         .style('background', 'transparent');
+
+    const defs = svg.append('defs');
+    for (let d = 1; d <= 4; d++) {
+        const c = DEPTH_COLORS[d];
+        if (!c) continue;
+        const grad = defs.append('linearGradient')
+            .attr('id', `sb-grad-${d}`)
+            .attr('x1', '0').attr('y1', '1')
+            .attr('x2', '0').attr('y2', '0');
+        grad.append('stop').attr('offset', '0%').attr('stop-color', c.base).attr('stop-opacity', 1);
+        grad.append('stop').attr('offset', '60%').attr('stop-color', c.light).attr('stop-opacity', 0.95);
+        grad.append('stop').attr('offset', '100%').attr('stop-color', c.light).attr('stop-opacity', 0.7);
+    }
 
     const g = svg.append('g')
         .attr('transform', `translate(${width / 2},${height / 2})`);
@@ -65,8 +78,8 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl) {
         );
 
     g.selectAll('path.sunburst-arc')
-        .attr('fill', d => getDepthColor(d))
-        .attr('stroke', '#1a0000').attr('stroke-width', 0.8)
+        .attr('fill', d => `url(#sb-grad-${d.depth})`)
+        .attr('stroke', '#4a0000').attr('stroke-width', 0.7)
         .attr('cursor', 'pointer')
         .on('mouseenter', function (event, d) {
             d3.select(this).interrupt().transition().duration(80)
@@ -87,12 +100,12 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl) {
         .on('mouseleave', function () {
             g.selectAll('path.sunburst-arc').transition().duration(150)
                 .style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78))
-                .attr('stroke', '#1a0000').attr('stroke-width', 0.8).attr('filter', null);
+                .attr('stroke', '#4a0000').attr('stroke-width', 0.7).attr('filter', null);
             tooltipEl.style.display = 'none'; tooltipEl.style.opacity = '0';
         });
 
     const centerR = radius * 0.08;
-    g.append('circle').attr('r', centerR + 3).attr('fill', '#2d0000').attr('stroke', '#4a1000')
+    g.append('circle').attr('r', centerR + 3).attr('fill', '#7a0000').attr('stroke', '#990000')
         .attr('stroke-width', 1.5)
         .attr('filter', 'drop-shadow(0 0 6px rgba(255,100,0,0.3)) drop-shadow(0 0 14px rgba(255,60,0,0.15))');
     g.append('text').attr('text-anchor', 'middle').attr('dy', '-0.2em')
