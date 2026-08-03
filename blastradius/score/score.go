@@ -64,6 +64,12 @@ type CallerContribution struct {
 	QualifiedName string
 	Depth         int
 	Weight        float64
+	// Path holds the intermediate qualified names between the symbol and
+	// this caller, excluding both endpoints. Empty for depth 1. For depth 2,
+	// Path[0] is the direct child of the symbol that this caller is reached
+	// through. For depth 3, Path[0] is the depth-1 node and Path[1] is the
+	// depth-2 node.
+	Path []string
 }
 
 // SymbolScore is the computed importance of a single symbol.
@@ -94,15 +100,29 @@ func FanIn(ctx context.Context, q GraphQuerier, qualifiedNames []string, cfg Con
 	for _, qn := range qualifiedNames {
 		results[qn] = &SymbolScore{QualifiedName: qn}
 	}
-	// caller -> symbol -> best (smallest) depth seen so far.
+	// caller -> symbol -> best (smallest) depth seen so far + path nodes.
 	bestDepth := make(map[string]map[string]int)
+	callerPath := make(map[string]map[string][]string)
 
 	symbolList := client.CypherStringList(qualifiedNames)
 	for depth := 1; depth <= cfg.MaxDepth; depth++ {
-		cypher := fmt.Sprintf(
-			"MATCH (caller)-[:CALLS*%d..%d]->(f) WHERE f.qualified_name IN %s RETURN f.qualified_name AS symbol, caller.qualified_name AS caller",
-			depth, depth, symbolList,
-		)
+		var cypher string
+		if depth == 1 {
+			cypher = fmt.Sprintf(
+				"MATCH (caller)-[:CALLS]->(f) WHERE f.qualified_name IN %s RETURN f.qualified_name AS symbol, caller.qualified_name AS caller",
+				symbolList,
+			)
+		} else if depth == 2 {
+			cypher = fmt.Sprintf(
+				"MATCH (caller)-[:CALLS]->(mid)-[:CALLS]->(f) WHERE f.qualified_name IN %s RETURN f.qualified_name AS symbol, caller.qualified_name AS caller, mid.qualified_name AS via",
+				symbolList,
+			)
+		} else {
+			cypher = fmt.Sprintf(
+				"MATCH (caller)-[:CALLS]->(mid1)-[:CALLS]->(mid2)-[:CALLS]->(f) WHERE f.qualified_name IN %s RETURN f.qualified_name AS symbol, caller.qualified_name AS caller, mid1.qualified_name AS via1, mid2.qualified_name AS via2",
+				symbolList,
+			)
+		}
 		result, err := q.QueryGraph(ctx, cypher, cfg.MaxRows)
 		if err != nil {
 			return nil, fmt.Errorf("blastradius/score: fan-in query at depth %d: %w", depth, err)
@@ -112,7 +132,7 @@ func FanIn(ctx context.Context, q GraphQuerier, qualifiedNames []string, cfg Con
 			symbol := col.get(row, "symbol")
 			caller := col.get(row, "caller")
 			if symbol == "" || caller == "" || symbol == caller {
-				continue // skip self-calls / malformed rows
+				continue
 			}
 			byCaller, ok := bestDepth[symbol]
 			if !ok {
@@ -121,6 +141,31 @@ func FanIn(ctx context.Context, q GraphQuerier, qualifiedNames []string, cfg Con
 			}
 			if existing, seen := byCaller[caller]; !seen || depth < existing {
 				byCaller[caller] = depth
+				// Store the path through intermediate nodes.
+				byPath, ok := callerPath[symbol]
+				if !ok {
+					byPath = make(map[string][]string)
+					callerPath[symbol] = byPath
+				}
+				byPath[caller] = nil
+				if depth == 2 {
+					if via := col.get(row, "via"); via != "" {
+						byPath[caller] = []string{via}
+					}
+				} else if depth >= 3 {
+					// MATCH (caller)->(mid1)->(mid2)->(f): mid2 is 1 hop from f (direct),
+					// mid1 is 2 hops from f. Build path from root outward.
+					var path []string
+					if via2 := col.get(row, "via2"); via2 != "" {
+						path = append(path, via2)
+					}
+					if via1 := col.get(row, "via1"); via1 != "" {
+						path = append(path, via1)
+					}
+					if len(path) > 0 {
+						byPath[caller] = path
+					}
+				}
 			}
 		}
 	}
@@ -140,6 +185,7 @@ func FanIn(ctx context.Context, q GraphQuerier, qualifiedNames []string, cfg Con
 				QualifiedName: caller,
 				Depth:         depth,
 				Weight:        weight,
+				Path:          callerPath[symbol][caller],
 			})
 		}
 		s.Raw = cfg.Transform(s.LinearSum)

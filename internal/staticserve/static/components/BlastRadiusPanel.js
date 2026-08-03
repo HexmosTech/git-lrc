@@ -5,22 +5,20 @@
 //
 //   scores + impacted-packages summary
 //   └─ hunk-level signals (always visible, ranked)
-//   └─ one card per touched symbol (collapsed: name, fan-in, contribution)
-//        └─ full signal list, code metrics, impacted packages,
-//           and the complete caller graph grouped by call depth
+//   └─ two-column layout: text details (left) + sunburst call graph (right)
+//        └─ symbol navigation slider ◀ N of M ▶
+//        └─ selected symbol: signals, metrics, caller groups, packages
 import { waitForPreact } from './utils.js';
 import { renderIcon } from './icons.js';
 import { blastRadiusTier } from './blast_radius_sort_state.mjs';
+import { getSunburstChart } from './SunburstChart.js';
+import { getFlameGraph } from './FlameGraph.js';
 
 const CALLERS_PREVIEW = 8;
 const PKGS_PREVIEW = 10;
 const HIDE_DELAY_MS = 180;
+const SUNBURST_SIZE = 420;
 
-// Brief, reviewer-pitched explanations for each score chip. Surfaced via the
-// info icon's hover popup and the chip's native title attribute (for the
-// classic browser tooltip path). Mirrors the standalone explorer's
-// "How is this scored?" panel — see blastradius/explorer/index.html — kept
-// short here since the full methodology is one click away.
 const SCORE_HINTS = {
     combined: {
         title: 'Combined score: 0-100 rank within this diff',
@@ -77,6 +75,8 @@ function depthLabel(depth) {
 
 export async function createBlastRadiusPanel() {
     const { html, useState, useRef, useCallback } = await waitForPreact();
+    const SunburstChart = await getSunburstChart();
+    const FlameGraph = await getFlameGraph();
 
     function SignalList({ signals }) {
         const ranked = sortedSignals(signals);
@@ -97,10 +97,6 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    // A score chip + an info icon that summons a hover popup with the brief
-    // explanation from SCORE_HINTS. Same delayed-hover discipline as
-    // RiskBadge's hover card (mouse can travel chip -> popup without it
-    // vanishing, and the popup itself keeps the popup open while hovered).
     function ScoreChipWithHelp({ hintKey, chipClass, children }) {
         const [showHelp, setShowHelp] = useState(false);
         const hideTimerRef = useRef(null);
@@ -146,9 +142,6 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    // The "How is this scored?" button. Opens a single shared popup with the
-    // full methodology text (mirrors the standalone explorer's explanation
-    // panel — see blastradius/explorer/index.html).
     function MethodologyButton() {
         const [open, setOpen] = useState(false);
         const hideTimerRef = useRef(null);
@@ -194,8 +187,6 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    // Expandable chip list used for impacted packages: first N always shown,
-    // the rest behind a "+N more" toggle - all data reachable, none dumped.
     function ChipList({ items, preview, chipClass, label }) {
         const [showAll, setShowAll] = useState(false);
         if (!items || items.length === 0) return null;
@@ -215,8 +206,6 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    // One depth level of the caller graph: preview list expandable to the
-    // complete set (scrollable), so even 300+ callers stay reachable.
     function CallerGroup({ depth, callers }) {
         const [showAll, setShowAll] = useState(false);
         const visible = showAll ? callers : callers.slice(0, CALLERS_PREVIEW);
@@ -257,51 +246,59 @@ export async function createBlastRadiusPanel() {
         return chips;
     }
 
-    // One touched symbol: collapsed = identity + reach summary; expanded =
-    // every signal, metric, impacted package, and the full caller graph.
-    // Open state is controlled by the parent (accordion: at least one card
-    // is always open) via isOpen/onToggle, not held per-card.
-    function SymbolCard({ sym, isOpen, onToggle }) {
+    function SymbolNavBar({ symbols, selectedIdx, onSelect }) {
+        if (!symbols || symbols.length <= 1) return null;
+        const current = symbols[selectedIdx];
+        return html`
+            <div class="blast-symbol-nav">
+                <button
+                    class="blast-symbol-nav-btn"
+                    onClick=${() => onSelect(selectedIdx === 0 ? symbols.length - 1 : selectedIdx - 1)}
+                    title="Previous symbol"
+                >
+                    ${renderIcon(html, 'chevronLeft', { size: 14 })}
+                </button>
+                <span class="blast-symbol-nav-info">
+                    <span class="blast-symbol-nav-name" title=${current.QualifiedName}>${current.Name || shortName(current.QualifiedName)}</span>
+                    <span class="blast-symbol-nav-kind">${current.Label}</span>
+                    <span class="blast-symbol-nav-pos">${selectedIdx + 1} of ${symbols.length}</span>
+                </span>
+                <button
+                    class="blast-symbol-nav-btn"
+                    onClick=${() => onSelect(selectedIdx === symbols.length - 1 ? 0 : selectedIdx + 1)}
+                    title="Next symbol"
+                >
+                    ${renderIcon(html, 'chevronRight', { size: 14 })}
+                </button>
+            </div>
+        `;
+    }
+
+    function SymbolDetail({ sym }) {
         const callerGroups = groupCallersByDepth(sym.Callers);
         const totalCallers = (sym.Callers || []).length;
-        const reach = sym.Method === 'calls'
-            ? `${sym.DirectCount || 0} direct · ${sym.TransitiveCount || 0} transitive callers`
-            : 'matched by text reference';
         return html`
-            <div class="blast-symbol ${isOpen ? 'open' : ''}">
-                <button class="blast-symbol-header" onClick=${onToggle} aria-expanded=${isOpen}>
-                    <span class="blast-symbol-toggle">${isOpen ? '▾' : '▸'}</span>
-                    <span class="blast-symbol-name" title="${sym.QualifiedName}">${sym.Name || sym.QualifiedName}</span>
-                    <span class="blast-symbol-kind">${sym.Label}</span>
-                    <span class="blast-symbol-reach">${reach}</span>
-                    <span class="blast-symbol-contrib" title="This symbol's contribution to the hunk's blast radius">
-                        +${(sym.BlastRadiusRaw || 0).toFixed(1)}
-                    </span>
-                </button>
-                ${isOpen && html`
-                    <div class="blast-symbol-body">
-                        <div class="blast-metric-chips">
-                            ${metricChips(sym).map((chip) => html`
-                                <span key=${chip.label} class="blast-metric-chip ${chip.warn ? 'warn' : ''}" title="${chip.title}">${chip.label}</span>
-                            `)}
-                        </div>
-                        <${SignalList} signals=${sym.Signals} />
-                        ${totalCallers > 0 && html`
-                            <div class="blast-callers">
-                                <div class="blast-section-title">Reached from ${totalCallers} caller${totalCallers !== 1 ? 's' : ''}</div>
-                                ${callerGroups.map(([depth, callers]) => html`
-                                    <${CallerGroup} key=${depth} depth=${depth} callers=${callers} />
-                                `)}
-                            </div>
-                        `}
-                        <${ChipList}
-                            items=${sym.ImpactedPackages}
-                            preview=${PKGS_PREVIEW}
-                            chipClass="blast-pkg-chip"
-                            label="Impacted packages (${(sym.ImpactedPackages || []).length})"
-                        />
+            <div class="blast-symbol-detail">
+                <div class="blast-metric-chips">
+                    ${metricChips(sym).map((chip) => html`
+                        <span key=${chip.label} class="blast-metric-chip ${chip.warn ? 'warn' : ''}" title="${chip.title}">${chip.label}</span>
+                    `)}
+                </div>
+                <${SignalList} signals=${sym.Signals} />
+                ${totalCallers > 0 && html`
+                    <div class="blast-callers">
+                        <div class="blast-section-title">Reached from ${totalCallers} caller${totalCallers !== 1 ? 's' : ''}</div>
+                        ${callerGroups.map(([depth, callers]) => html`
+                            <${CallerGroup} key=${depth} depth=${depth} callers=${callers} />
+                        `)}
                     </div>
                 `}
+                <${ChipList}
+                    items=${sym.ImpactedPackages}
+                    preview=${PKGS_PREVIEW}
+                    chipClass="blast-pkg-chip"
+                    label="Impacted packages (${(sym.ImpactedPackages || []).length})"
+                />
             </div>
         `;
     }
@@ -309,29 +306,11 @@ export async function createBlastRadiusPanel() {
     return function BlastRadiusPanel({ detail }) {
         if (!detail) return null;
 
-        const hygiene = typeof detail.HygieneMultiplier === 'number' && detail.HygieneMultiplier < 1
-            ? detail.HygieneMultiplier
-            : null;
+        const hygieneMult = typeof detail.HygieneMultiplier === 'number' ? detail.HygieneMultiplier : 1.0;
+        const couplingVal = typeof detail.FileCouplingBonus === 'number' ? detail.FileCouplingBonus : 0;
         const symbols = [...(detail.Symbols || [])].sort((a, b) => (b.BlastRadiusRaw || 0) - (a.BlastRadiusRaw || 0));
-
-        // Accordion: at least one symbol card is always open. The first symbol
-        // (highest contribution) defaults open; clicking an open card only
-        // closes it if at least one other card is still open.
-        const [openIdx, setOpenIdx] = useState(0);
-        const toggle = (idx) => {
-            if (idx === openIdx) {
-                // Trying to close the currently-open card: allow only if
-                // there's another card to fall open to (i.e. start the next
-                // one). This keeps exactly one card open at all times, while
-                // still letting the user switch focus freely.
-                if (symbols.length > 1) {
-                    setOpenIdx(idx === 0 ? 1 : 0);
-                }
-                // If there's only one symbol, it stays open.
-            } else {
-                setOpenIdx(idx);
-            }
-        };
+        const [selectedIdx, setSelectedIdx] = useState(0);
+        const [vizMode, setVizMode] = useState('sunburst');
 
         return html`
             <div class="blast-panel">
@@ -354,22 +333,14 @@ export async function createBlastRadiusPanel() {
                     >
                         Priority ${Math.round(detail.ReviewPriorityNorm || 0)}
                     </${ScoreChipWithHelp}>
-                    ${hygiene !== null && html`
-                        <${ScoreChipWithHelp}
-                            hintKey="hygiene"
-                            chipClass="blast-score-chip hygiene"
-                        >
-                            ×${hygiene}
-                        </${ScoreChipWithHelp}>
-                    `}
-                    ${detail.FileCouplingBonus > 0 && html`
-                        <${ScoreChipWithHelp}
-                            hintKey="coupling"
-                            chipClass="blast-score-chip"
-                        >
-                            Coupling +${detail.FileCouplingBonus.toFixed(1)}
-                        </${ScoreChipWithHelp}>
-                    `}
+                    ${hygieneMult < 1
+                        ? html`<${ScoreChipWithHelp} hintKey="hygiene" chipClass="blast-score-chip hygiene">×${hygieneMult}</${ScoreChipWithHelp}>`
+                        : html`<${ScoreChipWithHelp} hintKey="hygiene" chipClass="blast-score-chip hygiene-dormant">Hygiene ×1.0</${ScoreChipWithHelp}>`
+                    }
+                    ${couplingVal > 0
+                        ? html`<${ScoreChipWithHelp} hintKey="coupling" chipClass="blast-score-chip">Coupling +${couplingVal.toFixed(1)}</${ScoreChipWithHelp}>`
+                        : html`<${ScoreChipWithHelp} hintKey="coupling" chipClass="blast-score-chip coupling-dormant">Coupling +0</${ScoreChipWithHelp}>`
+                    }
                     <${MethodologyButton} />
                 </div>
                 <${ChipList}
@@ -380,16 +351,31 @@ export async function createBlastRadiusPanel() {
                 />
                 <${SignalList} signals=${detail.Signals} />
                 ${symbols.length > 0 && html`
-                    <div class="blast-panel-symbols">
-                        <div class="blast-section-title">Symbols touched (${symbols.length}) — highest contribution first</div>
-                        ${symbols.map((sym, idx) => html`
-                            <${SymbolCard}
-                                key=${sym.QualifiedName}
-                                sym=${sym}
-                                isOpen=${idx === openIdx}
-                                onToggle=${() => toggle(idx)}
+                    <div class="blast-panel-columns">
+                        <div class="blast-panel-left">
+                            <${SymbolNavBar}
+                                symbols=${symbols}
+                                selectedIdx=${selectedIdx}
+                                onSelect=${(idx) => setSelectedIdx(idx)}
                             />
-                        `)}
+                            <${SymbolDetail} sym=${symbols[selectedIdx]} />
+                        </div>
+                        <div class="blast-panel-right">
+                            <div class="blast-viz-toggle">
+                                <button class=${vizMode === 'sunburst' ? 'active' : ''} onClick=${() => setVizMode('sunburst')}>
+                                    ${renderIcon(html, 'blastRadius', { size: 12 })} Sunburst
+                                </button>
+                                <button class=${vizMode === 'flamegraph' ? 'active' : ''} onClick=${() => setVizMode('flamegraph')}>
+                                    ${renderIcon(html, 'reorder', { size: 12 })} Flamegraph
+                                </button>
+                            </div>
+                            <div class="blast-viz-wrapper">
+                                ${vizMode === 'sunburst'
+                                    ? html`<${SunburstChart} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} />`
+                                    : html`<${FlameGraph} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} />`
+                                }
+                            </div>
+                        </div>
                     </div>
                 `}
             </div>

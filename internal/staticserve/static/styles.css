@@ -2781,6 +2781,13 @@ body {
   background: rgba(148, 163, 184, 0.14);
   color: var(--text-dim);
 }
+.blast-score-chip.hygiene-dormant,
+.blast-score-chip.coupling-dormant {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px dashed var(--border-subtle);
+  opacity: 0.55;
+}
 .blast-signal-list {
   list-style: none;
   margin: 0;
@@ -3060,6 +3067,241 @@ body {
 .blast-caller:hover {
   color: var(--text-primary);
   border-color: rgba(148, 163, 184, 0.4);
+}
+
+/* Two-column blast panel layout: details (left) + sunburst chart (right) */
+.blast-panel-columns {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.blast-panel-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.blast-panel-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.blast-sunburst-wrapper,
+.blast-viz-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Sunburst: forces square aspect ratio, never exceeds container */
+.viz-container-sq {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  max-width: 420px;
+  max-height: 390px;
+}
+
+.viz-container-sq svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Flamegraph: fills available width and height */
+.viz-container-fg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 420px;
+  max-height: 390px;
+  overflow: hidden;
+}
+
+.viz-container-fg svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Visualization toggle: Sunburst | Flamegraph */
+.blast-viz-toggle {
+  display: inline-flex;
+  gap: 1px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--border-subtle);
+}
+
+.blast-viz-toggle button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.blast-viz-toggle button:hover {
+  color: var(--text-secondary);
+}
+
+.blast-viz-toggle button.active {
+  background: var(--accent-blue);
+  color: #fff;
+}
+
+/* Symbol navigation bar */
+.blast-symbol-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+}
+
+.blast-symbol-nav-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.blast-symbol-nav-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+}
+
+.blast-symbol-nav-btn:active {
+  background: var(--accent-blue);
+  color: #fff;
+}
+
+.blast-symbol-nav-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.blast-symbol-nav-name {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.blast-symbol-nav-kind {
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 1px 6px;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.blast-symbol-nav-pos {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+/* Symbol detail (always-expanded card) */
+.blast-symbol-detail {
+  padding: 8px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 4px;
+  background: var(--bg-secondary);
+}
+
+.viz-tooltip {
+  position: fixed;
+  z-index: 9999;
+  padding: 8px 12px;
+  background: rgba(20, 20, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  pointer-events: none;
+  line-height: 1.5;
+  max-width: 380px;
+  white-space: normal;
+  word-break: break-all;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: opacity 0.1s ease;
+}
+
+.viz-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+  padding: 16px;
+}
+
+/* Flamegraph bars */
+.flame-bar {
+  transition: opacity 0.12s ease;
+}
+
+@keyframes flame-flicker {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(255,120,0,0.2)); }
+  33% { filter: drop-shadow(0 0 5px rgba(255,100,0,0.3)); }
+  66% { filter: drop-shadow(0 0 4px rgba(255,140,0,0.25)); }
+}
+
+/* Responsive: stack columns on narrow screens */
+@media (max-width: 900px) {
+  .blast-panel-columns {
+    flex-direction: column;
+  }
+
+  .blast-panel-right {
+    flex-shrink: 1;
+  }
 }
 
 /* Comments */

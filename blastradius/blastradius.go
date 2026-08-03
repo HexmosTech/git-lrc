@@ -151,6 +151,9 @@ type CallerRef struct {
 	QualifiedName string
 	Depth         int // 1 = direct caller, 2+ = transitive
 	Weight        float64
+	// Path holds the intermediate qualified names between the symbol and
+	// this caller (see CallerContribution.Path).
+	Path []string
 }
 
 // SymbolContribution describes one touched symbol's part of a hunk's score.
@@ -585,7 +588,7 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 		var packages []string
 		direct, transitive := 0, 0
 		for _, caller := range ss.Callers {
-			callers = append(callers, CallerRef{QualifiedName: caller.QualifiedName, Depth: caller.Depth, Weight: caller.Weight})
+			callers = append(callers, CallerRef{QualifiedName: caller.QualifiedName, Depth: caller.Depth, Weight: caller.Weight, Path: caller.Path})
 			packages = append(packages, packageOf(caller.QualifiedName))
 			if caller.Depth == 1 {
 				direct++
