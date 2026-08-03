@@ -117,10 +117,15 @@ func FanIn(ctx context.Context, q GraphQuerier, qualifiedNames []string, cfg Con
 				"MATCH (caller)-[:CALLS]->(mid)-[:CALLS]->(f) WHERE f.qualified_name IN %s RETURN f.qualified_name AS symbol, caller.qualified_name AS caller, mid.qualified_name AS via",
 				symbolList,
 			)
-		} else {
+		} else if depth == 3 {
 			cypher = fmt.Sprintf(
 				"MATCH (caller)-[:CALLS]->(mid1)-[:CALLS]->(mid2)-[:CALLS]->(f) WHERE f.qualified_name IN %s RETURN f.qualified_name AS symbol, caller.qualified_name AS caller, mid1.qualified_name AS via1, mid2.qualified_name AS via2",
 				symbolList,
+			)
+		} else {
+			cypher = fmt.Sprintf(
+				"MATCH (caller)-[:CALLS*%d..%d]->(f) WHERE f.qualified_name IN %s RETURN f.qualified_name AS symbol, caller.qualified_name AS caller",
+				depth, depth, symbolList,
 			)
 		}
 		result, err := q.QueryGraph(ctx, cypher, cfg.MaxRows)

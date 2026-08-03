@@ -7,6 +7,7 @@ export function buildHierarchy(symbol) {
     const callers = symbol.Callers || [];
     const nodeMap = new Map();
     const children = [];
+    const childrenNames = new Set();
 
     function ensureNode(qualifiedName, isIntermediate) {
         if (!nodeMap.has(qualifiedName)) {
@@ -14,6 +15,7 @@ export function buildHierarchy(symbol) {
                 name: shortName(qualifiedName),
                 qualifiedName: qualifiedName,
                 children: [],
+                _names: new Set(),
             };
             if (isIntermediate) node.isIntermediate = true;
             nodeMap.set(qualifiedName, node);
@@ -31,21 +33,24 @@ export function buildHierarchy(symbol) {
             node.weight = caller.Weight;
             node.isLeaf = true;
             children.push(node);
+            childrenNames.add(caller.QualifiedName);
             continue;
         }
 
         const firstVia = path[0];
         const viaNode = ensureNode(firstVia, true);
-        if (!children.some(c => c.qualifiedName === firstVia)) {
+        if (!childrenNames.has(firstVia)) {
             children.push(viaNode);
+            childrenNames.add(firstVia);
         }
         if (!viaNode.depth) viaNode.depth = 1;
 
         let parent = viaNode;
         for (let i = 1; i < path.length; i++) {
             const childNode = ensureNode(path[i], true);
-            if (!parent.children.some(c => c.qualifiedName === path[i])) {
+            if (!parent._names.has(path[i])) {
                 parent.children.push(childNode);
+                parent._names.add(path[i]);
             }
             if (!childNode.depth) childNode.depth = i + 1;
             parent = childNode;
@@ -55,8 +60,9 @@ export function buildHierarchy(symbol) {
         leafNode.depth = caller.Depth;
         leafNode.weight = caller.Weight;
         leafNode.isLeaf = true;
-        if (!parent.children.some(c => c.qualifiedName === caller.QualifiedName)) {
+        if (!parent._names.has(caller.QualifiedName)) {
             parent.children.push(leafNode);
+            parent._names.add(caller.QualifiedName);
         }
     }
 
@@ -89,12 +95,14 @@ export function interpolateColor(c1, c2, t) {
 }
 
 export function getDepthColor(d) {
-    if (d.depth === 0) return '#12121c';
+    if (d.depth === 0) return (DEPTH_COLORS[0] || { base: '#12121c' }).base;
     const ring = DEPTH_COLORS[d.depth] || { base: '#607d8b', light: '#90a4ae' };
     if (d.parent && d.parent.children && d.parent.children.length > 1) {
         const idx = d.parent.children.indexOf(d);
-        const frac = idx / (d.parent.children.length - 1);
-        if (frac >= 0) return interpolateColor(ring.base, ring.light, frac);
+        if (idx >= 0) {
+            const frac = idx / Math.max(d.parent.children.length - 1, 1);
+            return interpolateColor(ring.base, ring.light, frac);
+        }
     }
     return ring.base;
 }

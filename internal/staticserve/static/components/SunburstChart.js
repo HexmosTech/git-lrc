@@ -6,7 +6,7 @@ function arcTween(a, arcGen) {
     return t => arcGen(i(t));
 }
 
-function renderSunburst(svgEl, symbol, width, height, tooltipEl, _hoveredCaller, onHoverCaller) {
+function renderSunburst(svgEl, symbol, width, height, tooltipEl, onHoverCaller) {
     const d3 = window.d3;
     const radius = Math.min(width, height) / 2;
 
@@ -73,7 +73,11 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl, _hoveredCaller,
             update => update.call(sel => sel.interrupt().transition().duration(300)
                 .attr('d', d => arc(d)).style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78))),
             exit => exit.interrupt().transition().duration(150)
-                .attrTween('d', d => { const m = (d.x0 + d.x1) / 2; return t => arc({ x0: m, x1: m, y0: d.y0, y1: d.y0 }); })
+                .attrTween('d', d => {
+                    const m = (d.x0 + d.x1) / 2;
+                    const i = d3.interpolate({ x0: d.x0, x1: d.x1, y0: d.y0, y1: d.y1 }, { x0: m, x1: m, y0: d.y0, y1: d.y0 });
+                    return t => arc(i(t));
+                })
                 .style('opacity', 0).remove(),
         );
 
@@ -86,7 +90,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl, _hoveredCaller,
                 .style('opacity', 1).attr('stroke', '#fff7e0').attr('stroke-width', 1.8)
                 .attr('filter', 'drop-shadow(0 0 10px rgba(255,152,0,0.5)) drop-shadow(0 0 20px rgba(255,100,0,0.3))');
             g.selectAll('path.sunburst-arc').interrupt().transition().duration(80)
-                .style('opacity', p => (p === d || p === d.parent || (d.parent && p === d.parent)) ? 1 : 0.12);
+                .style('opacity', p => (p === d || p === d.parent) ? 1 : 0.12);
             const b = d.data;
             tooltipEl.innerHTML = b.isIntermediate
                 ? `<strong>&#8627;</strong> ${b.qualifiedName}<br><span style="color:#9a8070;font-size:10px">intermediate &middot; depth ${d.depth}</span>`
@@ -137,7 +141,7 @@ export async function createSunburstChart() {
             const tt = tooltipRef.current;
             el.getBoundingClientRect();
             const t = setTimeout(() => {
-                if (el && tt) renderSunburst(el, symbol, width, height, tt, null, onHoverCaller);
+                if (el && tt) renderSunburst(el, symbol, width, height, tt, onHoverCaller);
             }, 60);
             return () => clearTimeout(t);
         }, [d3Ready, symbol, width, height]);

@@ -1,7 +1,7 @@
 import { waitForPreact } from './utils.js';
 import { buildHierarchy, DEPTH_COLORS } from './callgraph-utils.js';
 
-function renderFlameGraph(svgEl, symbol, width, height, tooltipEl, _hoveredCaller, onHoverCaller) {
+function renderFlameGraph(svgEl, symbol, width, height, tooltipEl, onHoverCaller) {
     const d3 = window.d3;
     const PAD_L = 4;
     const PAD_R = 4;
@@ -169,7 +169,7 @@ export async function createFlameGraph() {
             const tt = tooltipRef.current;
             el.getBoundingClientRect();
             const t = setTimeout(() => {
-                if (el && tt) renderFlameGraph(el, symbol, width, height, tt, null, onHoverCaller);
+                if (el && tt) renderFlameGraph(el, symbol, width, height, tt, onHoverCaller);
             }, 60);
             return () => clearTimeout(t);
         }, [d3Ready, symbol, width, height]);
