@@ -11,6 +11,15 @@
 import { waitForPreact } from './utils.js';
 import { renderIcon } from './icons.js';
 import { blastRadiusTier, allSignals } from './blast_radius_sort_state.mjs';
+import {
+    callerGroupLabel,
+    callersForRenameView,
+    groupCallers,
+    hasRenameViews,
+    RENAME_VIEW_AFTER,
+    RENAME_VIEW_BEFORE,
+    symbolForRenameView,
+} from './callgraph_model.mjs';
 import { getSunburstChart } from './SunburstChart.js';
 import { getFlameGraph } from './FlameGraph.js';
 
@@ -143,23 +152,8 @@ function sumExpression(nums) {
     return { text, total };
 }
 
-function groupCallersByDepth(callers) {
-    const groups = new Map();
-    (callers || []).forEach((c) => {
-        const depth = c.Depth || 1;
-        if (!groups.has(depth)) groups.set(depth, []);
-        groups.get(depth).push(c);
-    });
-    return [...groups.entries()].sort((a, b) => a[0] - b[0]);
-}
-
-function depthLabel(depth) {
-    if (depth === 1) return 'Direct callers';
-    return `${depth} calls away`;
-}
-
 export async function createBlastRadiusPanel() {
-    const { html, useState, useRef, useCallback, useEffect } = await waitForPreact();
+    const { html, useState, useRef, useCallback, useEffect, useMemo } = await waitForPreact();
     const SunburstChart = await getSunburstChart();
     const FlameGraph = await getFlameGraph();
 
@@ -410,21 +404,52 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    function CallerGroup({ depth, callers, hoveredCaller, onHoverCaller }) {
+    // RenameViewToggle only appears for renamed symbols - everything else has
+    // a single call graph, and offering a Before/After choice there would
+    // imply a distinction that does not exist. Each side shows its own count
+    // so an empty view is obviously empty rather than looking broken.
+    function RenameViewToggle({ sym, view, onSelect }) {
+        if (!hasRenameViews(sym)) return null;
+        const beforeCount = callersForRenameView(sym, RENAME_VIEW_BEFORE).length;
+        const afterCount = callersForRenameView(sym, RENAME_VIEW_AFTER).length;
+        const newName = sym.Name || shortName(sym.QualifiedName);
+        return html`
+            <div class="blast-rename-toggle">
+                <span class="blast-rename-toggle-label">Call graph</span>
+                <button
+                    class=${view === RENAME_VIEW_BEFORE ? 'active' : ''}
+                    title="Symbols still using the old name ${sym.RenamedFrom} — found by text search, since the old name has no node left in the graph"
+                    onClick=${() => onSelect(RENAME_VIEW_BEFORE)}
+                >
+                    Before <span class="blast-rename-toggle-count">${beforeCount}</span>
+                </button>
+                <button
+                    class=${view === RENAME_VIEW_AFTER ? 'active' : ''}
+                    title="Callers of the new name ${newName} in the current graph"
+                    onClick=${() => onSelect(RENAME_VIEW_AFTER)}
+                >
+                    After <span class="blast-rename-toggle-count">${afterCount}</span>
+                </button>
+            </div>
+        `;
+    }
+
+    function CallerGroup({ group, oldName, hoveredCaller, onHoverCaller }) {
+        const callers = group.callers;
         const [showAll, setShowAll] = useState(false);
         const visible = showAll ? callers : callers.slice(0, CALLERS_PREVIEW);
         const hidden = callers.length - visible.length;
         return html`
-            <div class="blast-caller-group">
+            <div class="blast-caller-group ${group.preRename ? 'pre-rename' : ''}">
                 <div class="blast-caller-group-header">
-                    ${depthLabel(depth)}
+                    ${callerGroupLabel(group, oldName)}
                     <span class="blast-caller-count">${callers.length}</span>
                 </div>
                 <div class="blast-caller-list ${showAll ? 'expanded' : ''}">
                     ${visible.map((c) => html`
                         <span
                             key=${c.QualifiedName}
-                            class="blast-caller ${hoveredCaller === c.QualifiedName ? 'highlighted' : ''}"
+                            class="blast-caller ${group.preRename ? 'pre-rename' : ''} ${hoveredCaller === c.QualifiedName ? 'highlighted' : ''}"
                             title="${c.QualifiedName}"
                             onMouseEnter=${() => onHoverCaller(c.QualifiedName)}
                             onMouseLeave=${() => onHoverCaller(null)}
@@ -485,7 +510,7 @@ export async function createBlastRadiusPanel() {
     }
 
     function SymbolDetail({ sym, hoveredCaller, onHoverCaller }) {
-        const callerGroups = groupCallersByDepth(sym.Callers);
+        const callerGroups = groupCallers(sym.Callers);
         const totalCallers = (sym.Callers || []).length;
         return html`
             <div class="blast-symbol-detail">
@@ -498,8 +523,8 @@ export async function createBlastRadiusPanel() {
                 ${totalCallers > 0 && html`
                     <div class="blast-callers">
                         <div class="blast-section-title">Reached from ${totalCallers} caller${totalCallers !== 1 ? 's' : ''}</div>
-                        ${callerGroups.map(([depth, callers]) => html`
-                            <${CallerGroup} key=${depth} depth=${depth} callers=${callers} hoveredCaller=${hoveredCaller} onHoverCaller=${onHoverCaller} />
+                        ${callerGroups.map((group) => html`
+                            <${CallerGroup} key=${group.key} group=${group} oldName=${sym.RenamedFrom} hoveredCaller=${hoveredCaller} onHoverCaller=${onHoverCaller} />
                         `)}
                     </div>
                 `}
@@ -705,6 +730,18 @@ export async function createBlastRadiusPanel() {
         const [vizMode, setVizMode] = useState('sunburst');
         const [hoveredCaller, setHoveredCaller] = useState(null);
         const [scoreMode, setScoreMode] = useState('summary');
+        // Renamed symbols open on "Before": the After graph is the honest
+        // current state but is almost always empty right after a rename, so
+        // landing there shows nothing and reads as a broken chart.
+        const [renameView, setRenameView] = useState(RENAME_VIEW_BEFORE);
+        // Memoized because symbolForRenameView returns a fresh object for a
+        // renamed symbol: the charts key their render effect on symbol
+        // identity, so rebuilding it every parent render (each hover, each
+        // toggle elsewhere in the panel) would redraw the whole chart.
+        const vizSymbol = useMemo(
+            () => symbolForRenameView(symbols[selectedIdx], renameView),
+            [symbols, selectedIdx, renameView],
+        );
 
         return html`
             <div class="blast-panel">
@@ -796,10 +833,15 @@ export async function createBlastRadiusPanel() {
                                     ${renderIcon(html, 'reorder', { size: 12 })} Flamegraph
                                 </button>
                             </div>
+                            <${RenameViewToggle}
+                                sym=${symbols[selectedIdx]}
+                                view=${renameView}
+                                onSelect=${setRenameView}
+                            />
                             <div class="blast-viz-wrapper">
                                 ${vizMode === 'sunburst'
-                                    ? html`<${SunburstChart} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
-                                    : html`<${FlameGraph} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
+                                    ? html`<${SunburstChart} symbol=${vizSymbol} view=${renameView} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
+                                    : html`<${FlameGraph} symbol=${vizSymbol} view=${renameView} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
                                 }
                             </div>
                         </div>

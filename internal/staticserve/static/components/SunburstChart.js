@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, getDepthColor, DEPTH_COLORS, hoverInfoFromDatum, renderHoverTooltip, loadD3, verifyChartRender } from './callgraph-utils.js';
+import { buildHierarchy, getDepthColor, DEPTH_COLORS, PRERENAME_COLORS, hoverInfoFromDatum, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 function arcTween(a, arcGen) {
     const i = window.d3.interpolate({ x0: a.x0, x1: a.x0 }, a);
@@ -27,7 +27,7 @@ function arcTween(a, arcGen) {
 // failure, so the retry can't itself get caught by whatever stalled the
 // first attempt (a slow/backgrounded tab throttling the transition's timer
 // ticks, concurrent chart mounts competing for the main thread, etc).
-function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller, immediate) {
+function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller, immediate, view) {
     const d3 = window.d3;
     const radius = Math.min(width, height) / 2;
 
@@ -39,16 +39,18 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
         .style('background', 'transparent');
 
     const defs = svg.append('defs');
-    for (let d = 1; d <= 4; d++) {
-        const c = DEPTH_COLORS[d];
-        if (!c) continue;
+    const addGradient = (id, c) => {
         const grad = defs.append('linearGradient')
-            .attr('id', `sb-grad-${d}`)
+            .attr('id', id)
             .attr('x1', '0').attr('y1', '1')
             .attr('x2', '0').attr('y2', '0');
         grad.append('stop').attr('offset', '0%').attr('stop-color', c.base).attr('stop-opacity', 1);
         grad.append('stop').attr('offset', '60%').attr('stop-color', c.light).attr('stop-opacity', 0.95);
         grad.append('stop').attr('offset', '100%').attr('stop-color', c.light).attr('stop-opacity', 0.7);
+    };
+    for (let d = 1; d <= 4; d++) {
+        if (DEPTH_COLORS[d]) addGradient(`sb-grad-${d}`, DEPTH_COLORS[d]);
+        if (PRERENAME_COLORS[d]) addGradient(`sb-grad-pre-${d}`, PRERENAME_COLORS[d]);
     }
 
     const g = svg.append('g')
@@ -58,7 +60,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
         g.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em')
             .attr('fill', '#8a7060').attr('font-size', '13px')
             .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
-            .text('No callers in the dependency graph');
+            .text(emptyCallGraphMessage(symbol, view));
         return 0;
     }
 
@@ -107,8 +109,9 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
         );
 
     g.selectAll('path.sunburst-arc')
-        .attr('fill', d => `url(#sb-grad-${d.depth})`)
-        .attr('stroke', '#4a0000').attr('stroke-width', 0.7)
+        .attr('fill', d => (d.data.preRename ? `url(#sb-grad-pre-${d.depth})` : `url(#sb-grad-${d.depth})`))
+        .attr('stroke', d => (d.data.preRename ? '#1a2352' : '#4a0000')).attr('stroke-width', 0.7)
+        .attr('stroke-dasharray', d => (d.data.preRename ? '3 2' : null))
         .attr('cursor', 'pointer')
         .on('mouseenter', function (event, d) {
             d3.select(this).interrupt().transition().duration(80)
@@ -129,7 +132,8 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
         .on('mouseleave', function () {
             g.selectAll('path.sunburst-arc').transition().duration(150)
                 .style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78))
-                .attr('stroke', '#4a0000').attr('stroke-width', 0.7).attr('filter', null);
+                .attr('stroke', d => (d.data.preRename ? '#1a2352' : '#4a0000'))
+                .attr('stroke-width', 0.7).attr('filter', null);
             onHover(null);
             if (onHoverCaller) onHoverCaller(null);
         });
@@ -152,7 +156,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
 
 export async function createSunburstChart() {
     const { html, useState, useRef, useEffect } = await waitForPreact();
-    function SunburstChart({ symbol, width, height, hoveredCaller, onHoverCaller }) {
+    function SunburstChart({ symbol, view, width, height, hoveredCaller, onHoverCaller }) {
         const svgRef = useRef(null); const tooltipRef = useRef(null);
         const [d3Ready, setD3Ready] = useState(typeof window.d3 !== 'undefined');
         const [hover, setHover] = useState(null);
@@ -175,7 +179,7 @@ export async function createSunburstChart() {
             const timers = [];
             const t = setTimeout(() => {
                 if (!el) return;
-                const expected = renderSunburst(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, false);
+                const expected = renderSunburst(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, false, view);
                 // Verify once the entrance transition should have finished
                 // (last arc's delay + its own duration, plus a grace
                 // margin) - if it stalled or got interrupted (backgrounded
@@ -186,13 +190,13 @@ export async function createSunburstChart() {
                 timers.push(setTimeout(() => {
                     if (!el || !el.isConnected) return;
                     if (!verifyChartRender(el, 'path.sunburst-arc', expected)) {
-                        renderSunburst(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, true);
+                        renderSunburst(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, true, view);
                     }
                 }, verifyDelay));
             }, 60);
             timers.push(t);
             return () => timers.forEach(clearTimeout);
-        }, [d3Ready, symbol, width, height]);
+        }, [d3Ready, symbol, view, width, height]);
 
         useEffect(() => {
             if (!d3Ready || !svgRef.current) return;
@@ -212,17 +216,18 @@ export async function createSunburstChart() {
             } else {
                 arcs.interrupt().transition().duration(150)
                     .style('opacity', d => (d && d.data && d.data.isLeaf ? 0.92 : 0.78))
-                    .attr('stroke', '#4a0000').attr('stroke-width', 0.7).attr('filter', null);
+                    .attr('stroke', d => (d && d.data && d.data.preRename ? '#1a2352' : '#4a0000'))
+                    .attr('stroke-width', 0.7).attr('filter', null);
             }
         }, [hoveredCaller, d3Ready]);
         if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
-            return html`<div class="viz-container-sq"><div class="viz-empty">${symbol && symbol.Method === 'text-references' ? 'Text reference method — no call graph available' : 'No callers in the dependency graph'}</div></div>`;
+            return html`<div class="viz-container-sq"><div class="viz-empty">${emptyCallGraphMessage(symbol, view)}</div></div>`;
         }
         return html`
             <div class="viz-container-sq">
                 ${hover && html`
                     <div ref=${tooltipRef} class="viz-tooltip" style="left:${hover.x}px;top:${hover.y}px">
-                        ${renderHoverTooltip(html, hover)}
+                        ${renderHoverTooltip(html, hover, symbol.RenamedFrom)}
                     </div>
                 `}
                 <svg ref=${svgRef} width=${width} height=${height}></svg>

@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, DEPTH_COLORS, renderHoverTooltip, loadD3, verifyChartRender } from './callgraph-utils.js';
+import { buildHierarchy, DEPTH_COLORS, PRERENAME_COLORS, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 // renderFlameGraph owns d3 rendering only; tooltip content/visibility is
 // reported via onHover(info, x, y) rather than mutated directly on a ref'd
@@ -9,7 +9,7 @@ import { buildHierarchy, DEPTH_COLORS, renderHoverTooltip, loadD3, verifyChartRe
 // SunburstChart.js and its use below). immediate=true skips every entrance
 // transition and snaps bars straight to their final width/position/opacity
 // - used for the automatic repair pass after a verification failure.
-function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller, immediate) {
+function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller, immediate, view) {
     const d3 = window.d3;
     const PAD_L = 4;
     const PAD_R = 4;
@@ -26,7 +26,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
         svg.append('text').attr('x', width / 2).attr('y', height / 2)
             .attr('text-anchor', 'middle').attr('fill', '#8a7060').attr('font-size', '13px')
             .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
-            .text('No callers in the dependency graph');
+            .text(emptyCallGraphMessage(symbol, view));
         return 0;
     }
 
@@ -57,9 +57,10 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
         grad.append('stop').attr('offset', '0%').attr('stop-color', from).attr('stop-opacity', 1);
         grad.append('stop').attr('offset', '100%').attr('stop-color', to).attr('stop-opacity', 1);
     }
-    function depthGradientId(depth) {
-        const c = DEPTH_COLORS[depth] || DEPTH_COLORS[1];
-        const id = 'fg-grad-' + depth;
+    function depthGradientId(depth, preRename) {
+        const palette = preRename ? PRERENAME_COLORS : DEPTH_COLORS;
+        const c = palette[depth] || palette[1];
+        const id = (preRename ? 'fg-grad-pre-' : 'fg-grad-') + depth;
         ensureGradient(id, c.base, c.light);
         return id;
     }
@@ -100,9 +101,13 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
             .style('opacity', (animate && !skipAnim) ? 0 : 0.92)
             .merge(rects);
 
-        const gradId = depthGradientId(depth + 1);
-        merged.attr('fill', `url(#${gradId})`).attr('rx', 0).attr('ry', 0).attr('cursor', 'pointer')
-            .attr('stroke', '#3d0000').attr('stroke-width', 1.5);
+        // Fill is per-bar, not per-level: pre-rename callers can sit at the
+        // same depth as live ones and must stay visually distinct.
+        merged.attr('fill', d => `url(#${depthGradientId(depth + 1, d.node.preRename)})`)
+            .attr('rx', 0).attr('ry', 0).attr('cursor', 'pointer')
+            .attr('stroke', d => (d.node.preRename ? '#1a2352' : '#3d0000'))
+            .attr('stroke-dasharray', d => (d.node.preRename ? '4 2' : null))
+            .attr('stroke-width', 1.5);
 
         if (skipAnim) {
             merged.attr('width', d => d.width).attr('y', y).style('opacity', 0.92);
@@ -119,8 +124,8 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
                 .attr('filter', 'drop-shadow(0 0 8px rgba(255,152,0,0.5)) drop-shadow(0 0 16px rgba(255,80,0,0.25)) brightness(1.12)');
             const n = d.node;
             onHover(n.isIntermediate
-                ? { isIntermediate: true, qualifiedName: n.qualifiedName, depth: n.depth }
-                : { isIntermediate: false, name: n.name, qualifiedName: n.qualifiedName, depth: n.depth },
+                ? { isIntermediate: true, qualifiedName: n.qualifiedName, depth: n.depth, preRename: !!n.preRename }
+                : { isIntermediate: false, name: n.name, qualifiedName: n.qualifiedName, depth: n.depth, preRename: !!n.preRename },
                 event.clientX + 14, event.clientY - 10);
             if (onHoverCaller && n.qualifiedName) onHoverCaller(n.qualifiedName);
         })
@@ -173,7 +178,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
 
 export async function createFlameGraph() {
     const { html, useState, useRef, useEffect } = await waitForPreact();
-    function FlameGraph({ symbol, width, height, hoveredCaller, onHoverCaller }) {
+    function FlameGraph({ symbol, view, width, height, hoveredCaller, onHoverCaller }) {
         const svgRef = useRef(null); const tooltipRef = useRef(null);
         const [d3Ready, setD3Ready] = useState(typeof window.d3 !== 'undefined');
         const [hover, setHover] = useState(null);
@@ -194,7 +199,7 @@ export async function createFlameGraph() {
             const timers = [];
             const t = setTimeout(() => {
                 if (!el) return;
-                const expected = renderFlameGraph(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, false);
+                const expected = renderFlameGraph(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, false, view);
                 // See the matching verification+repair comment in
                 // SunburstChart.js - same stalled-transition failure mode,
                 // same fix.
@@ -202,13 +207,13 @@ export async function createFlameGraph() {
                 timers.push(setTimeout(() => {
                     if (!el || !el.isConnected) return;
                     if (!verifyChartRender(el, 'rect.flame-bar', expected)) {
-                        renderFlameGraph(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, true);
+                        renderFlameGraph(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, true, view);
                     }
                 }, verifyDelay));
             }, 60);
             timers.push(t);
             return () => timers.forEach(clearTimeout);
-        }, [d3Ready, symbol, width, height]);
+        }, [d3Ready, symbol, view, width, height]);
 
         useEffect(() => {
             if (!d3Ready || !svgRef.current) return;
@@ -230,13 +235,13 @@ export async function createFlameGraph() {
             }
         }, [hoveredCaller, d3Ready]);
         if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
-            return html`<div class="viz-container-fg"><div class="viz-empty">${symbol && symbol.Method === 'text-references' ? 'Text reference method — no call graph available' : 'No callers in the dependency graph'}</div></div>`;
+            return html`<div class="viz-container-fg"><div class="viz-empty">${emptyCallGraphMessage(symbol, view)}</div></div>`;
         }
         return html`
             <div class="viz-container-fg">
                 ${hover && html`
                     <div ref=${tooltipRef} class="viz-tooltip" style="left:${hover.x}px;top:${hover.y}px">
-                        ${renderHoverTooltip(html, hover)}
+                        ${renderHoverTooltip(html, hover, symbol.RenamedFrom)}
                     </div>
                 `}
                 <svg ref=${svgRef} width=${width} height=${height}></svg>
