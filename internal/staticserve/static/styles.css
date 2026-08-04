@@ -3267,6 +3267,14 @@ body {
   min-height: 0;
   width: 100%;
   max-width: 420px;
+  /* .viz-container-sq/.viz-container-fg are capped at 420x390 and don't
+     necessarily fill this wrapper (the sunburst is forced square via
+     aspect-ratio, so it can't fill a taller-than-wide wrapper) - center
+     that fixed-size box within whatever space this wrapper actually gets,
+     both axes, instead of letting it sit pinned to the top. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Sunburst: forces square aspect ratio, never exceeds container */

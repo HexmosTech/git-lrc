@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, getDepthColor, DEPTH_COLORS, hoverInfoFromDatum, renderHoverTooltip } from './callgraph-utils.js';
+import { buildHierarchy, getDepthColor, DEPTH_COLORS, hoverInfoFromDatum, renderHoverTooltip, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 function arcTween(a, arcGen) {
     const i = window.d3.interpolate({ x0: a.x0, x1: a.x0 }, a);
@@ -15,7 +15,19 @@ function arcTween(a, arcGen) {
 // since Preact never tracked the imperatively-injected children. Only the
 // tooltip's *position* stays imperative (via tooltipRef, updated on every
 // mousemove) - that's a leaf style write, not content, so it can't desync.
-function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller) {
+//
+// Returns the number of arcs this render expects to end up with, so the
+// caller can verify the draw actually completed (see verifyChartRender in
+// the component below) - a fresh call always clears the SVG first, so every
+// element is in the "enter" branch below regardless of what was drawn
+// before.
+//
+// immediate=true skips the entrance transition and writes final d/opacity
+// directly - used for the automatic repair pass after a verification
+// failure, so the retry can't itself get caught by whatever stalled the
+// first attempt (a slow/backgrounded tab throttling the transition's timer
+// ticks, concurrent chart mounts competing for the main thread, etc).
+function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller, immediate) {
     const d3 = window.d3;
     const radius = Math.min(width, height) / 2;
 
@@ -47,7 +59,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
             .attr('fill', '#8a7060').attr('font-size', '13px')
             .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
             .text('No callers in the dependency graph');
-        return;
+        return 0;
     }
 
     const root = buildHierarchy(symbol);
@@ -72,13 +84,17 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
             return parts.join('|');
         })
         .join(
-            enter => enter.append('path').attr('class', 'sunburst-arc')
-                .attr('d', d => { const m = (d.x0 + d.x1) / 2; return arc({ x0: m, x1: m, y0: d.y0, y1: d.y0 }); })
-                .style('opacity', 0)
-                .call(sel => sel.interrupt().transition().duration(400).delay((d, i) => i * 8)
-                    .attrTween('d', d => arcTween(d, arc))
-                    .style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78)),
-                ),
+            enter => immediate
+                ? enter.append('path').attr('class', 'sunburst-arc')
+                    .attr('d', d => arc(d))
+                    .style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78))
+                : enter.append('path').attr('class', 'sunburst-arc')
+                    .attr('d', d => { const m = (d.x0 + d.x1) / 2; return arc({ x0: m, x1: m, y0: d.y0, y1: d.y0 }); })
+                    .style('opacity', 0)
+                    .call(sel => sel.interrupt().transition().duration(400).delay((d, i) => i * 8)
+                        .attrTween('d', d => arcTween(d, arc))
+                        .style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78)),
+                    ),
             update => update.call(sel => sel.interrupt().transition().duration(300)
                 .attr('d', d => arc(d)).style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78))),
             exit => exit.interrupt().transition().duration(150)
@@ -130,6 +146,8 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
         .attr('fill', '#8a6040').attr('font-size', '8px')
         .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
         .text(root.children.length + ' child' + (root.children.length !== 1 ? 'ren' : ''));
+
+    return visible.length;
 }
 
 export async function createSunburstChart() {
@@ -139,10 +157,10 @@ export async function createSunburstChart() {
         const [d3Ready, setD3Ready] = useState(typeof window.d3 !== 'undefined');
         const [hover, setHover] = useState(null);
         useEffect(() => {
-            if (window.d3) { setD3Ready(true); return; }
-            const s = document.createElement('script'); s.src = '/static/vendor/d3.v7.min.js';
-            s.onload = () => setD3Ready(true); s.onerror = () => console.warn('D3 load fail');
-            document.head.appendChild(s);
+            let cancelled = false;
+            loadD3().then(() => { if (!cancelled) setD3Ready(true); })
+                .catch(() => console.warn('D3 load fail'));
+            return () => { cancelled = true; };
         }, []);
         // Clear any lingering hover state whenever the selected symbol
         // changes - defense-in-depth so switching symbols via the nav (e.g.
@@ -153,12 +171,27 @@ export async function createSunburstChart() {
             if (!d3Ready || !symbol || !svgRef.current) return;
             const el = svgRef.current;
             el.getBoundingClientRect();
+            const onHoverCb = (info, x, y) => setHover(info ? { ...info, x, y } : null);
+            const timers = [];
             const t = setTimeout(() => {
-                if (el) renderSunburst(el, symbol, width, height, tooltipRef, (info, x, y) => {
-                    setHover(info ? { ...info, x, y } : null);
-                }, onHoverCaller);
+                if (!el) return;
+                const expected = renderSunburst(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, false);
+                // Verify once the entrance transition should have finished
+                // (last arc's delay + its own duration, plus a grace
+                // margin) - if it stalled or got interrupted (backgrounded
+                // tab throttling the transition clock, a concurrent chart
+                // mount competing for the main thread, etc - see loadD3),
+                // redraw immediately, no animation, guaranteed complete.
+                const verifyDelay = Math.max(500, expected * 8 + 450);
+                timers.push(setTimeout(() => {
+                    if (!el || !el.isConnected) return;
+                    if (!verifyChartRender(el, 'path.sunburst-arc', expected)) {
+                        renderSunburst(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, true);
+                    }
+                }, verifyDelay));
             }, 60);
-            return () => clearTimeout(t);
+            timers.push(t);
+            return () => timers.forEach(clearTimeout);
         }, [d3Ready, symbol, width, height]);
 
         useEffect(() => {

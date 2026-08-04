@@ -1,10 +1,15 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, DEPTH_COLORS, renderHoverTooltip } from './callgraph-utils.js';
+import { buildHierarchy, DEPTH_COLORS, renderHoverTooltip, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 // renderFlameGraph owns d3 rendering only; tooltip content/visibility is
 // reported via onHover(info, x, y) rather than mutated directly on a ref'd
 // DOM node - see the matching comment in SunburstChart.js for why.
-function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller) {
+//
+// Returns the number of bars this render expects (see verifyChartRender in
+// SunburstChart.js and its use below). immediate=true skips every entrance
+// transition and snaps bars straight to their final width/position/opacity
+// - used for the automatic repair pass after a verification failure.
+function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller, immediate) {
     const d3 = window.d3;
     const PAD_L = 4;
     const PAD_R = 4;
@@ -22,7 +27,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
             .attr('text-anchor', 'middle').attr('fill', '#8a7060').attr('font-size', '13px')
             .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
             .text('No callers in the dependency graph');
-        return;
+        return 0;
     }
 
     const root = buildHierarchy(symbol);
@@ -86,19 +91,22 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
         rects.exit().interrupt().transition().duration(100)
             .attr('width', 0).attr('y', leafY).style('opacity', 0).remove();
 
+        const skipAnim = animate && immediate;
         const merged = rects.enter().append('rect')
             .attr('class', 'flame-bar')
             .attr('x', d => d.x).attr('y', leafY)
-            .attr('width', d => animate ? 0 : d.width)
+            .attr('width', d => (animate && !skipAnim) ? 0 : d.width)
             .attr('height', BAR_H)
-            .style('opacity', animate ? 0 : 0.92)
+            .style('opacity', (animate && !skipAnim) ? 0 : 0.92)
             .merge(rects);
 
         const gradId = depthGradientId(depth + 1);
         merged.attr('fill', `url(#${gradId})`).attr('rx', 0).attr('ry', 0).attr('cursor', 'pointer')
             .attr('stroke', '#3d0000').attr('stroke-width', 1.5);
 
-        if (animate) {
+        if (skipAnim) {
+            merged.attr('width', d => d.width).attr('y', y).style('opacity', 0.92);
+        } else if (animate) {
             merged.interrupt().transition().duration(300).delay((d, i) => i * 8)
                 .attr('width', d => d.width).attr('y', y).style('opacity', 0.92);
         } else {
@@ -155,6 +163,12 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
         .attr('font-size', Math.max(9, Math.min(12, BAR_H * 0.55)) + 'px')
         .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", monospace')
         .attr('pointer-events', 'none').text(root.name);
+
+    // All bars across every recursion level are already appended by this
+    // point (renderLevel's own recursive calls happen synchronously, before
+    // any of their entrance transitions resolve) - only the transitions are
+    // still in flight.
+    return g.selectAll('rect.flame-bar').size();
 }
 
 export async function createFlameGraph() {
@@ -164,10 +178,10 @@ export async function createFlameGraph() {
         const [d3Ready, setD3Ready] = useState(typeof window.d3 !== 'undefined');
         const [hover, setHover] = useState(null);
         useEffect(() => {
-            if (window.d3) { setD3Ready(true); return; }
-            const s = document.createElement('script'); s.src = '/static/vendor/d3.v7.min.js';
-            s.onload = () => setD3Ready(true); s.onerror = () => console.warn('D3 load fail');
-            document.head.appendChild(s);
+            let cancelled = false;
+            loadD3().then(() => { if (!cancelled) setD3Ready(true); })
+                .catch(() => console.warn('D3 load fail'));
+            return () => { cancelled = true; };
         }, []);
         // Clear any lingering hover state whenever the selected symbol
         // changes - see the matching comment in SunburstChart.js.
@@ -176,12 +190,24 @@ export async function createFlameGraph() {
             if (!d3Ready || !symbol || !svgRef.current) return;
             const el = svgRef.current;
             el.getBoundingClientRect();
+            const onHoverCb = (info, x, y) => setHover(info ? { ...info, x, y } : null);
+            const timers = [];
             const t = setTimeout(() => {
-                if (el) renderFlameGraph(el, symbol, width, height, tooltipRef, (info, x, y) => {
-                    setHover(info ? { ...info, x, y } : null);
-                }, onHoverCaller);
+                if (!el) return;
+                const expected = renderFlameGraph(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, false);
+                // See the matching verification+repair comment in
+                // SunburstChart.js - same stalled-transition failure mode,
+                // same fix.
+                const verifyDelay = Math.max(500, expected * 8 + 450);
+                timers.push(setTimeout(() => {
+                    if (!el || !el.isConnected) return;
+                    if (!verifyChartRender(el, 'rect.flame-bar', expected)) {
+                        renderFlameGraph(el, symbol, width, height, tooltipRef, onHoverCb, onHoverCaller, true);
+                    }
+                }, verifyDelay));
             }, 60);
-            return () => clearTimeout(t);
+            timers.push(t);
+            return () => timers.forEach(clearTimeout);
         }, [d3Ready, symbol, width, height]);
 
         useEffect(() => {

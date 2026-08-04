@@ -1,3 +1,46 @@
+// loadD3 loads /static/vendor/d3.v7.min.js exactly once, however many chart
+// instances ask for it concurrently. SunburstChart and FlameGraph each used
+// to append their own <script> tag independently on mount - fine for one
+// chart, but "Expand All" (or any view that mounts several hunks' panels at
+// once) mounted several chart instances at the same moment, each racing its
+// own script load. That's a plausible source of an intermittent partial
+// first render: whichever instance's script tag finished loading first set
+// window.d3 and started drawing while the *page* was still busy fetching/
+// executing the other duplicate <script> tags, competing for the main
+// thread during the exact window the first D3 timers/transitions needed to
+// tick. A single shared, cached load removes that race entirely.
+let d3LoadPromise = null;
+export function loadD3() {
+    if (window.d3) return Promise.resolve(window.d3);
+    if (d3LoadPromise) return d3LoadPromise;
+    d3LoadPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = '/static/vendor/d3.v7.min.js';
+        s.onload = () => resolve(window.d3);
+        s.onerror = (e) => { d3LoadPromise = null; reject(e); };
+        document.head.appendChild(s);
+    });
+    return d3LoadPromise;
+}
+
+// verifyChartRender checks, after a chart's entrance transitions should have
+// finished, that every expected element actually exists AND actually
+// reached a visible opacity - a plain element-count check would miss a
+// stalled/interrupted transition (the reported "half done graph"), since
+// the element can exist in the DOM mid-transition at opacity 0. Shared by
+// SunburstChart.js and FlameGraph.js, each of which knows its own selector
+// ('path.sunburst-arc' / 'rect.flame-bar') and expected count (returned by
+// their own render function).
+export function verifyChartRender(svgEl, selector, expectedCount) {
+    if (expectedCount === 0) return true;
+    const els = svgEl.querySelectorAll(selector);
+    if (els.length !== expectedCount) return false;
+    for (const el of els) {
+        if (parseFloat(window.getComputedStyle(el).opacity || '0') < 0.05) return false;
+    }
+    return true;
+}
+
 export function shortName(qualifiedName) {
     const parts = (qualifiedName || '').split('.');
     return parts[parts.length - 1] || qualifiedName;
