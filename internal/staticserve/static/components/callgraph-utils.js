@@ -73,21 +73,7 @@ export function interpolateColor(c1, c2, t) {
     return `rgb(${r},${g},${b})`;
 }
 
-// Pre-rename callers reference a name that no longer exists, so they read as
-// broken rather than merely "far away" - a cool, desaturated ramp keeps them
-// visually separate from the warm depth ramp of a live call graph.
-export const PRERENAME_COLORS = {
-    1: { base: '#5c6bc0', light: '#9fa8da' },
-    2: { base: '#7986cb', light: '#c5cae9' },
-    3: { base: '#9575cd', light: '#d1c4e9' },
-    4: { base: '#b39ddb', light: '#ede7f6' },
-};
-
 export function getDepthColor(d) {
-    if (d.data && d.data.preRename) {
-        const ring = PRERENAME_COLORS[d.depth] || { base: '#7986cb' };
-        return ring.base;
-    }
     if (d.depth === 0) return (DEPTH_COLORS[0] || { base: '#12121c' }).base;
     const ring = DEPTH_COLORS[d.depth] || { base: '#607d8b', light: '#90a4ae' };
     if (d.parent && d.parent.children && d.parent.children.length > 1) {
@@ -112,31 +98,23 @@ export function countLeaves(node) {
 export function hoverInfoFromDatum(d) {
     const b = d.data;
     if (b.isIntermediate) {
-        return { isIntermediate: true, qualifiedName: b.qualifiedName, depth: d.depth, preRename: !!b.preRename };
+        return { isIntermediate: true, qualifiedName: b.qualifiedName, depth: d.depth };
     }
-    return { isIntermediate: false, name: b.name, qualifiedName: b.qualifiedName, depth: b.depth, preRename: !!b.preRename };
+    return { isIntermediate: false, name: b.name, qualifiedName: b.qualifiedName, depth: b.depth };
 }
 
 // renderHoverTooltip returns the vdom content for a hover-state object (see
 // hoverInfoFromDatum) - `html` is the caller's own htm-bound tag (each
 // component gets its own instance from waitForPreact(), so it's passed in
 // rather than imported here).
-// htm does not decode HTML entities in template text, so these use literal
-// characters ("·", "↳") rather than &middot;/&#8627; - an entity here renders
-// verbatim in the tooltip.
 //
-// oldName is the symbol's pre-rename name, used only to say which name a
-// pre-rename node was found under. The wording stops at what was actually
-// measured (a textual occurrence of that name); it deliberately does not
-// claim the reference is broken, since a grep hit can equally be a comment or
-// a string literal.
-export function renderHoverTooltip(html, hover, oldName) {
+// htm does not decode HTML entities in template text, so this uses literal
+// characters ("·", "↳") rather than &middot;/&#8627; - an entity here would
+// render verbatim in the tooltip instead of the symbol it names.
+export function renderHoverTooltip(html, hover) {
     if (!hover) return null;
-    const foundUnder = hover.preRename
-        ? html`<br /><span style="color:#9fa8da;font-size:10px">${oldName ? `still uses the old name "${oldName}"` : 'still uses the old name'}</span>`
-        : null;
     if (hover.isIntermediate) {
-        return html`<strong>↳</strong> ${hover.qualifiedName}<br /><span style="color:#9a8070;font-size:10px">intermediate · depth ${hover.depth}</span>${foundUnder}`;
+        return html`<strong>↳</strong> ${hover.qualifiedName}<br /><span style="color:#9a8070;font-size:10px">intermediate · depth ${hover.depth}</span>`;
     }
-    return html`<strong>${hover.name}</strong><br /><span style="color:#baa090;font-size:10px">${hover.qualifiedName}</span><br /><span style="color:#8a7060;font-size:10px">${hover.depth === 1 ? 'Direct caller' : hover.depth + ' hops away'}</span>${foundUnder}`;
+    return html`<strong>${hover.name}</strong><br /><span style="color:#baa090;font-size:10px">${hover.qualifiedName}</span><br /><span style="color:#8a7060;font-size:10px">${hover.depth === 1 ? 'Direct caller' : hover.depth + ' hops away'}</span>`;
 }

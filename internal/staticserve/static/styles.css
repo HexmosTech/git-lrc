@@ -3238,28 +3238,30 @@ body {
   box-shadow: 0 0 4px rgba(255, 87, 34, 0.2);
 }
 
-/* Pre-rename callers: they reference the symbol's OLD name and break until
-   migrated, so they get the same cool/indigo treatment the charts use for
-   them (PRERENAME_COLORS in callgraph-utils.js) rather than reading as
-   ordinary live callers. */
+/* Pre-rename callers (left column only - see BlastRadiusPanel's
+   chartSymbol): found by text search against the symbol's old name, not a
+   verified CALLS edge, so they get the app's existing red/critical treatment
+   (--accent-red) to read as a flag worth checking, distinct from ordinary
+   live callers. This styling is scoped to the left column's CallerGroup
+   component and never reaches the chart. */
 .blast-caller-group.pre-rename .blast-caller-group-header {
-  color: #9fa8da;
+  color: var(--accent-red);
 }
 .blast-caller-group.pre-rename .blast-caller-count {
-  background: rgba(92, 107, 192, 0.22);
-  color: #c5cae9;
+  background: rgba(241, 76, 76, 0.2);
+  color: var(--accent-red);
 }
 .blast-caller.pre-rename {
-  background: rgba(92, 107, 192, 0.12);
-  border: 1px dashed rgba(159, 168, 218, 0.55);
-  color: #b6bde0;
+  background: rgba(241, 76, 76, 0.12);
+  border: 1px dashed rgba(241, 76, 76, 0.55);
+  color: var(--accent-red);
 }
 .blast-caller.pre-rename:hover,
 .blast-caller.pre-rename.highlighted {
   color: var(--text-primary);
-  border-color: #9fa8da;
-  background: rgba(92, 107, 192, 0.28);
-  box-shadow: 0 0 4px rgba(121, 134, 203, 0.35);
+  border-color: var(--accent-red);
+  background: rgba(241, 76, 76, 0.28);
+  box-shadow: 0 0 4px rgba(241, 76, 76, 0.4);
 }
 
 /* Two-column blast panel layout: details (left) + sunburst chart (right) */
@@ -3371,71 +3373,6 @@ body {
 .blast-score-mode-toggle button.active {
   background: var(--accent-blue);
   color: #fff;
-}
-
-/* Before/After call-graph switch, shown only for renamed symbols. Sits under
-   the Sunburst/Flamegraph switch and governs the chart only - the caller list
-   on the left keeps the full grouped inventory. */
-.blast-rename-toggle {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  margin-bottom: 6px;
-}
-
-.blast-rename-toggle-label {
-  margin-right: 6px;
-  color: var(--text-dim);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.blast-rename-toggle button {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
-  color: var(--text-dim);
-  font-size: 11px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
-
-.blast-rename-toggle button:first-of-type {
-  border-radius: 4px 0 0 4px;
-}
-
-.blast-rename-toggle button:last-of-type {
-  border-radius: 0 4px 4px 0;
-}
-
-.blast-rename-toggle button:hover {
-  color: var(--text-secondary);
-}
-
-/* Indigo when active, matching the pre-rename styling the Before graph uses */
-.blast-rename-toggle button.active {
-  background: rgba(92, 107, 192, 0.3);
-  border-color: #9fa8da;
-  color: #e8eaf6;
-}
-
-.blast-rename-toggle-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 15px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.18);
-  font-size: 9px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Symbol navigation bar */

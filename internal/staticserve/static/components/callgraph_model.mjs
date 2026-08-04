@@ -14,10 +14,11 @@ export function shortName(qualifiedName) {
 // the symbol and themselves (ordered outward from the symbol), so a depth-3
 // caller contributes two intermediate levels plus its own leaf.
 //
-// A caller flagged PreRename references the symbol's *old* name and breaks
-// until it's migrated. That flag propagates to every node on its branch, not
-// just its leaf: an intermediate only reaches the symbol through the broken
-// name, so the whole path is breaking.
+// This must only ever see genuine CALLS-graph callers - the chart draws an
+// edge for every entry, so anything synthesized (e.g. a symbol's pre-rename
+// callers, found by text search rather than a real graph edge) would render
+// as a call that was never actually observed. Callers should filter those out
+// before invoking this; see BlastRadiusPanel's chartSymbol.
 export function buildHierarchy(symbol) {
     const callers = symbol.Callers || [];
     const nodeMap = new Map();
@@ -47,7 +48,6 @@ export function buildHierarchy(symbol) {
             node.depth = caller.Depth;
             node.weight = caller.Weight;
             node.isLeaf = true;
-            if (caller.PreRename) node.preRename = true;
             children.push(node);
             childrenNames.add(caller.QualifiedName);
             continue;
@@ -60,7 +60,6 @@ export function buildHierarchy(symbol) {
             childrenNames.add(firstVia);
         }
         if (!viaNode.depth) viaNode.depth = 1;
-        if (caller.PreRename) viaNode.preRename = true;
 
         let parent = viaNode;
         for (let i = 1; i < path.length; i++) {
@@ -70,7 +69,6 @@ export function buildHierarchy(symbol) {
                 parent._names.add(path[i]);
             }
             if (!childNode.depth) childNode.depth = i + 1;
-            if (caller.PreRename) childNode.preRename = true;
             parent = childNode;
         }
 
@@ -78,7 +76,6 @@ export function buildHierarchy(symbol) {
         leafNode.depth = caller.Depth;
         leafNode.weight = caller.Weight;
         leafNode.isLeaf = true;
-        if (caller.PreRename) leafNode.preRename = true;
         if (!parent._names.has(caller.QualifiedName)) {
             parent.children.push(leafNode);
             parent._names.add(caller.QualifiedName);
@@ -92,57 +89,16 @@ export function buildHierarchy(symbol) {
     };
 }
 
-// emptyCallGraphMessage explains *why* a symbol has nothing to draw, which is
-// otherwise easy to misread as a broken chart. A renamed symbol is the case
-// worth calling out: its post-rename name genuinely has no callers yet, so a
-// bare "no callers" reads as a leaf function when it actually means nothing
-// else uses the old name either.
-export function emptyCallGraphMessage(symbol, view) {
-    if (symbol && symbol.RenamedFrom) {
-        const newName = symbol.Name || shortName(symbol.QualifiedName);
-        if (view === RENAME_VIEW_AFTER) {
-            return `Nothing calls "${newName}" yet — renamed from "${symbol.RenamedFrom}"`;
-        }
-        if (view === RENAME_VIEW_BEFORE) {
-            return `Nothing else uses the old name "${symbol.RenamedFrom}"`;
-        }
-        return `Renamed from "${symbol.RenamedFrom}" — nothing else uses the old name`;
-    }
+// emptyCallGraphMessage explains why a symbol has nothing to draw. Kept
+// graph-agnostic to rename status on purpose: the chart only ever sees real
+// CALLS-graph callers (see buildHierarchy), so whether this symbol was
+// renamed is irrelevant to what the *chart* shows - that context belongs in
+// the left column's CallerGroup instead (see groupCallers/callerGroupLabel).
+export function emptyCallGraphMessage(symbol) {
     if (symbol && symbol.Method === 'text-references') {
         return 'Text reference method — no call graph available';
     }
     return 'No callers in the dependency graph';
-}
-
-// A renamed symbol has two genuinely different call graphs, and the index only
-// knows one of them. "After" is the real thing: CALLS fan-in on the new name,
-// as the graph sees the post-change tree - usually empty right after a rename.
-// "Before" is who still uses the old name, recovered by text search because
-// the old name has no node left to walk from. Keeping them as separate views
-// stops the empty After graph from reading as "no callers, nothing to see".
-export const RENAME_VIEW_BEFORE = 'before';
-export const RENAME_VIEW_AFTER = 'after';
-
-// hasRenameViews reports whether the Before/After split is meaningful for this
-// symbol - only renamed symbols have two states to compare.
-export function hasRenameViews(symbol) {
-    return !!(symbol && symbol.RenamedFrom);
-}
-
-// callersForRenameView selects the callers belonging to one side of the split.
-// Symbols that were not renamed have a single graph and ignore view entirely.
-export function callersForRenameView(symbol, view) {
-    const callers = (symbol && symbol.Callers) || [];
-    if (!hasRenameViews(symbol)) return callers;
-    if (view === RENAME_VIEW_BEFORE) return callers.filter((c) => c.PreRename);
-    return callers.filter((c) => !c.PreRename);
-}
-
-// symbolForRenameView returns the symbol as the charts should see it for the
-// selected view - same symbol, Callers narrowed to that side.
-export function symbolForRenameView(symbol, view) {
-    if (!hasRenameViews(symbol)) return symbol;
-    return { ...symbol, Callers: callersForRenameView(symbol, view) };
 }
 
 // groupCallers buckets a caller list for the sidebar. Pre-rename callers get

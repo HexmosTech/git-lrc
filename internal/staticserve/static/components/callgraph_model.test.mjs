@@ -4,25 +4,10 @@ import assert from 'node:assert/strict';
 import {
     buildHierarchy,
     callerGroupLabel,
-    callersForRenameView,
     emptyCallGraphMessage,
     groupCallers,
-    hasRenameViews,
-    RENAME_VIEW_AFTER,
-    RENAME_VIEW_BEFORE,
     shortName,
-    symbolForRenameView,
 } from './callgraph_model.mjs';
-
-const RENAMED = {
-    Name: 'RuHelp',
-    QualifiedName: 'pkg.RuHelp',
-    RenamedFrom: 'RunHelp',
-    Callers: [
-        { QualifiedName: 'pkg.main', Depth: 1, PreRename: true },
-        { QualifiedName: 'pkg.migrated', Depth: 1 },
-    ],
-};
 
 test('shortName takes the last dotted segment', () => {
     assert.equal(shortName('a.b.c.RunHelp'), 'RunHelp');
@@ -49,36 +34,12 @@ test('buildHierarchy nests callers by their Path', () => {
     assert.equal(via.children[0].depth, 2);
 });
 
-test('buildHierarchy marks pre-rename callers', () => {
-    const root = buildHierarchy({
-        Name: 'RuHelp',
-        QualifiedName: 'pkg.RuHelp',
-        Callers: [{ QualifiedName: 'pkg.main', Depth: 1, Weight: 1, PreRename: true }],
-    });
-
-    assert.equal(root.children.length, 1);
-    assert.equal(root.children[0].qualifiedName, 'pkg.main');
-    assert.equal(root.children[0].preRename, true);
-});
-
-test('buildHierarchy propagates preRename across a whole branch', () => {
-    // An intermediate only reaches the renamed symbol through the broken
-    // name, so it is breaking too - not just the leaf at the end.
-    const root = buildHierarchy({
-        Name: 'RuHelp',
-        QualifiedName: 'pkg.RuHelp',
-        Callers: [
-            { QualifiedName: 'pkg.direct', Depth: 1, Weight: 1, PreRename: true },
-            { QualifiedName: 'pkg.top', Depth: 2, Weight: 0.5, Path: ['pkg.direct'], PreRename: true },
-        ],
-    });
-
-    const via = root.children[0];
-    assert.equal(via.preRename, true, 'intermediate must inherit the breaking flag');
-    assert.equal(via.children[0].preRename, true);
-});
-
-test('buildHierarchy leaves live callers unflagged', () => {
+test('buildHierarchy ignores PreRename - it must only ever see real graph callers', () => {
+    // BlastRadiusPanel's chartSymbol strips PreRename entries before a symbol
+    // ever reaches buildHierarchy, so the flag carries no special meaning
+    // here - a caller is a caller. This pins that buildHierarchy itself does
+    // no rename-aware branching (that logic lives in groupCallers, for the
+    // left column only).
     const root = buildHierarchy({
         QualifiedName: 'pkg.leftWidth',
         Callers: [{ QualifiedName: 'pkg.renderPreview', Depth: 1, Weight: 1 }],
@@ -133,10 +94,13 @@ test('callerGroupLabel claims only what was measured', () => {
     assert.doesNotMatch(label, /break/i);
 });
 
-test('emptyCallGraphMessage explains a fully-migrated rename', () => {
+test('emptyCallGraphMessage ignores RenamedFrom - the chart is not rename-aware', () => {
+    // Whether a symbol was renamed is a left-column concern (CallerGroup);
+    // the chart's empty state must read identically either way, since it
+    // only ever describes the real CALLS graph, never rename status.
     assert.equal(
         emptyCallGraphMessage({ RenamedFrom: 'RunHelp', Method: 'calls' }),
-        'Renamed from "RunHelp" — nothing else uses the old name',
+        'No callers in the dependency graph',
     );
 });
 
@@ -147,54 +111,4 @@ test('emptyCallGraphMessage falls back to method and generic copy', () => {
     );
     assert.equal(emptyCallGraphMessage({ Method: 'calls' }), 'No callers in the dependency graph');
     assert.equal(emptyCallGraphMessage(null), 'No callers in the dependency graph');
-});
-
-test('emptyCallGraphMessage is view-specific for a renamed symbol', () => {
-    assert.equal(
-        emptyCallGraphMessage(RENAMED, RENAME_VIEW_AFTER),
-        'Nothing calls "RuHelp" yet — renamed from "RunHelp"',
-    );
-    assert.equal(
-        emptyCallGraphMessage(RENAMED, RENAME_VIEW_BEFORE),
-        'Nothing else uses the old name "RunHelp"',
-    );
-});
-
-test('hasRenameViews is true only for renamed symbols', () => {
-    assert.equal(hasRenameViews(RENAMED), true);
-    assert.equal(hasRenameViews({ QualifiedName: 'pkg.leftWidth', Callers: [] }), false);
-    assert.equal(hasRenameViews(null), false);
-});
-
-test('callersForRenameView splits the two graphs', () => {
-    assert.deepEqual(
-        callersForRenameView(RENAMED, RENAME_VIEW_BEFORE).map((c) => c.QualifiedName),
-        ['pkg.main'],
-    );
-    assert.deepEqual(
-        callersForRenameView(RENAMED, RENAME_VIEW_AFTER).map((c) => c.QualifiedName),
-        ['pkg.migrated'],
-    );
-});
-
-test('callersForRenameView ignores the view for unrenamed symbols', () => {
-    // A symbol that was not renamed has one graph, not two - the view must
-    // not silently filter its callers away.
-    const plain = { QualifiedName: 'pkg.leftWidth', Callers: [{ QualifiedName: 'pkg.a', Depth: 1 }] };
-    assert.equal(callersForRenameView(plain, RENAME_VIEW_BEFORE).length, 1);
-    assert.equal(callersForRenameView(plain, RENAME_VIEW_AFTER).length, 1);
-});
-
-test('symbolForRenameView narrows Callers but keeps identity fields', () => {
-    const before = symbolForRenameView(RENAMED, RENAME_VIEW_BEFORE);
-    assert.equal(before.QualifiedName, 'pkg.RuHelp');
-    assert.equal(before.RenamedFrom, 'RunHelp');
-    assert.deepEqual(before.Callers.map((c) => c.QualifiedName), ['pkg.main']);
-});
-
-test('symbolForRenameView returns unrenamed symbols unchanged by identity', () => {
-    // Charts key their render effect on symbol identity; returning a fresh
-    // object for every unrenamed symbol would redraw on each parent render.
-    const plain = { QualifiedName: 'pkg.leftWidth', Callers: [] };
-    assert.equal(symbolForRenameView(plain, RENAME_VIEW_AFTER), plain);
 });

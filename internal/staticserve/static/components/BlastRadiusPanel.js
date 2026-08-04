@@ -11,15 +11,7 @@
 import { waitForPreact } from './utils.js';
 import { renderIcon } from './icons.js';
 import { blastRadiusTier, allSignals } from './blast_radius_sort_state.mjs';
-import {
-    callerGroupLabel,
-    callersForRenameView,
-    groupCallers,
-    hasRenameViews,
-    RENAME_VIEW_AFTER,
-    RENAME_VIEW_BEFORE,
-    symbolForRenameView,
-} from './callgraph_model.mjs';
+import { callerGroupLabel, groupCallers } from './callgraph_model.mjs';
 import { getSunburstChart } from './SunburstChart.js';
 import { getFlameGraph } from './FlameGraph.js';
 
@@ -404,36 +396,6 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    // RenameViewToggle only appears for renamed symbols - everything else has
-    // a single call graph, and offering a Before/After choice there would
-    // imply a distinction that does not exist. Each side shows its own count
-    // so an empty view is obviously empty rather than looking broken.
-    function RenameViewToggle({ sym, view, onSelect }) {
-        if (!hasRenameViews(sym)) return null;
-        const beforeCount = callersForRenameView(sym, RENAME_VIEW_BEFORE).length;
-        const afterCount = callersForRenameView(sym, RENAME_VIEW_AFTER).length;
-        const newName = sym.Name || shortName(sym.QualifiedName);
-        return html`
-            <div class="blast-rename-toggle">
-                <span class="blast-rename-toggle-label">Call graph</span>
-                <button
-                    class=${view === RENAME_VIEW_BEFORE ? 'active' : ''}
-                    title="Symbols still using the old name ${sym.RenamedFrom} — found by text search, since the old name has no node left in the graph"
-                    onClick=${() => onSelect(RENAME_VIEW_BEFORE)}
-                >
-                    Before <span class="blast-rename-toggle-count">${beforeCount}</span>
-                </button>
-                <button
-                    class=${view === RENAME_VIEW_AFTER ? 'active' : ''}
-                    title="Callers of the new name ${newName} in the current graph"
-                    onClick=${() => onSelect(RENAME_VIEW_AFTER)}
-                >
-                    After <span class="blast-rename-toggle-count">${afterCount}</span>
-                </button>
-            </div>
-        `;
-    }
-
     function CallerGroup({ group, oldName, hoveredCaller, onHoverCaller }) {
         const callers = group.callers;
         const [showAll, setShowAll] = useState(false);
@@ -730,18 +692,17 @@ export async function createBlastRadiusPanel() {
         const [vizMode, setVizMode] = useState('sunburst');
         const [hoveredCaller, setHoveredCaller] = useState(null);
         const [scoreMode, setScoreMode] = useState('summary');
-        // Renamed symbols open on "Before": the After graph is the honest
-        // current state but is almost always empty right after a rename, so
-        // landing there shows nothing and reads as a broken chart.
-        const [renameView, setRenameView] = useState(RENAME_VIEW_BEFORE);
-        // Memoized because symbolForRenameView returns a fresh object for a
-        // renamed symbol: the charts key their render effect on symbol
-        // identity, so rebuilding it every parent render (each hover, each
-        // toggle elsewhere in the panel) would redraw the whole chart.
-        const vizSymbol = useMemo(
-            () => symbolForRenameView(symbols[selectedIdx], renameView),
-            [symbols, selectedIdx, renameView],
-        );
+        // The chart must only ever draw genuine CALLS-graph edges - a
+        // symbol's pre-rename callers are found by text search, not a real
+        // graph edge, and drawing one as an arc/bar would claim a call that
+        // was never observed. That analysis stays in the left column's
+        // CallerGroup (fed from sym.Callers directly, unfiltered); this
+        // strips it back out before anything reaches the chart.
+        const chartSymbol = useMemo(() => {
+            const sym = symbols[selectedIdx];
+            if (!sym || !sym.RenamedFrom) return sym;
+            return { ...sym, Callers: (sym.Callers || []).filter((c) => !c.PreRename) };
+        }, [symbols, selectedIdx]);
 
         return html`
             <div class="blast-panel">
@@ -833,15 +794,10 @@ export async function createBlastRadiusPanel() {
                                     ${renderIcon(html, 'reorder', { size: 12 })} Flamegraph
                                 </button>
                             </div>
-                            <${RenameViewToggle}
-                                sym=${symbols[selectedIdx]}
-                                view=${renameView}
-                                onSelect=${setRenameView}
-                            />
                             <div class="blast-viz-wrapper">
                                 ${vizMode === 'sunburst'
-                                    ? html`<${SunburstChart} symbol=${vizSymbol} view=${renameView} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
-                                    : html`<${FlameGraph} symbol=${vizSymbol} view=${renameView} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
+                                    ? html`<${SunburstChart} symbol=${chartSymbol} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
+                                    : html`<${FlameGraph} symbol=${chartSymbol} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
                                 }
                             </div>
                         </div>
