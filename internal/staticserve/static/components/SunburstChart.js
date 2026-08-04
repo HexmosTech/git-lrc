@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, getDepthColor, DEPTH_COLORS, PRERENAME_COLORS, hoverInfoFromDatum, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
+import { buildHierarchy, DEPTH_COLORS, PRERENAME_COLORS, hoverInfoFromDatum, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 function arcTween(a, arcGen) {
     const i = window.d3.interpolate({ x0: a.x0, x1: a.x0 }, a);
