@@ -2642,12 +2642,15 @@ body {
 }
 /* Help popup: no border, no shadow ring. A quiet floating sheet so it
    doesn't read as "box stacked on box" beside the chip. */
+/* position:fixed with coordinates computed in JS from the trigger's
+   getBoundingClientRect() (see computePopupPos in BlastRadiusPanel.js) -
+   this popup lives inside .file/.diff-table td, both overflow:hidden, so
+   position:absolute would get clipped regardless of z-index; fixed
+   positioning escapes that clip entirely (same technique as RiskBadge.js's
+   HoverCard). */
 .blast-help-popup {
-  position: absolute;
-  top: 100%;
-  left: 0;
+  position: fixed;
   z-index: 3000;
-  margin-top: 8px;
   width: 260px;
   max-width: 80vw;
   padding: 8px 10px;
@@ -2704,12 +2707,10 @@ body {
   border-bottom-color: var(--text-dim);
   outline: none;
 }
+/* position:fixed - see .blast-help-popup comment above for why. */
 .blast-methodology-popup {
-  position: absolute;
-  top: 100%;
-  right: 0;
+  position: fixed;
   z-index: 3000;
-  margin-top: 8px;
   width: 420px;
   max-width: min(460px, 92vw);
   max-height: 60vh;
@@ -2796,15 +2797,20 @@ body {
   flex-direction: column;
   gap: 3px;
 }
+/* Grid, not flex-wrap: name sits in column 2 next to the points; Detail is
+   explicitly placed in column 2 as well (see .blast-signal-detail) so when
+   it wraps or sits on its own line, it stays indented under the name's text
+   instead of starting back at the far-left points column - a flex row that
+   wraps would otherwise drop the wrapped text flush left, under the number,
+   which reads as broken alignment rather than a continuation of the row. */
 .blast-signal {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  column-gap: 6px;
   align-items: baseline;
-  gap: 6px;
   line-height: 1.4;
 }
 .blast-signal-points {
-  min-width: 42px;
   text-align: right;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -2820,7 +2826,28 @@ body {
   color: var(--text-primary);
 }
 .blast-signal-detail {
+  grid-column: 2;
   color: var(--text-dim);
+}
+/* Per-symbol sections (see groupSignalsBySymbol/SignalBlock): shown only
+   when a list mixes signals from more than one symbol - the header makes
+   explicit which symbol a repeated-looking signal name (e.g. "Caller
+   reach" appearing several times) actually belongs to. */
+.blast-signal-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.blast-signal-section-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 .blast-signal-category {
   margin-left: auto;
@@ -2832,6 +2859,145 @@ body {
 .blast-signal-empty {
   color: var(--text-dim);
   font-style: italic;
+}
+/* A signal that was checked but contributed 0 points ("does not write
+   persistent data", etc) - same dormant/dashed treatment as the
+   hygiene-dormant / coupling-dormant score chips, so "checked, found
+   nothing" reads consistently wherever it shows up. */
+.blast-signal.dormant {
+  opacity: 0.55;
+}
+.blast-signal.dormant .blast-signal-points {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+/* otherSignals (diff-shape/hygiene) - shown as a plain note since they
+   don't feed either dimension's raw sum (see splitSignalsByDimension) and
+   so have no card of their own; the Hygiene chip above already carries the
+   multiplier itself. */
+.blast-hygiene-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: -2px 0 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Two dimension cards side by side - makes the score hierarchy explicit
+   (Score -> Blast/Priority -> the signals each is the literal sum of)
+   instead of one flat list that mixed both dimensions' signals together
+   with no visual grouping. Collapses to one column on narrow panels (see
+   the max-width media query below) rather than needing extra page width. */
+.blast-dimension-grid {
+  display: grid;
+  /* auto-fit/minmax responds to the panel's own available width (which
+     varies with sidebar state and nesting), not the viewport - a viewport
+     media-query breakpoint would force two columns even when this panel's
+     own column is too narrow to hold them comfortably. */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin: 4px 0 8px;
+}
+.blast-dimension-card {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+.blast-dimension-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.blast-dimension-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.blast-dimension-math {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Math Mode: a workbook-style, fully worked derivation of Combined - every
+   step numbered and labeled, every subtotal shown as the literal addition
+   that produces it (see renderMathDimension/MathModeView), for anyone who
+   wants to check the score by hand instead of trusting the summary cards. */
+.math-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 4px 0 8px;
+}
+.math-section {
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+.math-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.math-step {
+  margin-bottom: 10px;
+}
+.math-step:last-child {
+  margin-bottom: 0;
+}
+.math-step-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--accent-blue);
+  margin-bottom: 4px;
+}
+.math-step-line {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  padding-left: 4px;
+}
+.math-step-line.dim {
+  color: var(--text-dim);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.math-step-line strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.math-step-subject {
+  color: var(--text-dim);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 600;
+}
+.math-step.final {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.math-step.final .math-step-label {
+  color: var(--text-primary);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.math-step.final .math-step-line strong {
+  font-size: 15px;
+  color: var(--accent-blue);
 }
 
 /* Section labels inside the panel (symbols list, caller graph). */
@@ -3138,7 +3304,8 @@ body {
 }
 
 /* Visualization toggle: Sunburst | Flamegraph */
-.blast-viz-toggle {
+.blast-viz-toggle,
+.blast-score-mode-toggle {
   display: inline-flex;
   gap: 1px;
   margin-bottom: 6px;
@@ -3147,7 +3314,8 @@ body {
   background: var(--border-subtle);
 }
 
-.blast-viz-toggle button {
+.blast-viz-toggle button,
+.blast-score-mode-toggle button {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -3162,11 +3330,13 @@ body {
   transition: background 0.12s ease, color 0.12s ease;
 }
 
-.blast-viz-toggle button:hover {
+.blast-viz-toggle button:hover,
+.blast-score-mode-toggle button:hover {
   color: var(--text-secondary);
 }
 
-.blast-viz-toggle button.active {
+.blast-viz-toggle button.active,
+.blast-score-mode-toggle button.active {
   background: var(--accent-blue);
   color: #fff;
 }

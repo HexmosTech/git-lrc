@@ -1,7 +1,10 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, DEPTH_COLORS } from './callgraph-utils.js';
+import { buildHierarchy, DEPTH_COLORS, renderHoverTooltip } from './callgraph-utils.js';
 
-function renderFlameGraph(svgEl, symbol, width, height, tooltipEl, onHoverCaller) {
+// renderFlameGraph owns d3 rendering only; tooltip content/visibility is
+// reported via onHover(info, x, y) rather than mutated directly on a ref'd
+// DOM node - see the matching comment in SunburstChart.js for why.
+function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller) {
     const d3 = window.d3;
     const PAD_L = 4;
     const PAD_R = 4;
@@ -107,20 +110,22 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipEl, onHoverCaller
                 .style('opacity', 1)
                 .attr('filter', 'drop-shadow(0 0 8px rgba(255,152,0,0.5)) drop-shadow(0 0 16px rgba(255,80,0,0.25)) brightness(1.12)');
             const n = d.node;
-            tooltipEl.innerHTML = n.isIntermediate
-                ? `<strong>&#8627;</strong> ${n.qualifiedName}<br><span style="color:#8a7060;font-size:10px">intermediate</span>`
-                : `<strong>${n.name}</strong><br><span style="color:#baa090;font-size:10px">${n.qualifiedName}</span><br><span style="color:#8a7060;font-size:10px">${n.depth === 1 ? 'Direct caller' : n.depth + ' hops away'}</span>`;
-            tooltipEl.style.display = 'block'; tooltipEl.style.opacity = '1';
+            onHover(n.isIntermediate
+                ? { isIntermediate: true, qualifiedName: n.qualifiedName, depth: n.depth }
+                : { isIntermediate: false, name: n.name, qualifiedName: n.qualifiedName, depth: n.depth },
+                event.clientX + 14, event.clientY - 10);
             if (onHoverCaller && n.qualifiedName) onHoverCaller(n.qualifiedName);
         })
             .on('mousemove', function (event) {
-                tooltipEl.style.left = (event.clientX + 14) + 'px';
-                tooltipEl.style.top = (event.clientY - 10) + 'px';
+                if (tooltipRef.current) {
+                    tooltipRef.current.style.left = (event.clientX + 14) + 'px';
+                    tooltipRef.current.style.top = (event.clientY - 10) + 'px';
+                }
             })
             .on('mouseleave', function () {
                 d3.select(this).interrupt().transition().duration(100)
                     .style('opacity', 0.92).attr('filter', null);
-                tooltipEl.style.display = 'none'; tooltipEl.style.opacity = '0';
+                onHover(null);
                 if (onHoverCaller) onHoverCaller(null);
             });
 
@@ -157,19 +162,24 @@ export async function createFlameGraph() {
     function FlameGraph({ symbol, width, height, hoveredCaller, onHoverCaller }) {
         const svgRef = useRef(null); const tooltipRef = useRef(null);
         const [d3Ready, setD3Ready] = useState(typeof window.d3 !== 'undefined');
+        const [hover, setHover] = useState(null);
         useEffect(() => {
             if (window.d3) { setD3Ready(true); return; }
             const s = document.createElement('script'); s.src = '/static/vendor/d3.v7.min.js';
             s.onload = () => setD3Ready(true); s.onerror = () => console.warn('D3 load fail');
             document.head.appendChild(s);
         }, []);
+        // Clear any lingering hover state whenever the selected symbol
+        // changes - see the matching comment in SunburstChart.js.
+        useEffect(() => { setHover(null); }, [symbol]);
         useEffect(() => {
-            if (!d3Ready || !symbol || !svgRef.current || !tooltipRef.current) return;
+            if (!d3Ready || !symbol || !svgRef.current) return;
             const el = svgRef.current;
-            const tt = tooltipRef.current;
             el.getBoundingClientRect();
             const t = setTimeout(() => {
-                if (el && tt) renderFlameGraph(el, symbol, width, height, tt, onHoverCaller);
+                if (el) renderFlameGraph(el, symbol, width, height, tooltipRef, (info, x, y) => {
+                    setHover(info ? { ...info, x, y } : null);
+                }, onHoverCaller);
             }, 60);
             return () => clearTimeout(t);
         }, [d3Ready, symbol, width, height]);
@@ -196,7 +206,16 @@ export async function createFlameGraph() {
         if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
             return html`<div class="viz-container-fg"><div class="viz-empty">${symbol && symbol.Method === 'text-references' ? 'Text reference method — no call graph available' : 'No callers in the dependency graph'}</div></div>`;
         }
-        return html`<div class="viz-container-fg"><div ref=${tooltipRef} class="viz-tooltip" style="display:none"></div><svg ref=${svgRef} width=${width} height=${height}></svg></div>`;
+        return html`
+            <div class="viz-container-fg">
+                ${hover && html`
+                    <div ref=${tooltipRef} class="viz-tooltip" style="left:${hover.x}px;top:${hover.y}px">
+                        ${renderHoverTooltip(html, hover)}
+                    </div>
+                `}
+                <svg ref=${svgRef} width=${width} height=${height}></svg>
+            </div>
+        `;
     }
     return FlameGraph;
 }

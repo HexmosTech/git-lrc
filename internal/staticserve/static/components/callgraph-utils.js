@@ -111,3 +111,27 @@ export function countLeaves(node) {
     if (!node.children || node.children.length === 0) return 1;
     return node.children.reduce((sum, c) => sum + countLeaves(c), 0);
 }
+
+// hoverInfoFromDatum builds the plain hover-state object (name/qualifiedName/
+// depth/isIntermediate) from a d3 hierarchy datum's `.data`, shared by
+// SunburstChart and FlameGraph so their tooltip content can't drift apart -
+// both charts build hierarchies from the same buildHierarchy() shape above.
+export function hoverInfoFromDatum(d) {
+    const b = d.data;
+    if (b.isIntermediate) {
+        return { isIntermediate: true, qualifiedName: b.qualifiedName, depth: d.depth };
+    }
+    return { isIntermediate: false, name: b.name, qualifiedName: b.qualifiedName, depth: b.depth };
+}
+
+// renderHoverTooltip returns the vdom content for a hover-state object (see
+// hoverInfoFromDatum) - `html` is the caller's own htm-bound tag (each
+// component gets its own instance from waitForPreact(), so it's passed in
+// rather than imported here).
+export function renderHoverTooltip(html, hover) {
+    if (!hover) return null;
+    if (hover.isIntermediate) {
+        return html`<strong>&#8627;</strong> ${hover.qualifiedName}<br /><span style="color:#9a8070;font-size:10px">intermediate &middot; depth ${hover.depth}</span>`;
+    }
+    return html`<strong>${hover.name}</strong><br /><span style="color:#baa090;font-size:10px">${hover.qualifiedName}</span><br /><span style="color:#8a7060;font-size:10px">${hover.depth === 1 ? 'Direct caller' : hover.depth + ' hops away'}</span>`;
+}

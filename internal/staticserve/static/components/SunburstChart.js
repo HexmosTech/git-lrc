@@ -1,12 +1,21 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, getDepthColor, DEPTH_COLORS } from './callgraph-utils.js';
+import { buildHierarchy, getDepthColor, DEPTH_COLORS, hoverInfoFromDatum, renderHoverTooltip } from './callgraph-utils.js';
 
 function arcTween(a, arcGen) {
     const i = window.d3.interpolate({ x0: a.x0, x1: a.x0 }, a);
     return t => arcGen(i(t));
 }
 
-function renderSunburst(svgEl, symbol, width, height, tooltipEl, onHoverCaller) {
+// renderSunburst owns d3 rendering only. Tooltip CONTENT/visibility is
+// reported via onHover(info, x, y) (info null on mouseleave) so Preact's own
+// vdom model of the tooltip's children always matches what's on screen -
+// mutating a ref'd node's innerHTML directly (the previous approach) left
+// stale content behind whenever Preact later reused that DOM node for a
+// different vdom shape (e.g. switching to the "no call graph" empty state),
+// since Preact never tracked the imperatively-injected children. Only the
+// tooltip's *position* stays imperative (via tooltipRef, updated on every
+// mousemove) - that's a leaf style write, not content, so it can't desync.
+function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHoverCaller) {
     const d3 = window.d3;
     const radius = Math.min(width, height) / 2;
 
@@ -92,21 +101,20 @@ function renderSunburst(svgEl, symbol, width, height, tooltipEl, onHoverCaller) 
             g.selectAll('path.sunburst-arc').interrupt().transition().duration(80)
                 .style('opacity', p => (p === d || p === d.parent) ? 1 : 0.12);
             const b = d.data;
-            tooltipEl.innerHTML = b.isIntermediate
-                ? `<strong>&#8627;</strong> ${b.qualifiedName}<br><span style="color:#9a8070;font-size:10px">intermediate &middot; depth ${d.depth}</span>`
-                : `<strong>${b.name}</strong><br><span style="color:#baa090;font-size:10px">${b.qualifiedName}</span><br><span style="color:#8a7060;font-size:10px">${b.depth === 1 ? 'Direct caller' : b.depth + ' hops away'}</span>`;
-            tooltipEl.style.display = 'block'; tooltipEl.style.opacity = '1';
+            onHover(hoverInfoFromDatum(d), event.clientX + 16, event.clientY - 12);
             if (onHoverCaller && b.qualifiedName) onHoverCaller(b.qualifiedName);
         })
         .on('mousemove', function (event) {
-            tooltipEl.style.left = (event.clientX + 16) + 'px';
-            tooltipEl.style.top = (event.clientY - 12) + 'px';
+            if (tooltipRef.current) {
+                tooltipRef.current.style.left = (event.clientX + 16) + 'px';
+                tooltipRef.current.style.top = (event.clientY - 12) + 'px';
+            }
         })
         .on('mouseleave', function () {
             g.selectAll('path.sunburst-arc').transition().duration(150)
                 .style('opacity', d => (d.data.isLeaf ? 0.92 : 0.78))
                 .attr('stroke', '#4a0000').attr('stroke-width', 0.7).attr('filter', null);
-            tooltipEl.style.display = 'none'; tooltipEl.style.opacity = '0';
+            onHover(null);
             if (onHoverCaller) onHoverCaller(null);
         });
 
@@ -129,19 +137,26 @@ export async function createSunburstChart() {
     function SunburstChart({ symbol, width, height, hoveredCaller, onHoverCaller }) {
         const svgRef = useRef(null); const tooltipRef = useRef(null);
         const [d3Ready, setD3Ready] = useState(typeof window.d3 !== 'undefined');
+        const [hover, setHover] = useState(null);
         useEffect(() => {
             if (window.d3) { setD3Ready(true); return; }
             const s = document.createElement('script'); s.src = '/static/vendor/d3.v7.min.js';
             s.onload = () => setD3Ready(true); s.onerror = () => console.warn('D3 load fail');
             document.head.appendChild(s);
         }, []);
+        // Clear any lingering hover state whenever the selected symbol
+        // changes - defense-in-depth so switching symbols via the nav (e.g.
+        // to one with no call graph at all) can never leave a previous
+        // symbol's tooltip content visible.
+        useEffect(() => { setHover(null); }, [symbol]);
         useEffect(() => {
-            if (!d3Ready || !symbol || !svgRef.current || !tooltipRef.current) return;
+            if (!d3Ready || !symbol || !svgRef.current) return;
             const el = svgRef.current;
-            const tt = tooltipRef.current;
             el.getBoundingClientRect();
             const t = setTimeout(() => {
-                if (el && tt) renderSunburst(el, symbol, width, height, tt, onHoverCaller);
+                if (el) renderSunburst(el, symbol, width, height, tooltipRef, (info, x, y) => {
+                    setHover(info ? { ...info, x, y } : null);
+                }, onHoverCaller);
             }, 60);
             return () => clearTimeout(t);
         }, [d3Ready, symbol, width, height]);
@@ -170,7 +185,16 @@ export async function createSunburstChart() {
         if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
             return html`<div class="viz-container-sq"><div class="viz-empty">${symbol && symbol.Method === 'text-references' ? 'Text reference method — no call graph available' : 'No callers in the dependency graph'}</div></div>`;
         }
-        return html`<div class="viz-container-sq"><div ref=${tooltipRef} class="viz-tooltip" style="display:none"></div><svg ref=${svgRef} width=${width} height=${height}></svg></div>`;
+        return html`
+            <div class="viz-container-sq">
+                ${hover && html`
+                    <div ref=${tooltipRef} class="viz-tooltip" style="left:${hover.x}px;top:${hover.y}px">
+                        ${renderHoverTooltip(html, hover)}
+                    </div>
+                `}
+                <svg ref=${svgRef} width=${width} height=${height}></svg>
+            </div>
+        `;
     }
     return SunburstChart;
 }

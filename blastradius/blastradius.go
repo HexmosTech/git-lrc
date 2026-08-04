@@ -221,10 +221,27 @@ type HunkReport struct {
 	// SymbolContribution instead - see Symbols.
 	Signals []Signal
 
-	BlastRadiusRaw     float64
-	BlastRadiusNorm    float64 // 0-100, relative to the highest BlastRadiusRaw in this Report
-	ReviewPriorityRaw  float64
-	ReviewPriorityNorm float64 // 0-100, relative to the highest ReviewPriorityRaw in this Report
+	BlastRadiusRaw  float64
+	BlastRadiusNorm float64 // 0-100, relative to the highest BlastRadiusRaw in this Report
+	// MaxBlastRadiusRaw is the denominator BlastRadiusNorm was divided by
+	// (the highest BlastRadiusRaw across every hunk in this Report) - exposed
+	// so a UI can show the normalization arithmetic explicitly
+	// (BlastRadiusRaw / MaxBlastRadiusRaw * 100 == BlastRadiusNorm) instead of
+	// presenting BlastRadiusNorm as an unexplained number. Same value on every
+	// hunk in a Report.
+	MaxBlastRadiusRaw float64
+	// MaxBlastRadiusHunkFile/Header identify *which* hunk set
+	// MaxBlastRadiusRaw (the first one encountered with that raw score, if
+	// several tie) - a UI showing "divided by the highest score in this
+	// diff" should be able to say which hunk that is, not just its number.
+	MaxBlastRadiusHunkFile   string
+	MaxBlastRadiusHunkHeader string
+	ReviewPriorityRaw        float64
+	ReviewPriorityNorm       float64 // 0-100, relative to the highest ReviewPriorityRaw in this Report
+	// MaxReviewPriorityRaw mirrors MaxBlastRadiusRaw for ReviewPriorityNorm.
+	MaxReviewPriorityRaw        float64
+	MaxReviewPriorityHunkFile   string
+	MaxReviewPriorityHunkHeader string
 	// Combined is (Weights.BlastRadius*BlastRadiusNorm + Weights.ReviewPriority*ReviewPriorityNorm)
 	// * HygieneMultiplier, already on a 0-100 scale - the single number to
 	// sort by if you want one ranking, though BlastRadiusNorm/
@@ -234,6 +251,11 @@ type HunkReport struct {
 	// signals (formatting-only, comments-only, generated code, etc.) - see
 	// classifyHunkHygiene. 1.0 (no effect) unless one of those fired.
 	HygieneMultiplier float64
+	// Weights is the actual (normalized) blend ratio Combined was computed
+	// with - exposed so a UI can show the Combined formula with the real
+	// numbers this report used rather than assuming DefaultWeights(). Same
+	// value on every hunk in a Report.
+	Weights Weights
 
 	Symbols []SymbolContribution
 	// ImpactedPackages is the union of every touched symbol's
@@ -468,6 +490,14 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 	symbolByQN := make(map[string]symbols.Symbol)
 	var callableQN []string
 	nameToTypeQNs := make(map[string][]string) // bare Name -> qualified names sharing it
+	// renameByQN holds, for every touched symbol whose own declaration line
+	// was detected as a single-identifier rename within its hunk, the old
+	// name that callers/references elsewhere in the repo are still using
+	// until they're migrated (see rename.go) - both scoring paths below use
+	// this to score the symbol against BOTH names, since internal callers of
+	// the pre-rename name are about to break, which the new name alone can't
+	// see.
+	renameByQN := make(map[string]DeclRename)
 	for _, path := range fileOrder {
 		for _, h := range hunksByFile[path] {
 			touched := symbols.ForHunk(symbolsByFile[path], diffparse.Hunk{
@@ -480,6 +510,9 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 					continue
 				}
 				symbolByQN[s.QualifiedName] = s
+				if rn := detectDeclRename(h, s); rn != nil {
+					renameByQN[s.QualifiedName] = *rn
+				}
 				if s.Label == "Function" || s.Label == "Method" {
 					callableQN = append(callableQN, s.QualifiedName)
 				} else {
@@ -598,18 +631,33 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 		}
 		impactedPackages := sortedUnique(packages)
 
+		rename, renamed := renameByQN[qn]
+		callerReachDetail := fmt.Sprintf("%d direct + %d transitive caller(s), up to %d hops", direct, transitive, maxDepth)
+		if renamed {
+			callerReachDetail = fmt.Sprintf("%d direct + %d transitive caller(s) already migrated to the new name %q, up to %d hops", direct, transitive, rename.NewName, maxDepth)
+		}
 		var signals []Signal
 		signals = append(signals, Signal{
 			Name:     "Caller reach",
-			Detail:   fmt.Sprintf("%d direct + %d transitive caller(s), up to %d hops", direct, transitive, maxDepth),
+			Detail:   callerReachDetail,
 			Points:   ss.Raw,
 			Category: "graph",
 		})
+		if renamed {
+			signals = append(signals, renameOldNameSignal(ctx, c, rename))
+		}
 		if div := packageDiversityBonus(impactedPackages); div > 0 {
 			signals = append(signals, Signal{
 				Name:     "Cross-package impact",
 				Detail:   fmt.Sprintf("callers span %d packages: %s", len(impactedPackages), strings.Join(impactedPackages, ", ")),
 				Points:   div,
+				Category: "graph",
+			})
+		} else {
+			signals = append(signals, Signal{
+				Name:     "Cross-package impact",
+				Detail:   fmt.Sprintf("callers concentrated in %d package(s), no cross-package spread", len(impactedPackages)),
+				Points:   0,
 				Category: "graph",
 			})
 		}
@@ -625,6 +673,13 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 				Name:     "Entry point",
 				Detail:   "directly reachable from outside the codebase (e.g. CLI/main)",
 				Points:   entryPointBonus,
+				Category: "architecture",
+			})
+		} else {
+			signals = append(signals, Signal{
+				Name:     "Entry point",
+				Detail:   "not a route handler, not flagged as an entry point",
+				Points:   0,
 				Category: "architecture",
 			})
 		}
@@ -678,18 +733,33 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 			}
 			methodBlastRadius := math.Sqrt(methodSum)
 
+			rename, renamed := renameByQN[qn]
+			textRefDetail := fmt.Sprintf("%d reference(s) to this name across the codebase", refs)
+			if renamed {
+				textRefDetail = fmt.Sprintf("%d reference(s) already migrated to the new name %q", refs, rename.NewName)
+			}
 			var signals []Signal
 			signals = append(signals, Signal{
 				Name:     "Text references",
-				Detail:   fmt.Sprintf("%d reference(s) to this name across the codebase", refs),
+				Detail:   textRefDetail,
 				Points:   textRefBlastRadius,
 				Category: "graph",
 			})
+			if renamed {
+				signals = append(signals, renameOldNameSignal(ctx, c, rename))
+			}
 			if methodBlastRadius > 0 {
 				signals = append(signals, Signal{
 					Name:     "Method call-graph activity",
 					Detail:   fmt.Sprintf("this type's own methods have an aggregated caller reach of %.2f", methodBlastRadius),
 					Points:   0.5 * methodBlastRadius,
+					Category: "graph",
+				})
+			} else if len(methodsByType[qn]) > 0 {
+				signals = append(signals, Signal{
+					Name:     "Method call-graph activity",
+					Detail:   fmt.Sprintf("%d method(s), none reached by any caller within scope", len(methodsByType[qn])),
+					Points:   0,
 					Category: "graph",
 				})
 			}
@@ -700,29 +770,49 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 					Points:   div,
 					Category: "graph",
 				})
+			} else {
+				signals = append(signals, Signal{
+					Name:     "Cross-package impact",
+					Detail:   fmt.Sprintf("references concentrated in %d directory(ies), no cross-package spread", len(usage.Directories)),
+					Points:   0,
+					Category: "graph",
+				})
 			}
 
 			if symbolByQN[qn].Label == "Interface" {
-				if n := implementerCountByIface[qn]; n > 0 {
-					signals = append(signals, Signal{
-						Name:     "Interface definition",
-						Detail:   fmt.Sprintf("%d implementer(s) must stay compatible with this interface", n),
-						Points:   math.Log1p(float64(n)) * 1.0,
-						Category: "architecture",
-					})
+				n := implementerCountByIface[qn]
+				detail := fmt.Sprintf("%d implementer(s) must stay compatible with this interface", n)
+				if n == 0 {
+					detail = "no known implementers"
 				}
+				signals = append(signals, Signal{
+					Name:     "Interface definition",
+					Detail:   detail,
+					Points:   math.Log1p(float64(n)) * 1.0,
+					Category: "architecture",
+				})
+			} else if len(implementsByType[qn]) == 0 {
+				signals = append(signals, Signal{
+					Name:     "Interface implementation",
+					Detail:   "implements no interfaces",
+					Points:   0,
+					Category: "architecture",
+				})
 			} else {
 				for _, info := range implementsByType[qn] {
 					// -1 to exclude this symbol itself from its interface's
 					// implementer count.
 					others := implementerCountByIface[info.interfaceQN] - 1
+					detail := fmt.Sprintf("implements %s (%d other implementer(s) - a plugin-style extensibility point)", info.interfaceName, others)
+					points := math.Log1p(float64(others)) * 1.0
 					if others <= 0 {
-						continue
+						detail = fmt.Sprintf("implements %s (sole implementer)", info.interfaceName)
+						points = 0
 					}
 					signals = append(signals, Signal{
 						Name:     "Interface implementation",
-						Detail:   fmt.Sprintf("implements %s (%d other implementer(s) - a plugin-style extensibility point)", info.interfaceName, others),
-						Points:   math.Log1p(float64(others)) * 1.0,
+						Detail:   detail,
+						Points:   points,
 						Category: "architecture",
 					})
 				}
@@ -764,6 +854,13 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 				Points:   1.5,
 				Category: "architecture",
 			})
+		} else {
+			contrib.Signals = append(contrib.Signals, Signal{
+				Name:     "Writes persistent data",
+				Detail:   "does not mutate a database/persistent store directly",
+				Points:   0,
+				Category: "architecture",
+			})
 		}
 		// Recompute from the now-complete Signals list rather than trusting
 		// the value set when this contribution was first built, since
@@ -792,6 +889,8 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 	packageHunkCount := make(map[string]int)
 	packageMaxBlastRadius := make(map[string]float64)
 	maxBlastRadius, maxReviewPriority := 0.0, 0.0
+	var maxBlastRadiusFile, maxBlastRadiusHeader string
+	var maxReviewPriorityFile, maxReviewPriorityHeader string
 	for _, p := range pending {
 		hr := HunkReport{
 			FilePath: p.hunk.FilePath,
@@ -838,7 +937,13 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 				packageMaxBlastRadius[pkg] = hr.BlastRadiusRaw
 			}
 		}
+		if hr.BlastRadiusRaw > maxBlastRadius {
+			maxBlastRadiusFile, maxBlastRadiusHeader = hr.FilePath, hr.Header
+		}
 		maxBlastRadius = math.Max(maxBlastRadius, hr.BlastRadiusRaw)
+		if hr.ReviewPriorityRaw > maxReviewPriority {
+			maxReviewPriorityFile, maxReviewPriorityHeader = hr.FilePath, hr.Header
+		}
 		maxReviewPriority = math.Max(maxReviewPriority, hr.ReviewPriorityRaw)
 		hunkReportsByFile[p.hunk.FilePath] = append(hunkReportsByFile[p.hunk.FilePath], hr)
 	}
@@ -846,6 +951,13 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 	for _, path := range fileOrder {
 		hrs := hunkReportsByFile[path]
 		for i := range hrs {
+			hrs[i].MaxBlastRadiusRaw = maxBlastRadius
+			hrs[i].MaxBlastRadiusHunkFile = maxBlastRadiusFile
+			hrs[i].MaxBlastRadiusHunkHeader = maxBlastRadiusHeader
+			hrs[i].MaxReviewPriorityRaw = maxReviewPriority
+			hrs[i].MaxReviewPriorityHunkFile = maxReviewPriorityFile
+			hrs[i].MaxReviewPriorityHunkHeader = maxReviewPriorityHeader
+			hrs[i].Weights = weights
 			if maxBlastRadius > 0 {
 				hrs[i].BlastRadiusNorm = hrs[i].BlastRadiusRaw / maxBlastRadius * 100
 			}

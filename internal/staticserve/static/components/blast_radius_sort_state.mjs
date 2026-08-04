@@ -30,16 +30,35 @@ export function blastRadiusTierLabel(score) {
     return 'Minimal risk';
 }
 
+// allSignals flattens a report hunk (BlastDetail) into every Signal that
+// contributed to it - the hunk's own (file coupling, arch role) plus every
+// touched symbol's - ranked by absolute contribution. This is the full set
+// that BlastRadiusRaw/ReviewPriorityRaw are literally the sum of (see
+// blastradius.go's sumSignalPoints); a UI showing only detail.Signals is
+// showing a small fraction of what the headline score is built from.
+//
+// Symbol-sourced signals carry a `_symbolName` (the symbol they came from);
+// hunk-level signals don't. A hunk touching several symbols can easily
+// produce the *same* signal name several times over (e.g. "Caller reach" for
+// each of 4 touched functions) - without _symbolName there's no way for a UI
+// to show that these are 4 different symbols' scores, not one signal counted
+// four times.
+export function allSignals(detail) {
+    if (!detail) return [];
+    const all = [...(detail.Signals || [])];
+    (detail.Symbols || []).forEach((sym) => {
+        (sym.Signals || []).forEach((s) => all.push({ ...s, _symbolName: sym.Name || sym.QualifiedName }));
+    });
+    all.sort((a, b) => Math.abs(b.Points || 0) - Math.abs(a.Points || 0));
+    return all;
+}
+
 // summarizeRiskDetail condenses a report hunk (BlastDetail) into what the
 // hover card shows: the headline numbers plus the strongest signals across
 // the hunk AND its touched symbols, ranked by absolute contribution.
 export function summarizeRiskDetail(detail, limit = 4) {
     if (!detail) return null;
-    const all = [...(detail.Signals || [])];
-    (detail.Symbols || []).forEach((sym) => {
-        (sym.Signals || []).forEach((s) => all.push(s));
-    });
-    all.sort((a, b) => Math.abs(b.Points || 0) - Math.abs(a.Points || 0));
+    const all = allSignals(detail);
     const top = all.slice(0, limit);
     return {
         score: detail.Combined || 0,
