@@ -59,6 +59,15 @@ var debugFlags = []cli.Flag{
 
 func main() {
 	selfupdate.SetVersion(version)
+	// Self-healing backstop, independent of self-update's own sync step:
+	// runs on every invocation (any subcommand, either binary name) so a
+	// git-lrc binary that drifted out of sync with lrc - however that
+	// happened - gets repaired on the very next command rather than staying
+	// silently stale. Cheap in the common case (just a size comparison via
+	// os.Stat); only reads/copies file content when a mismatch is found.
+	if err := selfupdate.EnsureGitLRCBinarySynced(false); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not resync git-lrc binary: %v\n", err)
+	}
 	appui.SetBuildInfo(version, buildTime, gitCommit)
 	appcore.Configure(version, reviewMode)
 

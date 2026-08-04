@@ -723,6 +723,157 @@ func copyFileContents(srcPath, dstPath string, mode fs.FileMode) error {
 	return nil
 }
 
+func fileSHA256(path string) (string, error) {
+	f, err := storage.OpenFileForRead(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func binariesMatch(a, b string) (bool, error) {
+	ha, err := fileSHA256(a)
+	if err != nil {
+		return false, err
+	}
+	hb, err := fileSHA256(b)
+	if err != nil {
+		return false, err
+	}
+	return ha == hb, nil
+}
+
+// resyncBinary copies srcPath's content over dstPath (via a temp file +
+// atomic rename, so a reader never sees a truncated dstPath mid-copy) and
+// then verifies the result by checksum rather than just trusting the copy
+// call succeeded - a copy that "succeeds" but produces the wrong bytes (a
+// concurrent writer, a filesystem quirk) would otherwise look identical to
+// a correct sync from the caller's side. Direction-agnostic: the caller
+// decides which of the two binaries is the source of truth.
+func resyncBinary(srcPath, dstPath string, verbose bool) error {
+	if !pathDirWritable(dstPath) {
+		return fmt.Errorf("install directory is not writable: %s", filepath.Dir(dstPath))
+	}
+
+	tmpPath := filepath.Join(filepath.Dir(dstPath), fmt.Sprintf(".%s.new.%d", filepath.Base(dstPath), time.Now().UnixNano()))
+	if err := copyFileContents(srcPath, tmpPath, 0755); err != nil {
+		return fmt.Errorf("failed to stage %s resync: %w", filepath.Base(dstPath), err)
+	}
+	if err := storage.Chmod(tmpPath, 0755); err != nil {
+		_ = storage.Remove(tmpPath)
+		return fmt.Errorf("failed to set executable permissions on %s: %w", filepath.Base(dstPath), err)
+	}
+	if err := storage.Rename(tmpPath, dstPath); err != nil {
+		_ = storage.Remove(tmpPath)
+		return fmt.Errorf("failed to install resynced %s binary: %w", filepath.Base(dstPath), err)
+	}
+
+	ok, err := binariesMatch(srcPath, dstPath)
+	if err != nil {
+		return fmt.Errorf("failed to verify %s resync: %w", filepath.Base(dstPath), err)
+	}
+	if !ok {
+		return fmt.Errorf("%s resync verification failed: content mismatch after copy", filepath.Base(dstPath))
+	}
+	if verbose {
+		log.Printf("%s binary resynced from %s", filepath.Base(dstPath), filepath.Base(srcPath))
+	}
+	return nil
+}
+
+// EnsureGitLRCBinarySynced is a self-healing backstop: it checks whether the
+// lrc/git-lrc binaries alongside the currently-running executable actually
+// match, and resyncs whichever one is stale. This runs on every invocation
+// (see main.go), independent of self-update's own apply step - so a
+// mismatch introduced by ANY prior failure mode (a sync step that errored
+// partway, an install predating this check, manual tampering) self-heals on
+// the very next command, regardless of which binary name was used to invoke
+// it.
+//
+// Direction is decided by modification time, not by name: whichever file
+// was written more recently is treated as the source of truth. In normal
+// operation that's always lrc (self-update writes it first, then mirrors it
+// onto git-lrc), but nothing here assumes that - if git-lrc were ever ahead
+// (a manual replacement, a future code path that updates it directly), a
+// name-fixed "always copy lrc over git-lrc" rule would silently downgrade
+// the newer file instead of repairing the older one.
+//
+// Cheap in the common (already-synced) case: just two os.Stat calls, no
+// file reads, unless a size mismatch actually suggests drift.
+func EnsureGitLRCBinarySynced(verbose bool) error {
+	if internalSelfUpdateDisabled() {
+		return nil
+	}
+
+	lrcBinaryPath, gitLRCBinaryPath, err := currentBinaryTargets()
+	if err != nil {
+		return err
+	}
+
+	return ensureBinariesSynced(lrcBinaryPath, gitLRCBinaryPath, verbose)
+}
+
+// ensureBinariesSynced holds the actual directionality decision, factored
+// out from EnsureGitLRCBinarySynced (which resolves paths via
+// os.Executable() and so can't be unit-tested with arbitrary temp paths).
+func ensureBinariesSynced(lrcBinaryPath, gitLRCBinaryPath string, verbose bool) error {
+	lrcInfo, lrcErr := os.Stat(lrcBinaryPath)
+	gitInfo, gitErr := os.Stat(gitLRCBinaryPath)
+
+	switch {
+	case lrcErr != nil && gitErr != nil:
+		return nil // neither binary is present/readable - nothing this check can fix
+	case lrcErr != nil:
+		// lrc missing but git-lrc present: recreate lrc from git-lrc.
+		if verbose {
+			log.Printf("lrc binary missing or unreadable (%v) - resyncing from git-lrc", lrcErr)
+		}
+		return resyncBinary(gitLRCBinaryPath, lrcBinaryPath, verbose)
+	case gitErr != nil:
+		if verbose {
+			log.Printf("git-lrc binary missing or unreadable (%v) - resyncing from lrc", gitErr)
+		}
+		return resyncBinary(lrcBinaryPath, gitLRCBinaryPath, verbose)
+	}
+
+	if lrcInfo.Size() == gitInfo.Size() {
+		// Equal size is a cheap but not conclusive signal (two different
+		// builds could coincidentally land on the same byte count) - only
+		// skip the (comparatively expensive) hash check when mtimes are
+		// also close together, which is what any correct prior sync
+		// actually leaves behind (both files touched in the same
+		// operation). Mtimes far apart despite equal size means "probably
+		// fine, but verify" rather than "definitely fine".
+		delta := lrcInfo.ModTime().Sub(gitInfo.ModTime())
+		if delta < 0 {
+			delta = -delta
+		}
+		if delta < 5*time.Second {
+			return nil
+		}
+		if match, err := binariesMatch(lrcBinaryPath, gitLRCBinaryPath); err == nil && match {
+			return nil
+		}
+	}
+
+	if lrcInfo.ModTime().After(gitInfo.ModTime()) {
+		if verbose {
+			log.Printf("git-lrc binary out of sync with lrc (size %d vs %d, lrc is newer) - resyncing", gitInfo.Size(), lrcInfo.Size())
+		}
+		return resyncBinary(lrcBinaryPath, gitLRCBinaryPath, verbose)
+	}
+	if verbose {
+		log.Printf("lrc binary out of sync with git-lrc (size %d vs %d, git-lrc is newer) - resyncing", lrcInfo.Size(), gitInfo.Size())
+	}
+	return resyncBinary(gitLRCBinaryPath, lrcBinaryPath, verbose)
+}
+
 func runHooksInstallWithBinary(binaryPath string, verbose bool) error {
 	cleaned := filepath.Clean(strings.TrimSpace(binaryPath))
 	if cleaned == "" {
@@ -774,11 +925,8 @@ func applyPendingUpdateUnix(state *storage.PendingUpdateState, verbose bool) err
 		return fmt.Errorf("failed to replace lrc binary: %w", err)
 	}
 
-	if err := copyFileContents(lrcBinaryPath, gitLRCBinaryPath, 0755); err != nil {
+	if err := resyncBinary(lrcBinaryPath, gitLRCBinaryPath, verbose); err != nil {
 		return fmt.Errorf("failed to sync git-lrc binary: %w", err)
-	}
-	if err := storage.Chmod(gitLRCBinaryPath, 0755); err != nil {
-		return fmt.Errorf("failed to set executable permissions on git-lrc binary: %w", err)
 	}
 
 	if err := runHooksInstallWithBinary(lrcBinaryPath, verbose); err != nil {
