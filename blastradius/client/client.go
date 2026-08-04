@@ -158,6 +158,64 @@ func (c *Client) SearchCodeUsage(ctx context.Context, pattern string) (*CodeUsag
 	return &CodeUsage{TotalMatches: result.TotalGrepMatches, Directories: dirs}, nil
 }
 
+// CodeSymbolMatch is one textual hit resolved to the graph node that encloses
+// it - search_code's "compact" mode maps each grep match back to the symbol
+// whose source range contains it, which is what makes it usable as a caller
+// list for names that have no node of their own (see SearchCodeSymbols).
+type CodeSymbolMatch struct {
+	QualifiedName string `json:"qualified_name"`
+	Name          string `json:"node"`
+	Label         string `json:"label"`
+	File          string `json:"file"`
+	StartLine     int    `json:"start_line"`
+	// MatchLines are the 1-based line numbers inside this symbol where the
+	// pattern actually occurred.
+	MatchLines []int `json:"match_lines"`
+}
+
+// CodeSymbolMatches is the result of SearchCodeSymbols.
+type CodeSymbolMatches struct {
+	// Matches are the enclosing symbols, deduplicated by the tool itself
+	// (one entry per symbol, however many lines inside it matched).
+	Matches []CodeSymbolMatch
+	// TotalMatches is the raw grep-style hit count, the same number
+	// SearchCodeUsage reports - unaffected by the enrichment limit.
+	TotalMatches int
+	// Truncated reports that the tool found more enclosing symbols than the
+	// limit allowed it to enrich, so Matches is a partial list.
+	Truncated bool
+}
+
+// SearchCodeSymbols runs `cli search_code --mode compact` for pattern and
+// returns the graph symbols enclosing each match. Unlike SearchCodeUsage
+// (which only counts hits), this identifies *who* references the name - the
+// only way to find references to a name the graph has no node for, e.g. a
+// symbol's pre-rename name after the tree was reindexed. limit <= 0 leaves
+// the tool's own default in place.
+func (c *Client) SearchCodeSymbols(ctx context.Context, pattern string, limit int) (*CodeSymbolMatches, error) {
+	args := []string{"--pattern", pattern, "--mode", "compact"}
+	if limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(limit))
+	}
+	out, err := c.run(ctx, "search_code", args...)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Results          []CodeSymbolMatch `json:"results"`
+		TotalGrepMatches int               `json:"total_grep_matches"`
+		TotalResults     int               `json:"total_results"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("blastradius/client: parsing search_code output: %w", err)
+	}
+	return &CodeSymbolMatches{
+		Matches:      result.Results,
+		TotalMatches: result.TotalGrepMatches,
+		Truncated:    result.TotalResults > len(result.Results),
+	}, nil
+}
+
 // ArchitectureEntryPoint is one entry in get_architecture's "entry_points"
 // aspect - a real, cross-language entry point (main functions, extension
 // activate/deactivate hooks, script mains), not just the is_entry_point

@@ -154,6 +154,12 @@ type CallerRef struct {
 	// Path holds the intermediate qualified names between the symbol and
 	// this caller (see CallerContribution.Path).
 	Path []string
+	// PreRename marks a caller reached via the symbol's pre-rename name
+	// rather than the graph's CALLS edges: it references the old name and
+	// breaks until it's migrated. CALLS fan-in can never find these - the
+	// index reflects the post-rename tree, where the old name has no node
+	// and every edge pointing at it was dropped as unresolvable.
+	PreRename bool
 }
 
 // SymbolContribution describes one touched symbol's part of a hunk's score.
@@ -182,7 +188,14 @@ type SymbolContribution struct {
 	TransitiveCount int
 	// Callers is the full caller list (only for "calls"), sorted by depth
 	// then name, for showing exactly which transitive calls contributed.
+	// A renamed symbol additionally carries its pre-rename callers here,
+	// flagged with CallerRef.PreRename - see RenamedFrom.
 	Callers []CallerRef
+	// RenamedFrom is the pre-rename name when this symbol's own declaration
+	// was renamed in the diff, empty otherwise. It explains why the entries
+	// in Callers flagged PreRename are there: they still reference this
+	// name, so they break until they're migrated.
+	RenamedFrom string
 	// ImpactedPackages are the distinct packages/directories this symbol's
 	// influence reaches: for "calls", the packages its callers live in; for
 	// "text-references", the directories search_code found matches in.
@@ -632,6 +645,17 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 		impactedPackages := sortedUnique(packages)
 
 		rename, renamed := renameByQN[qn]
+		// A renamed symbol's CALLS fan-in above only sees callers already
+		// migrated to the new name - usually none, which is why the graph
+		// looked empty for exactly the highest-risk case. The pre-rename
+		// callers are the ones about to break, so append them (display and
+		// visualization only; they contribute no points - the rename's score
+		// stays entirely in renameOldNameSignal below).
+		if renamed {
+			preRename := oldNameCallers(ctx, c, rename, qn)
+			callers = append(callers, preRename...)
+			callers = append(callers, expandPreRenameCallers(ctx, c, preRename, o.Score, qn)...)
+		}
 		callerReachDetail := fmt.Sprintf("%d direct + %d transitive caller(s), up to %d hops", direct, transitive, maxDepth)
 		if renamed {
 			callerReachDetail = fmt.Sprintf("%d direct + %d transitive caller(s) already migrated to the new name %q, up to %d hops", direct, transitive, rename.NewName, maxDepth)
@@ -706,6 +730,7 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 			DirectCount:      direct,
 			TransitiveCount:  transitive,
 			Callers:          callers,
+			RenamedFrom:      rename.OldName, // zero value when !renamed
 			ImpactedPackages: impactedPackages,
 		}
 	}
@@ -818,11 +843,24 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 				}
 			}
 
+			// A renamed type has no call graph of its own (that's what makes
+			// it a "text-references" symbol), but the places still using its
+			// old name are real, locatable nodes - so a renamed struct gets a
+			// dependency graph here where it previously had nothing to show.
+			var callers []CallerRef
+			if renamed {
+				preRename := oldNameCallers(ctx, c, rename, qn)
+				callers = append(callers, preRename...)
+				callers = append(callers, expandPreRenameCallers(ctx, c, preRename, o.Score, qn)...)
+			}
+
 			contribByQN[qn] = SymbolContribution{
 				Method:            "text-references",
 				Signals:           signals,
 				BlastRadiusRaw:    sumSignalPoints(signals, blastRadiusCategories),
 				DirectCount:       refs,
+				Callers:           callers,
+				RenamedFrom:       rename.OldName, // zero value when !renamed
 				ImpactedPackages:  usage.Directories,
 				MethodBlastRadius: methodBlastRadius,
 			}

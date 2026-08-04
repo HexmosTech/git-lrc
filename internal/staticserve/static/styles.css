@@ -3238,6 +3238,32 @@ body {
   box-shadow: 0 0 4px rgba(255, 87, 34, 0.2);
 }
 
+/* Pre-rename callers (left column only - see BlastRadiusPanel's
+   chartSymbol): found by text search against the symbol's old name, not a
+   verified CALLS edge, so they get the app's existing red/critical treatment
+   (--accent-red) to read as a flag worth checking, distinct from ordinary
+   live callers. This styling is scoped to the left column's CallerGroup
+   component and never reaches the chart. */
+.blast-caller-group.pre-rename .blast-caller-group-header {
+  color: var(--accent-red);
+}
+.blast-caller-group.pre-rename .blast-caller-count {
+  background: rgba(241, 76, 76, 0.2);
+  color: var(--accent-red);
+}
+.blast-caller.pre-rename {
+  background: rgba(241, 76, 76, 0.12);
+  border: 1px dashed rgba(241, 76, 76, 0.55);
+  color: var(--accent-red);
+}
+.blast-caller.pre-rename:hover,
+.blast-caller.pre-rename.highlighted {
+  color: var(--text-primary);
+  border-color: var(--accent-red);
+  background: rgba(241, 76, 76, 0.28);
+  box-shadow: 0 0 4px rgba(241, 76, 76, 0.4);
+}
+
 /* Two-column blast panel layout: details (left) + sunburst chart (right) */
 .blast-panel-columns {
   display: flex;

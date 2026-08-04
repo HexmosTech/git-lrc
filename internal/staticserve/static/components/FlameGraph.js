@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, DEPTH_COLORS, renderHoverTooltip, loadD3, verifyChartRender } from './callgraph-utils.js';
+import { buildHierarchy, DEPTH_COLORS, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 // renderFlameGraph owns d3 rendering only; tooltip content/visibility is
 // reported via onHover(info, x, y) rather than mutated directly on a ref'd
@@ -26,7 +26,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
         svg.append('text').attr('x', width / 2).attr('y', height / 2)
             .attr('text-anchor', 'middle').attr('fill', '#8a7060').attr('font-size', '13px')
             .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
-            .text('No callers in the dependency graph');
+            .text(emptyCallGraphMessage(symbol));
         return 0;
     }
 
@@ -230,7 +230,7 @@ export async function createFlameGraph() {
             }
         }, [hoveredCaller, d3Ready]);
         if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
-            return html`<div class="viz-container-fg"><div class="viz-empty">${symbol && symbol.Method === 'text-references' ? 'Text reference method — no call graph available' : 'No callers in the dependency graph'}</div></div>`;
+            return html`<div class="viz-container-fg"><div class="viz-empty">${emptyCallGraphMessage(symbol)}</div></div>`;
         }
         return html`
             <div class="viz-container-fg">

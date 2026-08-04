@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, getDepthColor, DEPTH_COLORS, hoverInfoFromDatum, renderHoverTooltip, loadD3, verifyChartRender } from './callgraph-utils.js';
+import { buildHierarchy, DEPTH_COLORS, hoverInfoFromDatum, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 function arcTween(a, arcGen) {
     const i = window.d3.interpolate({ x0: a.x0, x1: a.x0 }, a);
@@ -58,7 +58,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
         g.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em')
             .attr('fill', '#8a7060').attr('font-size', '13px')
             .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
-            .text('No callers in the dependency graph');
+            .text(emptyCallGraphMessage(symbol));
         return 0;
     }
 
@@ -216,7 +216,7 @@ export async function createSunburstChart() {
             }
         }, [hoveredCaller, d3Ready]);
         if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
-            return html`<div class="viz-container-sq"><div class="viz-empty">${symbol && symbol.Method === 'text-references' ? 'Text reference method — no call graph available' : 'No callers in the dependency graph'}</div></div>`;
+            return html`<div class="viz-container-sq"><div class="viz-empty">${emptyCallGraphMessage(symbol)}</div></div>`;
         }
         return html`
             <div class="viz-container-sq">

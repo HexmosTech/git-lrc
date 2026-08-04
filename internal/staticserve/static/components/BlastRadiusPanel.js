@@ -11,6 +11,7 @@
 import { waitForPreact } from './utils.js';
 import { renderIcon } from './icons.js';
 import { blastRadiusTier, allSignals } from './blast_radius_sort_state.mjs';
+import { callerGroupLabel, groupCallers } from './callgraph_model.mjs';
 import { getSunburstChart } from './SunburstChart.js';
 import { getFlameGraph } from './FlameGraph.js';
 
@@ -143,23 +144,8 @@ function sumExpression(nums) {
     return { text, total };
 }
 
-function groupCallersByDepth(callers) {
-    const groups = new Map();
-    (callers || []).forEach((c) => {
-        const depth = c.Depth || 1;
-        if (!groups.has(depth)) groups.set(depth, []);
-        groups.get(depth).push(c);
-    });
-    return [...groups.entries()].sort((a, b) => a[0] - b[0]);
-}
-
-function depthLabel(depth) {
-    if (depth === 1) return 'Direct callers';
-    return `${depth} calls away`;
-}
-
 export async function createBlastRadiusPanel() {
-    const { html, useState, useRef, useCallback, useEffect } = await waitForPreact();
+    const { html, useState, useRef, useCallback, useEffect, useMemo } = await waitForPreact();
     const SunburstChart = await getSunburstChart();
     const FlameGraph = await getFlameGraph();
 
@@ -410,21 +396,22 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
-    function CallerGroup({ depth, callers, hoveredCaller, onHoverCaller }) {
+    function CallerGroup({ group, oldName, hoveredCaller, onHoverCaller }) {
+        const callers = group.callers;
         const [showAll, setShowAll] = useState(false);
         const visible = showAll ? callers : callers.slice(0, CALLERS_PREVIEW);
         const hidden = callers.length - visible.length;
         return html`
-            <div class="blast-caller-group">
+            <div class="blast-caller-group ${group.preRename ? 'pre-rename' : ''}">
                 <div class="blast-caller-group-header">
-                    ${depthLabel(depth)}
+                    ${callerGroupLabel(group, oldName)}
                     <span class="blast-caller-count">${callers.length}</span>
                 </div>
                 <div class="blast-caller-list ${showAll ? 'expanded' : ''}">
                     ${visible.map((c) => html`
                         <span
                             key=${c.QualifiedName}
-                            class="blast-caller ${hoveredCaller === c.QualifiedName ? 'highlighted' : ''}"
+                            class="blast-caller ${group.preRename ? 'pre-rename' : ''} ${hoveredCaller === c.QualifiedName ? 'highlighted' : ''}"
                             title="${c.QualifiedName}"
                             onMouseEnter=${() => onHoverCaller(c.QualifiedName)}
                             onMouseLeave=${() => onHoverCaller(null)}
@@ -485,7 +472,7 @@ export async function createBlastRadiusPanel() {
     }
 
     function SymbolDetail({ sym, hoveredCaller, onHoverCaller }) {
-        const callerGroups = groupCallersByDepth(sym.Callers);
+        const callerGroups = groupCallers(sym.Callers);
         const totalCallers = (sym.Callers || []).length;
         return html`
             <div class="blast-symbol-detail">
@@ -498,8 +485,8 @@ export async function createBlastRadiusPanel() {
                 ${totalCallers > 0 && html`
                     <div class="blast-callers">
                         <div class="blast-section-title">Reached from ${totalCallers} caller${totalCallers !== 1 ? 's' : ''}</div>
-                        ${callerGroups.map(([depth, callers]) => html`
-                            <${CallerGroup} key=${depth} depth=${depth} callers=${callers} hoveredCaller=${hoveredCaller} onHoverCaller=${onHoverCaller} />
+                        ${callerGroups.map((group) => html`
+                            <${CallerGroup} key=${group.key} group=${group} oldName=${sym.RenamedFrom} hoveredCaller=${hoveredCaller} onHoverCaller=${onHoverCaller} />
                         `)}
                     </div>
                 `}
@@ -705,6 +692,17 @@ export async function createBlastRadiusPanel() {
         const [vizMode, setVizMode] = useState('sunburst');
         const [hoveredCaller, setHoveredCaller] = useState(null);
         const [scoreMode, setScoreMode] = useState('summary');
+        // The chart must only ever draw genuine CALLS-graph edges - a
+        // symbol's pre-rename callers are found by text search, not a real
+        // graph edge, and drawing one as an arc/bar would claim a call that
+        // was never observed. That analysis stays in the left column's
+        // CallerGroup (fed from sym.Callers directly, unfiltered); this
+        // strips it back out before anything reaches the chart.
+        const chartSymbol = useMemo(() => {
+            const sym = symbols[selectedIdx];
+            if (!sym || !sym.RenamedFrom) return sym;
+            return { ...sym, Callers: (sym.Callers || []).filter((c) => !c.PreRename) };
+        }, [symbols, selectedIdx]);
 
         return html`
             <div class="blast-panel">
@@ -798,8 +796,8 @@ export async function createBlastRadiusPanel() {
                             </div>
                             <div class="blast-viz-wrapper">
                                 ${vizMode === 'sunburst'
-                                    ? html`<${SunburstChart} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
-                                    : html`<${FlameGraph} symbol=${symbols[selectedIdx]} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
+                                    ? html`<${SunburstChart} symbol=${chartSymbol} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
+                                    : html`<${FlameGraph} symbol=${chartSymbol} width=${SUNBURST_SIZE} height=${SUNBURST_SIZE} hoveredCaller=${hoveredCaller} onHoverCaller=${setHoveredCaller} />`
                                 }
                             </div>
                         </div>

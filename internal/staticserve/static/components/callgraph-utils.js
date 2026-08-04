@@ -41,80 +41,16 @@ export function verifyChartRender(svgEl, selector, expectedCount) {
     return true;
 }
 
-export function shortName(qualifiedName) {
-    const parts = (qualifiedName || '').split('.');
-    return parts[parts.length - 1] || qualifiedName;
-}
-
-export function buildHierarchy(symbol) {
-    const callers = symbol.Callers || [];
-    const nodeMap = new Map();
-    const children = [];
-    const childrenNames = new Set();
-
-    function ensureNode(qualifiedName, isIntermediate) {
-        if (!nodeMap.has(qualifiedName)) {
-            const node = {
-                name: shortName(qualifiedName),
-                qualifiedName: qualifiedName,
-                children: [],
-                _names: new Set(),
-            };
-            if (isIntermediate) node.isIntermediate = true;
-            nodeMap.set(qualifiedName, node);
-            return node;
-        }
-        return nodeMap.get(qualifiedName);
-    }
-
-    for (const caller of callers) {
-        const path = caller.Path || [];
-
-        if (path.length === 0) {
-            const node = ensureNode(caller.QualifiedName, false);
-            node.depth = caller.Depth;
-            node.weight = caller.Weight;
-            node.isLeaf = true;
-            children.push(node);
-            childrenNames.add(caller.QualifiedName);
-            continue;
-        }
-
-        const firstVia = path[0];
-        const viaNode = ensureNode(firstVia, true);
-        if (!childrenNames.has(firstVia)) {
-            children.push(viaNode);
-            childrenNames.add(firstVia);
-        }
-        if (!viaNode.depth) viaNode.depth = 1;
-
-        let parent = viaNode;
-        for (let i = 1; i < path.length; i++) {
-            const childNode = ensureNode(path[i], true);
-            if (!parent._names.has(path[i])) {
-                parent.children.push(childNode);
-                parent._names.add(path[i]);
-            }
-            if (!childNode.depth) childNode.depth = i + 1;
-            parent = childNode;
-        }
-
-        const leafNode = ensureNode(caller.QualifiedName, false);
-        leafNode.depth = caller.Depth;
-        leafNode.weight = caller.Weight;
-        leafNode.isLeaf = true;
-        if (!parent._names.has(caller.QualifiedName)) {
-            parent.children.push(leafNode);
-            parent._names.add(caller.QualifiedName);
-        }
-    }
-
-    return {
-        name: symbol.Name || shortName(symbol.QualifiedName),
-        qualifiedName: symbol.QualifiedName,
-        children,
-    };
-}
+// The pure half of this module lives in callgraph_model.mjs so it can be unit
+// tested under `node --test`; re-exported here so chart components keep a
+// single import site.
+export {
+    shortName,
+    buildHierarchy,
+    emptyCallGraphMessage,
+    groupCallers,
+    callerGroupLabel,
+} from './callgraph_model.mjs';
 
 export const DEPTH_COLORS = {
     0: { base: '#990000', light: '#e60000' },
@@ -171,10 +107,14 @@ export function hoverInfoFromDatum(d) {
 // hoverInfoFromDatum) - `html` is the caller's own htm-bound tag (each
 // component gets its own instance from waitForPreact(), so it's passed in
 // rather than imported here).
+//
+// htm does not decode HTML entities in template text, so this uses literal
+// characters ("·", "↳") rather than &middot;/&#8627; - an entity here would
+// render verbatim in the tooltip instead of the symbol it names.
 export function renderHoverTooltip(html, hover) {
     if (!hover) return null;
     if (hover.isIntermediate) {
-        return html`<strong>&#8627;</strong> ${hover.qualifiedName}<br /><span style="color:#9a8070;font-size:10px">intermediate &middot; depth ${hover.depth}</span>`;
+        return html`<strong>↳</strong> ${hover.qualifiedName}<br /><span style="color:#9a8070;font-size:10px">intermediate · depth ${hover.depth}</span>`;
     }
     return html`<strong>${hover.name}</strong><br /><span style="color:#baa090;font-size:10px">${hover.qualifiedName}</span><br /><span style="color:#8a7060;font-size:10px">${hover.depth === 1 ? 'Direct caller' : hover.depth + ' hops away'}</span>`;
 }
