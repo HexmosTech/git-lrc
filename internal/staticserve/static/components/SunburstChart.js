@@ -31,7 +31,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
     const d3 = window.d3;
     const radius = Math.min(width, height) / 2;
 
-    d3.select(svgEl).selectAll('*').remove();
+    d3.select(svgEl).selectAll('*').interrupt().remove();
 
     const svg = d3.select(svgEl)
         .attr('width', width).attr('height', height)

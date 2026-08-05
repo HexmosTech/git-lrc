@@ -15,7 +15,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
     const PAD_R = 4;
     const PAD_TB = 8;
 
-    d3.select(svgEl).selectAll('*').remove();
+    d3.select(svgEl).selectAll('*').interrupt().remove();
 
     const svg = d3.select(svgEl)
         .attr('width', width).attr('height', height)

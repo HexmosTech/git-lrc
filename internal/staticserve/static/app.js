@@ -323,6 +323,11 @@ async function initApp() {
         const eventsInFlightRef = useRef(false);
         const reviewStartMsRef = useRef(domReadyStartMs || getPerformanceNow());
         const reviewCompletedMsRef = useRef(null);
+        // Mirrors the `allComments` list built later in this render so
+        // navigateToComment (defined further up, before that list exists)
+        // can read the current comment set without a temporal-dead-zone
+        // reference or needing to be in its own dependency array.
+        const allCommentsRef = useRef([]);
         const [logsCopied, setLogsCopied] = useState(false);
         const [sessionEnded, setSessionEnded] = useState(false);
         const sessionReviewID = new URLSearchParams(window.location.search).get('r') || '';
@@ -754,14 +759,19 @@ async function initApp() {
             }
             // Switch to files tab first
             setActiveTab('files');
-            
-            // Expand the file containing the comment
+
+            // Expand the file containing the comment. `fileId` alone isn't
+            // reliable here: in flattened/ranked sort modes it's a synthetic
+            // per-hunk id, not the real file's expand key, so resolve the
+            // actual key from the comment's own list entry.
+            const entry = allCommentsRef.current.find(c => c.commentId === commentId);
+            const expandKey = entry?.expandKey || fileId;
             setExpandedFiles(prev => {
                 const next = new Set(prev);
-                next.add(fileId);
+                next.add(expandKey);
                 return next;
             });
-            
+
             setTimeout(() => {
                 const comment = document.getElementById(commentId);
                 if (comment) {
@@ -1152,6 +1162,7 @@ async function initApp() {
                             allComments.push({
                                 filePath: file.FilePath,
                                 fileId: fileId,
+                                expandKey: file.ExpandKey || file.ID,
                                 line: comment.Line,
                                 commentId: cid
                             });
@@ -1163,6 +1174,7 @@ async function initApp() {
         });
         // Stable key that only changes when the actual comment set changes
         const commentKey = commentIds.join(',');
+        allCommentsRef.current = allComments;
         
         // Calculate visible comments for the agent button
         let totalVisibleComments = 0;

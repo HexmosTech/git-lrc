@@ -2841,13 +2841,20 @@ body {
 .blast-signal-section-header {
   font-size: 10px;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-dim);
   margin-bottom: 3px;
   padding-bottom: 2px;
   border-bottom: 1px solid var(--border-subtle);
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+.blast-signal-section-header code,
+.blast-signal-code {
+  font-family: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
 }
 .blast-signal-category {
   margin-left: auto;
@@ -2981,8 +2988,11 @@ body {
 }
 .math-step-subject {
   color: var(--text-dim);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: inherit;
   font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
 }
 .math-step.final {
   margin-top: 4px;
@@ -5183,7 +5193,7 @@ body {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.4) rgba(255, 255, 255, 0.04);
-  transition-delay: 0s;
+  transition-delay: 0.3s;
 }
 
 .issue-filter-details-header {

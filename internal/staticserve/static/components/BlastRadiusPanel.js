@@ -192,7 +192,7 @@ export async function createBlastRadiusPanel() {
                 `}
                 ${groups.map(([name, sigs]) => html`
                     <div key=${name} class="blast-signal-section">
-                        <div class="blast-signal-section-header">${shortName(name)}</div>
+                        <div class="blast-signal-section-header"><code class="blast-signal-code">${shortName(name)}</code></div>
                         <ul class="blast-signal-list"><${SignalRows} signals=${sigs} dormant=${dormant} keyPrefix=${`${keyPrefix}-${name}`} /></ul>
                     </div>
                 `)}
@@ -286,13 +286,12 @@ export async function createBlastRadiusPanel() {
                 class="blast-score-chip-wrap"
                 onMouseLeave=${scheduleHide}
             >
-                <span class="${chipClass || ''}" title="${hint.title || ''}">${children}</span>
+                <span class="${chipClass || ''}">${children}</span>
                 <button
                     ref=${triggerRef}
                     type="button"
                     class="blast-help-btn"
                     aria-label="What does this score mean?"
-                    title="${hint.title || ''}"
                     onMouseEnter=${show}
                     onMouseLeave=${scheduleHide}
                     onFocus=${show}
@@ -351,7 +350,6 @@ export async function createBlastRadiusPanel() {
                     type="button"
                     class="blast-methodology-btn"
                     aria-label="How is this scored?"
-                    title="How is this scored?"
                     onClick=${(e) => { e.stopPropagation(); show(); }}
                     onFocus=${show}
                     onBlur=${scheduleHide}
@@ -549,7 +547,7 @@ export async function createBlastRadiusPanel() {
                     ${perSymbol.length === 0 && !hunkExpr && html`<div class="math-step-line dim">No signals fired for this dimension.</div>`}
                     ${perSymbol.map((l, i) => html`
                         <div key=${i} class="math-step-line">
-                            <span class="math-step-subject">${l.name}</span>: ${l.text} = <strong>${l.total.toFixed(1)}</strong>
+                            <code class="math-step-subject">${l.name}</code>: ${l.text} = <strong>${l.total.toFixed(1)}</strong>
                         </div>
                     `)}
                     ${hunkExpr && html`
@@ -686,7 +684,15 @@ export async function createBlastRadiusPanel() {
 
         const hygieneMult = typeof detail.HygieneMultiplier === 'number' ? detail.HygieneMultiplier : 1.0;
         const couplingVal = typeof detail.FileCouplingBonus === 'number' ? detail.FileCouplingBonus : 0;
-        const symbols = [...(detail.Symbols || [])].sort((a, b) => (b.BlastRadiusRaw || 0) - (a.BlastRadiusRaw || 0));
+        // Memoized so its identity only changes when the underlying data
+        // does - chartSymbol's own useMemo below depends on this array, and
+        // an unstable identity here (e.g. a fresh sort on every render)
+        // defeats that memo, causing the Sunburst/Flamegraph effect to tear
+        // down and restart on unrelated re-renders (hover, scoreMode, etc).
+        const symbols = useMemo(
+            () => [...(detail.Symbols || [])].sort((a, b) => (b.BlastRadiusRaw || 0) - (a.BlastRadiusRaw || 0)),
+            [detail.Symbols]
+        );
         const { blast: blastSignals, priority: prioritySignals, other: otherSignals } = splitSignalsByDimension(allSignals(detail));
         const [selectedIdx, setSelectedIdx] = useState(0);
         const [vizMode, setVizMode] = useState('sunburst');
