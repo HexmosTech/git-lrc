@@ -60,8 +60,8 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 
 | Operation | Mode | Data Handled | Purpose | Severity | Risk Acknowledgement | Compensation Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ReviewProxyRequest | api | Generic forwarded payloads with API key auth | Proxy events/webhook-style calls to configured endpoint | Medium | Medium abuse risk due to forwarding flexibility | Partially compensated by API key auth; Suggestion: document allowed method/path policy for deployments | [network/review_operations.go](review_operations.go#L21) |
-| ReviewForwardJSONWithBearer | api | JSON body, bearer token, org context | Forward authenticated JSON requests across setup flows | Medium | Medium risk from header/context propagation mistakes | Compensated by explicit bearer plus org-context request construction; acceptable risk | [network/review_operations.go](review_operations.go#L27) |
+| ReviewProxyRequest | api | Generic forwarded payloads with API key auth | Proxy events/webhook-style calls to configured endpoint | Medium | Medium abuse risk due to forwarding flexibility | Partially compensated by API key auth; Suggestion: document allowed method/path policy for deployments | [network/review_operations.go](review_operations.go#L29) |
+| ReviewForwardJSONWithBearer | api | JSON body, bearer token, org context | Forward authenticated JSON requests across setup flows | Medium | Medium risk from header/context propagation mistakes | Compensated by explicit bearer plus org-context request construction; acceptable risk | [network/review_operations.go](review_operations.go#L35) |
 
 ## Inventory: Self-Update Network Operations
 
