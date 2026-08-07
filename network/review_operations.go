@@ -17,6 +17,14 @@ func ReviewPoll(client *Client, apiURL, reviewID, apiKey string) (*Response, err
 	return client.DoJSON(http.MethodGet, ReviewPollURL(apiURL, reviewID), nil, "", "", map[string]string{"X-API-Key": apiKey})
 }
 
+// ReviewUploadArtifact POSTs a locally-computed, per-review artifact (e.g. a
+// blast-radius report) to LiveReview's generic artifact sync channel. Callers
+// should treat failures as non-fatal — this is opportunistic, best-effort
+// data (see LiveReview's AGENTS.md "Porting from git-lrc" section).
+func ReviewUploadArtifact(client *Client, apiURL, reviewID, artifactType string, payload any, apiKey string) (*Response, error) {
+	return client.DoJSON(http.MethodPost, ReviewArtifactURL(apiURL, reviewID, artifactType), payload, "", "", map[string]string{"X-API-Key": apiKey})
+}
+
 // ReviewProxyRequest forwards a proxied review request with API key auth.
 func ReviewProxyRequest(client *Client, method, apiBase, path, rawQuery string, body []byte, apiKey string) (*Response, error) {
 	backendURL := ReviewProxyRequestURL(apiBase, path, rawQuery)

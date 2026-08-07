@@ -18,6 +18,7 @@ import { renderHandoffConfetti } from './components/handoffConfetti.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
+import { BlastUploadStatus } from './components/BlastUploadStatus.js';
 import { renderIcon } from './components/icons.js';
 import { getSummarySlideshow } from './components/SummarySlideshow/SummarySlideshow.js';
 import { evaluateSummarySlidesEligibility } from './components/SummarySlideshow/slideshowParser.js';
@@ -297,7 +298,7 @@ async function initApp() {
         // view stays reachable via the sort control. While blast data is
         // still pending/unavailable the UI falls back to diff order.
         const [sortMode, setSortMode] = useState(SORT_MODE_RISK_FLAT);
-        const [blastData, setBlastData] = useState({ status: 'pending', report: null });
+        const [blastData, setBlastData] = useState({ status: 'pending', report: null, upload: null });
         const [events, setEvents] = useState([]);
         const [newEventCount, setNewEventCount] = useState(0);
         const [isTailing, setIsTailing] = useState(false);
@@ -572,15 +573,24 @@ async function initApp() {
                     if (!response.ok) {
                         // Endpoint absent (static saved HTML) or session gone:
                         // no blast data will ever arrive - stop polling.
-                        if (!cancelled) setBlastData({ status: 'unavailable', report: null });
+                        if (!cancelled) setBlastData({ status: 'unavailable', report: null, upload: null });
                         return true;
                     }
                     const data = await response.json();
                     if (cancelled) return true;
-                    setBlastData({ status: data.status || 'unavailable', report: data.report || null });
-                    return data.status === 'ready' || data.status === 'unavailable';
+                    setBlastData({ status: data.status || 'unavailable', report: data.report || null, upload: data.upload || null });
+                    const scoringDone = data.status === 'ready' || data.status === 'unavailable';
+                    // Upload starts (and is flagged "uploading") as soon as the CLI
+                    // knows a reviewID exists, well before scoring necessarily
+                    // finishes - so once scoring is done, an in-flight upload is
+                    // already visible here if one was ever going to happen. Keep
+                    // polling until it reaches a terminal state so the banner/
+                    // close-guard below doesn't stop watching mid-upload.
+                    const uploadStatus = data.upload && data.upload.status;
+                    const uploadDone = !uploadStatus || uploadStatus === 'uploaded' || uploadStatus === 'failed';
+                    return scoringDone && uploadDone;
                 } catch (err) {
-                    if (!cancelled) setBlastData({ status: 'unavailable', report: null });
+                    if (!cancelled) setBlastData({ status: 'unavailable', report: null, upload: null });
                     return true;
                 }
             };
@@ -605,6 +615,21 @@ async function initApp() {
                 }
             };
         }, [sessionReviewID]);
+
+        // Warn before closing the tab while the blast-radius report is still
+        // uploading to LiveReview, mirroring ui-connectors.js's unsaved-changes
+        // guard. Does not affect the CLI process itself (that's handled
+        // separately with a bounded exit grace) - this only protects against
+        // losing the upload because the browser tab closed mid-flight.
+        useEffect(() => {
+            const onBeforeUnload = (event) => {
+                if (blastData.upload?.status !== 'uploading') return;
+                event.preventDefault();
+                event.returnValue = '';
+            };
+            window.addEventListener('beforeunload', onBeforeUnload);
+            return () => window.removeEventListener('beforeunload', onBeforeUnload);
+        }, [blastData.upload]);
 
         const handleSortModeChange = useCallback((mode) => {
             setSortMode(mode);
@@ -1255,6 +1280,7 @@ async function initApp() {
                     ${getStatusDisplay()}
                     
                     <${UsageBanner} endpoint="/api/runtime/usage-chip" />
+                    <${BlastUploadStatus} upload=${blastData.upload} />
                     
                     ${(showAllClear || (summary && summary.trim())) && status !== 'in_progress' && html`
                         <${Summary} 

@@ -62,6 +62,14 @@ func ReviewPollURL(apiURL, reviewID string) string {
 	return strings.TrimSuffix(apiURL, "/") + "/api/v1/diff-review/" + reviewID
 }
 
+// ReviewArtifactURL builds the generic artifact-sync-channel URL (see
+// LiveReview's AGENTS.md "Porting from git-lrc" section) for uploading or
+// fetching a locally-computed, per-review artifact such as a blast-radius
+// report.
+func ReviewArtifactURL(apiURL, reviewID, artifactType string) string {
+	return strings.TrimSuffix(apiURL, "/") + "/api/v1/diff-review/" + reviewID + "/artifacts/" + artifactType
+}
+
 func SelfUpdateManifestURL() string {
 	return selfUpdateReleaseManifestURL
 }

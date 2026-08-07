@@ -15,6 +15,7 @@ import (
 	"github.com/HexmosTech/git-lrc/internal/graphengine"
 	"github.com/HexmosTech/git-lrc/internal/reviewmodel"
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"
+	"github.com/HexmosTech/git-lrc/network"
 )
 
 // Blast-radius scoring runs concurrently with the server-side review: the
@@ -33,6 +34,14 @@ const blastIndexTimeout = 15 * time.Minute
 // --save-html) wait for scoring after the review itself has completed,
 // so a huge first index can't hang a finished review indefinitely.
 const blastResultGrace = 30 * time.Second
+
+// blastUploadExitGrace bounds how long the CLI process waits for an
+// in-flight blast-radius upload to finish before exiting anyway. Short,
+// since this only buys the upload a little extra time on a fast decision
+// (e.g. an immediate vouch), not a correctness guarantee - it never blocks
+// the CLI's own "never blocks a review" contract. The browser-side
+// beforeunload guard (app.js) covers the tab-close case separately.
+const blastUploadExitGrace = 5 * time.Second
 
 // blastScoringHandle carries an in-flight scoring run. A nil handle (scoring
 // disabled) is valid everywhere and behaves as "no report".
@@ -76,6 +85,29 @@ func blastStateSnapshot() (status string, report *blastradius.Report, errMsg str
 	blastStateMu.RLock()
 	defer blastStateMu.RUnlock()
 	return blastStatus, blastReport, blastErrMessage
+}
+
+// Package-level snapshot backing the "upload" field of GET /api/blastradius.
+// Separate mutex/state from the scoring snapshot above since upload only
+// starts once a reviewID exists (well after scoring may have finished) and
+// tracks a distinct lifecycle: "idle" (not started/not applicable) ->
+// "uploading" -> "uploaded" | "failed".
+var (
+	blastUploadMu     sync.RWMutex
+	blastUploadStatus = "idle"
+	blastUploadErrMsg string
+)
+
+func setBlastUploadState(status, errMsg string) {
+	blastUploadMu.Lock()
+	defer blastUploadMu.Unlock()
+	blastUploadStatus, blastUploadErrMsg = status, errMsg
+}
+
+func blastUploadStateSnapshot() (status, errMsg string) {
+	blastUploadMu.RLock()
+	defer blastUploadMu.RUnlock()
+	return blastUploadStatus, blastUploadErrMsg
 }
 
 // startBlastRadiusScoring kicks off the concurrent scoring goroutine:
@@ -223,6 +255,60 @@ func applyBlastRadiusFromHandle(h *blastScoringHandle, files []reviewmodel.DiffR
 		return
 	}
 	applyBlastScoresToFiles(blastScoresByKey(report), files)
+}
+
+// uploadBlastRadiusReport waits for the scoring goroutine started by
+// startBlastRadiusScoring to finish, then POSTs the report to LiveReview's
+// artifact sync channel (see LiveReview's AGENTS.md "Porting from git-lrc"
+// section) so the hosted review-details page can show it too. Called as its
+// own goroutine once reviewID is known (scoring starts before the review
+// submission response arrives, so it can't upload eagerly) — fire-and-forget,
+// matching blast-radius scoring's own "never blocks or fails a review"
+// contract. A nil handle (scoring disabled) is a silent no-op.
+func uploadBlastRadiusReport(h *blastScoringHandle, apiURL, apiKey, reviewID string, verbose bool) {
+	if h == nil {
+		return
+	}
+	report := h.wait(blastIndexTimeout)
+	if report == nil {
+		// Caller already flagged "uploading" before spawning this goroutine
+		// (see review_runtime.go) - move to a terminal state here too, or
+		// the browser's close-guard would think an upload is in flight
+		// forever.
+		setBlastUploadState("failed", "blast-radius scoring did not finish in time; nothing to upload")
+		return
+	}
+
+	client := network.NewReviewAPIClient(30 * time.Second)
+	resp, err := network.ReviewUploadArtifact(client, apiURL, reviewID, "blast-radius", report, apiKey)
+	if err != nil {
+		uploadErr := fmt.Errorf("failed to upload blast-radius report: %w", err)
+		warnBlastRadius(verbose, uploadErr)
+		setBlastUploadState("failed", uploadErr.Error())
+		return
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		uploadErr := fmt.Errorf("blast-radius report upload rejected (status %d): %s", resp.StatusCode, string(resp.Body))
+		warnBlastRadius(verbose, uploadErr)
+		setBlastUploadState("failed", uploadErr.Error())
+		return
+	}
+	if verbose {
+		log.Printf("blast-radius: report uploaded to LiveReview for review %s", reviewID)
+	}
+	setBlastUploadState("uploaded", "")
+}
+
+// waitForBlastUploadOrTimeout waits up to timeout for the upload goroutine
+// spawned in review_runtime.go to finish before the CLI process exits, so a
+// fast decision doesn't silently kill an in-flight upload. Never blocks
+// indefinitely - on timeout it just logs a warning and returns.
+func waitForBlastUploadOrTimeout(done <-chan struct{}, timeout time.Duration, verbose bool) {
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		warnBlastRadius(verbose, errors.New("blast-radius upload still in progress, exiting anyway"))
+	}
 }
 
 func warnBlastRadius(verbose bool, err error) {

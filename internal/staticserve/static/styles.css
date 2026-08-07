@@ -2679,6 +2679,35 @@ body {
 /* The single "How is this scored?" button + full-methodology popup.
    Ghost link style (no box) so it doesn't pile another rectangle onto the
    row of chip pills. */
+/* Small, non-blocking status line for the blast-radius report's upload to
+   LiveReview - see components/BlastUploadStatus.js. */
+.blast-upload-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.blast-upload-status--pending {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+.blast-upload-status--failed {
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.08);
+}
+.blast-upload-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #374151;
+  border-top-color: var(--accent-blue-dark);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
 .blast-methodology-wrap {
   position: relative;
   display: inline-flex;

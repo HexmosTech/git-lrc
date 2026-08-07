@@ -475,6 +475,25 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	reviewID := submitResp.ReviewID
 	reviewURL := buildReviewURL(config.APIURL, reviewID)
 
+	// Blast-radius scoring started earlier (before reviewID existed) — now
+	// that we have it, hand off a goroutine that waits for scoring to finish
+	// and uploads the report to LiveReview's artifact sync channel so the
+	// hosted review-details page can show it too. Fire-and-forget, like
+	// blast-radius scoring itself — but the CLI still gives it a bounded
+	// grace period below rather than killing it outright on exit, and the
+	// "uploading" state is set synchronously here (not from inside the
+	// goroutine) so the browser's poll loop can never observe scoring as
+	// finished without also seeing the upload as in-flight.
+	if !fakeMode && blastHandle != nil {
+		setBlastUploadState("uploading", "")
+		uploadDone := make(chan struct{})
+		go func() {
+			defer close(uploadDone)
+			uploadBlastRadiusReport(blastHandle, config.APIURL, config.APIKey, reviewID, verbose)
+		}()
+		defer waitForBlastUploadOrTimeout(uploadDone, blastUploadExitGrace, verbose)
+	}
+
 	// Track whether progressive loading mode is active
 	progressiveLoadingActive := false
 
@@ -729,6 +748,13 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				}
 				if report != nil {
 					payload["report"] = report
+				}
+				if uploadStatus, uploadErrMsg := blastUploadStateSnapshot(); uploadStatus != "idle" {
+					upload := map[string]any{"status": uploadStatus}
+					if uploadErrMsg != "" {
+						upload["error"] = uploadErrMsg
+					}
+					payload["upload"] = upload
 				}
 				if err := json.NewEncoder(w).Encode(payload); err != nil && verbose {
 					log.Printf("failed to write blastradius response: %v", err)

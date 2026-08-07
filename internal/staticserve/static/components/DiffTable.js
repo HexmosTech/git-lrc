@@ -39,30 +39,24 @@ export async function createDiffTable() {
 
         // Which hunks' "why this score" panels are open (keyed by index).
         const [openBlastPanels, setOpenBlastPanels] = useState(() => new Set());
-        // Track which hunk index was most recently opened so an effect can
-        // scroll it into view (the panel renders below the header row, so
-        // bringing the header to the top of the viewport keeps the whole
-        // panel visible). Stale when its panel has since been closed.
-        const [lastOpenedHunkIdx, setLastOpenedHunkIdx] = useState(null);
-        const toggleBlastPanel = (idx) => {
-            setOpenBlastPanels(prev => {
-                const next = new Set(prev);
-                if (next.has(idx)) {
-                    next.delete(idx);
-                } else {
-                    next.add(idx);
-                    setLastOpenedHunkIdx(idx);
-                }
-                return next;
-            });
-        };
-        // Ensure-open variant used from comment risk chips: never collapses.
+        // Tracks the most recent "open this panel" request so the effect
+        // below can scroll it into view (the panel renders below the header
+        // row, so bringing the header to the top of the viewport keeps the
+        // whole panel visible). Always a fresh object, even when re-opening
+        // the same hunk that's already open - clicking the badge or "Open
+        // breakdown" while the panel is already open (but scrolled out of
+        // view) should still jump back to it, not silently no-op just
+        // because `openBlastPanels` didn't change.
+        const [openRequest, setOpenRequest] = useState(null);
+        // Ensure-open: never collapses an already-open panel. Used by both
+        // the hunk-header risk badge and comment risk chips, since neither
+        // has any other way to reveal an already-open-but-offscreen panel.
         const openBlastPanel = (idx) => {
+            setOpenRequest({ idx });
             setOpenBlastPanels(prev => {
                 if (prev.has(idx)) return prev;
                 const next = new Set(prev);
                 next.add(idx);
-                setLastOpenedHunkIdx(idx);
                 return next;
             });
         };
@@ -75,7 +69,8 @@ export async function createDiffTable() {
         // floating filter bar via the same --severity-filter-sticky-offset
         // variable the rest of the app uses for scroll-margin-top.
         useEffect(() => {
-            if (lastOpenedHunkIdx === null) return;
+            if (!openRequest) return;
+            const lastOpenedHunkIdx = openRequest.idx;
             if (!openBlastPanels.has(lastOpenedHunkIdx)) return; // stale
             const hunkHeaderEl = document.getElementById(`hunk-${resolvedFileId}-${lastOpenedHunkIdx}`);
             if (!hunkHeaderEl) return;
@@ -108,7 +103,7 @@ export async function createDiffTable() {
                 '',
                 anchor
             );
-        }, [lastOpenedHunkIdx, openBlastPanels, resolvedFileId]);
+        }, [openRequest, openBlastPanels, resolvedFileId]);
 
         return html`
             <table class="diff-table">
@@ -121,7 +116,7 @@ export async function createDiffTable() {
                                     detail=${hunk.BlastDetail || null}
                                     size="large"
                                     expanded=${openBlastPanels.has(hunkIdx)}
-                                    onOpen=${hunk.BlastDetail ? (() => toggleBlastPanel(hunkIdx)) : undefined}
+                                    onOpen=${hunk.BlastDetail ? (() => openBlastPanel(hunkIdx)) : undefined}
                                 />
                             `}
                             ${hunk.Header}

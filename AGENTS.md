@@ -38,3 +38,25 @@ For any UI icon work in git-lrc, follow `docs/ui-iconography.md` as the source o
 - Do not introduce new emoji or Unicode action icons.
 - Do not force vendor logos onto action buttons just because the label names a vendor.
 - If a new icon decision is needed, update `docs/ui-iconography.md` together with the code.
+
+
+# Rule 4: Syncing to LiveReview
+
+LiveReview (sibling repo, typically at `../LiveReview`) hosts a web-based review-details
+page that ports capabilities built here — starting with the review UI
+(`internal/staticserve/static/`) and the blast-radius scoring engine (`blastradius/`).
+See `/home/shrsv/.claude/plans/piped-imagining-sky.md` for the design, and
+`LiveReview/AGENTS.md`'s "Porting from git-lrc" section for the full convention.
+
+When changing `blastradius/` or the review UI components, check whether LiveReview has a
+ported copy that cites the changed file (LiveReview files carry a
+`// Ported from git-lrc:<path>#L<start>-L<end>` header) — if so, the port may need a
+follow-up update there too. This repo has no obligation to keep those in sync itself;
+it's just worth flagging in the PR/commit description when a change touches ported code.
+
+Locally-computed artifacts (like `blastradius.Report`) reach LiveReview via a generic
+upload channel: `POST {api_url}/api/v1/diff-review/{review_id}/artifacts/{artifact_type}`,
+fire-and-forget from the CLI, using the same API key + `review_id` already obtained from
+the initial review submission (`internal/reviewapi/helpers.go`). Never let an artifact
+upload failure affect the review itself — log and move on, matching how blast-radius
+scoring already treats its own failures as non-fatal.
