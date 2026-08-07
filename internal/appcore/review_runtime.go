@@ -485,7 +485,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	// goroutine) so the browser's poll loop can never observe scoring as
 	// finished without also seeing the upload as in-flight.
 	if !fakeMode && blastHandle != nil {
-		setBlastUploadState("uploading", "")
+		setBlastUploadState("uploading", "", 0, 0)
 		uploadDone := make(chan struct{})
 		go func() {
 			defer close(uploadDone)
@@ -749,8 +749,13 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				if report != nil {
 					payload["report"] = report
 				}
-				if uploadStatus, uploadErrMsg := blastUploadStateSnapshot(); uploadStatus != "idle" {
-					upload := map[string]any{"status": uploadStatus}
+				{
+					uploadStatus, uploadErrMsg, uploadSizeBytes, uploadDurationMS := blastUploadStateSnapshot()
+					upload := map[string]any{
+						"status":      uploadStatus,
+						"size_bytes":  uploadSizeBytes,
+						"duration_ms": uploadDurationMS,
+					}
 					if uploadErrMsg != "" {
 						upload["error"] = uploadErrMsg
 					}

@@ -2,6 +2,7 @@ package appcore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -93,21 +94,24 @@ func blastStateSnapshot() (status string, report *blastradius.Report, errMsg str
 // tracks a distinct lifecycle: "idle" (not started/not applicable) ->
 // "uploading" -> "uploaded" | "failed".
 var (
-	blastUploadMu     sync.RWMutex
-	blastUploadStatus = "idle"
-	blastUploadErrMsg string
+	blastUploadMu         sync.RWMutex
+	blastUploadStatus     = "idle"
+	blastUploadErrMsg     string
+	blastUploadSizeBytes  int64
+	blastUploadDurationMS int64
 )
 
-func setBlastUploadState(status, errMsg string) {
+func setBlastUploadState(status, errMsg string, sizeBytes, durationMS int64) {
 	blastUploadMu.Lock()
 	defer blastUploadMu.Unlock()
 	blastUploadStatus, blastUploadErrMsg = status, errMsg
+	blastUploadSizeBytes, blastUploadDurationMS = sizeBytes, durationMS
 }
 
-func blastUploadStateSnapshot() (status, errMsg string) {
+func blastUploadStateSnapshot() (status, errMsg string, sizeBytes, durationMS int64) {
 	blastUploadMu.RLock()
 	defer blastUploadMu.RUnlock()
-	return blastUploadStatus, blastUploadErrMsg
+	return blastUploadStatus, blastUploadErrMsg, blastUploadSizeBytes, blastUploadDurationMS
 }
 
 // startBlastRadiusScoring kicks off the concurrent scoring goroutine:
@@ -275,28 +279,39 @@ func uploadBlastRadiusReport(h *blastScoringHandle, apiURL, apiKey, reviewID str
 		// (see review_runtime.go) - move to a terminal state here too, or
 		// the browser's close-guard would think an upload is in flight
 		// forever.
-		setBlastUploadState("failed", "blast-radius scoring did not finish in time; nothing to upload")
+		setBlastUploadState("failed", "blast-radius scoring did not finish in time; nothing to upload", 0, 0)
 		return
 	}
 
+	reportBytes, err := json.Marshal(report)
+	if err != nil {
+		uploadErr := fmt.Errorf("failed to marshal blast-radius report: %w", err)
+		warnBlastRadius(verbose, uploadErr)
+		setBlastUploadState("failed", uploadErr.Error(), 0, 0)
+		return
+	}
+	sizeBytes := int64(len(reportBytes))
+
 	client := network.NewReviewAPIClient(30 * time.Second)
-	resp, err := network.ReviewUploadArtifact(client, apiURL, reviewID, "blast-radius", report, apiKey)
+	start := time.Now()
+	resp, err := network.ReviewUploadArtifact(client, apiURL, reviewID, "blast-radius", json.RawMessage(reportBytes), apiKey)
+	durationMS := time.Since(start).Milliseconds()
 	if err != nil {
 		uploadErr := fmt.Errorf("failed to upload blast-radius report: %w", err)
 		warnBlastRadius(verbose, uploadErr)
-		setBlastUploadState("failed", uploadErr.Error())
+		setBlastUploadState("failed", uploadErr.Error(), sizeBytes, durationMS)
 		return
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		uploadErr := fmt.Errorf("blast-radius report upload rejected (status %d): %s", resp.StatusCode, string(resp.Body))
 		warnBlastRadius(verbose, uploadErr)
-		setBlastUploadState("failed", uploadErr.Error())
+		setBlastUploadState("failed", uploadErr.Error(), sizeBytes, durationMS)
 		return
 	}
 	if verbose {
 		log.Printf("blast-radius: report uploaded to LiveReview for review %s", reviewID)
 	}
-	setBlastUploadState("uploaded", "")
+	setBlastUploadState("uploaded", "", sizeBytes, durationMS)
 }
 
 // waitForBlastUploadOrTimeout waits up to timeout for the upload goroutine

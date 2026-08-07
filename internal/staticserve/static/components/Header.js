@@ -383,9 +383,96 @@ export async function createHeader() {
         `;
     }
 
+    // ── blast-radius upload chip ─────────────────────────────────────────────
+    // Persistent status chip for the blast-radius report's upload to
+    // LiveReview (see internal/appcore/blastradius_bridge.go's
+    // uploadBlastRadiusReport, and GET /api/blastradius's "upload" field).
+    // Unlike a transient banner, this never disappears once blast-radius has
+    // something to report - it just changes tone/icon as the upload moves
+    // through idle -> uploading -> uploaded/failed, mirroring UsageChip's
+    // hover-for-details pattern right next to it.
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+            value /= 1024;
+            unitIndex += 1;
+        }
+        return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+    }
+
+    function formatDuration(ms) {
+        if (!ms || ms <= 0) return '0 ms';
+        if (ms < 1000) return `${ms} ms`;
+        return `${(ms / 1000).toFixed(1)} s`;
+    }
+
+    const BLAST_CHIP_CONFIG = {
+        idle: { icon: 'upload', tone: 'idle', label: 'Not uploaded yet', spin: false },
+        uploading: { icon: 'upload', tone: 'pending', label: 'Uploading…', spin: true },
+        uploaded: { icon: 'check', tone: 'ok', label: 'Uploaded to LiveReview', spin: false },
+        failed: { icon: 'issueWarning', tone: 'critical', label: 'Upload failed', spin: false },
+    };
+
+    function BlastUploadChip({ blastRadius }) {
+        const { isOpen, open, closeSoon } = useHoverPopover();
+
+        const upload = blastRadius && blastRadius.upload;
+        const scoringKnown = blastRadius && blastRadius.status && blastRadius.status !== 'unavailable';
+        const uploadStarted = upload && upload.status && upload.status !== 'idle';
+        if (!scoringKnown && !uploadStarted) return '';
+
+        const status = (upload && upload.status) || 'idle';
+        const cfg = BLAST_CHIP_CONFIG[status] || BLAST_CHIP_CONFIG.idle;
+
+        return html`
+            <div class="blast-chip-wrap" onMouseEnter=${open} onMouseLeave=${closeSoon}>
+                <button
+                    class=${`blast-chip-button blast-chip-tone-${cfg.tone}`}
+                    title=${cfg.label}
+                    onFocus=${open}
+                    onBlur=${closeSoon}
+                    type="button"
+                >
+                    <span class=${cfg.spin ? 'blast-chip-icon blast-chip-icon-spin' : 'blast-chip-icon'}>
+                        ${renderIcon(html, cfg.icon, { size: 13 })}
+                    </span>
+                    Blast Radius
+                </button>
+
+                ${isOpen && html`
+                    <div class="blast-chip-popover" onMouseEnter=${open} onMouseLeave=${closeSoon}>
+                        <p class="blast-chip-title">Blast-Radius Upload</p>
+                        <p class="blast-chip-help">${cfg.label}</p>
+
+                        ${(status === 'uploaded' || status === 'failed') && html`
+                            <div class="blast-chip-grid">
+                                <div class="blast-chip-cell">
+                                    <p class="blast-chip-cell-label">Size</p>
+                                    <p class="blast-chip-cell-value">${formatBytes(upload.size_bytes)}</p>
+                                </div>
+                                <div class="blast-chip-cell">
+                                    <p class="blast-chip-cell-label">Transfer time</p>
+                                    <p class="blast-chip-cell-value">${formatDuration(upload.duration_ms)}</p>
+                                </div>
+                            </div>
+                        `}
+
+                        ${status === 'failed' && upload.error && html`
+                            <p class="blast-chip-error">${upload.error}</p>
+                        `}
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
     // ── header ────────────────────────────────────────────────────────────────
 
-    return function Header({ generatedTime, friendlyName, repositoryPath, onToggleSidebar }) {
+    return function Header({ generatedTime, friendlyName, repositoryPath, onToggleSidebar, blastRadius }) {
         return html`
             <div class="header">
                 <div class="header-top-row">
@@ -409,6 +496,7 @@ export async function createHeader() {
                                 </svg>
                             </button>
                         `}
+                        <${BlastUploadChip} blastRadius=${blastRadius} />
                         <${UsageChip} endpoint="/api/runtime/usage-chip" />
                         <${AppFeedback} />
                     </div>

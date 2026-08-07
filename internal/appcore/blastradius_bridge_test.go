@@ -14,6 +14,15 @@ import (
 
 func ptr(f float64) *float64 { return &f }
 
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	return b
+}
+
 func TestSortedHunksByBlastRadius(t *testing.T) {
 	hunks := []reviewmodel.DiffReviewHunk{
 		{NewStartLine: 10, NewLineCount: 2, BlastRadius: ptr(5)},  // low score
@@ -130,8 +139,8 @@ func TestUploadBlastRadiusReportNoOpCases(t *testing.T) {
 	if called {
 		t.Fatal("a handle with no report must not make an HTTP call")
 	}
-	if status, errMsg := blastUploadStateSnapshot(); status != "failed" || errMsg == "" {
-		t.Fatalf("expected a terminal 'failed' upload state with a message when there's no report to upload, got status=%q errMsg=%q", status, errMsg)
+	if status, errMsg, sizeBytes, durationMS := blastUploadStateSnapshot(); status != "failed" || errMsg == "" {
+		t.Fatalf("expected a terminal 'failed' upload state with a message when there's no report to upload, got status=%q errMsg=%q sizeBytes=%d durationMS=%d", status, errMsg, sizeBytes, durationMS)
 	}
 }
 
@@ -142,8 +151,10 @@ func TestUploadBlastRadiusReportNoOpCases(t *testing.T) {
 func TestUploadBlastRadiusReportUpdatesUploadState(t *testing.T) {
 	report := &blastradius.Report{Project: "demo"}
 
+	wantSizeBytes := int64(len(mustMarshal(t, report)))
+
 	t.Run("success reaches uploaded", func(t *testing.T) {
-		setBlastUploadState("idle", "")
+		setBlastUploadState("idle", "", 0, 0)
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -153,13 +164,20 @@ func TestUploadBlastRadiusReportUpdatesUploadState(t *testing.T) {
 		close(h.done)
 		uploadBlastRadiusReport(h, srv.URL, "key", "42", false)
 
-		if status, errMsg := blastUploadStateSnapshot(); status != "uploaded" || errMsg != "" {
+		status, errMsg, sizeBytes, durationMS := blastUploadStateSnapshot()
+		if status != "uploaded" || errMsg != "" {
 			t.Fatalf("expected status=uploaded with no error, got status=%q errMsg=%q", status, errMsg)
+		}
+		if sizeBytes != wantSizeBytes {
+			t.Fatalf("sizeBytes = %d, want %d (marshaled report size)", sizeBytes, wantSizeBytes)
+		}
+		if durationMS < 0 {
+			t.Fatalf("durationMS = %d, want >= 0", durationMS)
 		}
 	})
 
 	t.Run("non-2xx reaches failed with message", func(t *testing.T) {
-		setBlastUploadState("idle", "")
+		setBlastUploadState("idle", "", 0, 0)
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
@@ -169,18 +187,22 @@ func TestUploadBlastRadiusReportUpdatesUploadState(t *testing.T) {
 		close(h.done)
 		uploadBlastRadiusReport(h, srv.URL, "key", "42", false)
 
-		if status, errMsg := blastUploadStateSnapshot(); status != "failed" || errMsg == "" {
+		status, errMsg, sizeBytes, _ := blastUploadStateSnapshot()
+		if status != "failed" || errMsg == "" {
 			t.Fatalf("expected a terminal 'failed' state with a message on a non-2xx response, got status=%q errMsg=%q", status, errMsg)
+		}
+		if sizeBytes != wantSizeBytes {
+			t.Fatalf("sizeBytes = %d, want %d even on a rejected upload (size is known before the request is sent)", sizeBytes, wantSizeBytes)
 		}
 	})
 
 	t.Run("transport error reaches failed with message", func(t *testing.T) {
-		setBlastUploadState("idle", "")
+		setBlastUploadState("idle", "", 0, 0)
 		h := &blastScoringHandle{done: make(chan struct{}), report: report}
 		close(h.done)
 		uploadBlastRadiusReport(h, "http://127.0.0.1:0", "key", "42", false)
 
-		if status, errMsg := blastUploadStateSnapshot(); status != "failed" || errMsg == "" {
+		if status, errMsg, _, _ := blastUploadStateSnapshot(); status != "failed" || errMsg == "" {
 			t.Fatalf("expected a terminal 'failed' state with a message on a transport error, got status=%q errMsg=%q", status, errMsg)
 		}
 	})

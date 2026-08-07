@@ -18,7 +18,6 @@ import { renderHandoffConfetti } from './components/handoffConfetti.js';
 import { getToolbar } from './components/Toolbar.js';
 import { getCommentNav } from './components/CommentNav.js';
 import { UsageBanner } from './components/UsageBanner.js';
-import { BlastUploadStatus } from './components/BlastUploadStatus.js';
 import { renderIcon } from './components/icons.js';
 import { getSummarySlideshow } from './components/SummarySlideshow/SummarySlideshow.js';
 import { evaluateSummarySlidesEligibility } from './components/SummarySlideshow/slideshowParser.js';
@@ -1262,6 +1261,7 @@ async function initApp() {
                         friendlyName=${reviewData?.friendlyName || reviewData?.FriendlyName}
                         repositoryPath=${reviewData?.repositoryPath || reviewData?.RepositoryPath}
                         onToggleSidebar=${() => setSidebarOpen(v => !v)}
+                        blastRadius=${blastData}
                     />
                     
                     ${showLoader && html`
@@ -1280,8 +1280,7 @@ async function initApp() {
                     ${getStatusDisplay()}
                     
                     <${UsageBanner} endpoint="/api/runtime/usage-chip" />
-                    <${BlastUploadStatus} upload=${blastData.upload} />
-                    
+
                     ${(showAllClear || (summary && summary.trim())) && status !== 'in_progress' && html`
                         <${Summary} 
                             markdown=${summary}

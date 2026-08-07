@@ -2679,33 +2679,128 @@ body {
 /* The single "How is this scored?" button + full-methodology popup.
    Ghost link style (no box) so it doesn't pile another rectangle onto the
    row of chip pills. */
-/* Small, non-blocking status line for the blast-radius report's upload to
-   LiveReview - see components/BlastUploadStatus.js. */
-.blast-upload-status {
+/* Persistent header chip for the blast-radius report's upload to LiveReview
+   - see components/Header.js's BlastUploadChip. Modeled directly on the
+   .usage-chip-* rules above so it reads as a sibling of the usage chip. */
+.blast-chip-wrap {
+  position: relative;
+}
+
+.blast-chip-button {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 8px;
-  padding: 6px 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-medium);
   font-size: 12px;
-  border-radius: 4px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
-.blast-upload-status--pending {
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
+
+.blast-chip-button:hover {
+  background: var(--bg-hover);
 }
-.blast-upload-status--failed {
-  color: #fecaca;
-  background: rgba(248, 113, 113, 0.08);
+
+.blast-chip-icon {
+  display: inline-flex;
 }
-.blast-upload-spinner {
-  width: 10px;
-  height: 10px;
-  border: 2px solid #374151;
-  border-top-color: var(--accent-blue-dark);
-  border-radius: 50%;
+
+.blast-chip-icon-spin {
   animation: spin 1s linear infinite;
-  flex-shrink: 0;
+}
+
+.blast-chip-tone-idle {
+  border-color: var(--border-medium);
+  color: var(--text-secondary);
+}
+
+.blast-chip-tone-pending {
+  color: var(--text-secondary);
+}
+
+.blast-chip-tone-ok {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #d1fae5;
+}
+
+.blast-chip-tone-ok:hover {
+  background: rgba(16, 185, 129, 0.28);
+}
+
+.blast-chip-tone-critical {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+.blast-chip-tone-critical:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.blast-chip-popover {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  width: 260px;
+  border-radius: 10px;
+  border: 1px solid rgba(99, 130, 180, 0.22);
+  background: #0d1520;
+  padding: 12px;
+  z-index: 20000;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.6);
+}
+
+.blast-chip-title {
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.blast-chip-help {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.blast-chip-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.blast-chip-cell {
+  border-radius: 6px;
+  border: 1px solid rgba(71, 85, 105, 0.75);
+  background: rgba(30, 41, 59, 0.8);
+  padding: 8px;
+}
+
+.blast-chip-cell-label {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.blast-chip-cell-value {
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.blast-chip-error {
+  margin-top: 8px;
+  color: #fecaca;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .blast-methodology-wrap {
