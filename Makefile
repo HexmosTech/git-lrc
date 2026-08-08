@@ -107,11 +107,11 @@ design-ui:
 	@go run ./tools/uidev $(if $(PORT),--port $(PORT),)
 
 use-local-backend:
-	@sed -i 's|api_url = "https://livereview.hexmos.com"|api_url = "http://localhost:8888"|' $(HOME)/.lrc.toml
+	@sed -i 's|^api_url = ".*"|api_url = "http://localhost:8888"|' $(HOME)/.lrc.toml
 	@echo "✅ Switched to local backend (http://localhost:8888)"
 
 use-livereview-backend:
-	@sed -i 's|api_url = "http://localhost:8888"|api_url = "https://livereview.hexmos.com"|' $(HOME)/.lrc.toml
+	@sed -i 's|^api_url = ".*"|api_url = "https://livereview.hexmos.com"|' $(HOME)/.lrc.toml
 	@echo "✅ Switched to livereview.hexmos.com"
 
 copy-installers:
