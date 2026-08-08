@@ -23,6 +23,20 @@ function isSafeHref(href) {
     }
 }
 
+function sanitizeError(err) {
+    if (!err) return { short: '', full: '' };
+    const full = typeof err === 'string' ? err : String(err);
+    let short = full;
+    if (full.startsWith('{') || full.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(full);
+            short = parsed.error || parsed.message || parsed.envelope?.error || 'Unknown server error';
+        } catch { /* not valid JSON, show as-is */ }
+    }
+    if (short.length > 500) short = short.slice(0, 500) + '…';
+    return { short, full };
+}
+
 function copyAllowedAttributes(source, target) {
     if (source.tagName === 'A') {
         const href = source.getAttribute('href') || '';
@@ -166,6 +180,7 @@ export async function createSummary() {
         const [summaryViewMode, setSummaryViewMode] = useState(slidesEnabled ? 'slides' : 'text');
         const [isSummaryInView, setIsSummaryInView] = useState(false);
         const [showViewToggleAttention, setShowViewToggleAttention] = useState(false);
+        const [errorExpanded, setErrorExpanded] = useState(false);
         const hasPlayedAttentionRef = useRef(false);
         const hasSummaryMarkdown = Boolean(markdown && markdown.trim());
         const hasQuiz = Array.isArray(quiz) && quiz.length > 0;
@@ -306,14 +321,22 @@ export async function createSummary() {
                         </div>
                     </div>
                 `}
-                ${isError && html`
-                    <div style="padding: 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #991b1b; margin-bottom: 16px;">
-                        <strong style="display: block; margin-bottom: 8px; font-size: 16px;">${renderIcon(html, 'errorStatus', { className: 'btn-icon', size: 16 })}Error Details:</strong>
-                        <pre style="white-space: pre-wrap; font-family: monospace; font-size: 13px; margin: 0;">
-                            ${errorSummary || 'Review failed'}
-                        </pre>
-                    </div>
-                `}
+                ${isError && (() => {
+                    const err = sanitizeError(errorSummary) || { short: 'Review failed', full: 'Review failed' };
+                    return html`
+                        <div style="padding: 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #991b1b; margin-bottom: 16px;">
+                            <strong style="display: block; margin-bottom: 8px; font-size: 16px;">${renderIcon(html, 'errorStatus', { className: 'btn-icon', size: 16 })}Error Details:</strong>
+                            <pre style="white-space: pre-wrap; font-family: monospace; font-size: 13px; margin: 0;">${errorExpanded ? err.full : err.short}</pre>
+                            ${err.full !== err.short && html`
+                                <button
+                                    style="display: inline-block; margin-top: 8px; padding: 0; background: none; border: none; color: #3b82f6; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;"
+                                    onClick=${() => setErrorExpanded(v => !v)}
+                                    type="button"
+                                >${errorExpanded ? 'Show less' : 'Show full error'}</button>
+                            `}
+                        </div>
+                    `;
+                })()}
 
                 ${hasSummaryMarkdown && slidesEnabled && summaryViewMode === 'slides' && html`
                     <div class="summary-embedded-container">

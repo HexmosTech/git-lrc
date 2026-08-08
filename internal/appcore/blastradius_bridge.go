@@ -88,6 +88,34 @@ func blastStateSnapshot() (status string, report *blastradius.Report, errMsg str
 	return blastStatus, blastReport, blastErrMessage
 }
 
+// extractErrorMessage tries to parse a response body as JSON and extract
+// a human-readable error message. Falls back to the raw body if parsing fails.
+func extractErrorMessage(body []byte) string {
+	var parsed struct {
+		Error    string `json:"error"`
+		Message  string `json:"message"`
+		Envelope *struct {
+			Error string `json:"error"`
+		} `json:"envelope"`
+	}
+	if err := json.Unmarshal(body, &parsed); err == nil {
+		if parsed.Error != "" {
+			return parsed.Error
+		}
+		if parsed.Envelope != nil && parsed.Envelope.Error != "" {
+			return parsed.Envelope.Error
+		}
+		if parsed.Message != "" {
+			return parsed.Message
+		}
+	}
+	s := string(body)
+	if len(s) > 200 {
+		return s[:200] + "…"
+	}
+	return s
+}
+
 // Package-level snapshot backing the "upload" field of GET /api/blastradius.
 // Separate mutex/state from the scoring snapshot above since upload only
 // starts once a reviewID exists (well after scoring may have finished) and
@@ -303,7 +331,7 @@ func uploadBlastRadiusReport(h *blastScoringHandle, apiURL, apiKey, reviewID str
 		return
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		uploadErr := fmt.Errorf("blast-radius report upload rejected (status %d): %s", resp.StatusCode, string(resp.Body))
+		uploadErr := fmt.Errorf("blast-radius report upload rejected (status %d): %s", resp.StatusCode, extractErrorMessage(resp.Body))
 		warnBlastRadius(verbose, uploadErr)
 		setBlastUploadState("failed", uploadErr.Error(), sizeBytes, durationMS)
 		return

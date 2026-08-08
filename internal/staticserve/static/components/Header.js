@@ -392,6 +392,20 @@ export async function createHeader() {
     // through idle -> uploading -> uploaded/failed, mirroring UsageChip's
     // hover-for-details pattern right next to it.
 
+    function sanitizeError(err) {
+        if (!err) return { short: '', full: '' };
+        const full = typeof err === 'string' ? err : String(err);
+        let short = full;
+        if (full.startsWith('{') || full.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(full);
+                short = parsed.error || parsed.message || parsed.envelope?.error || 'Unknown server error';
+            } catch { /* not valid JSON, show as-is */ }
+        }
+        if (short.length > 300) short = short.slice(0, 300) + '…';
+        return { short, full };
+    }
+
     function formatBytes(bytes) {
         if (!bytes || bytes <= 0) return '0 B';
         const units = ['B', 'KB', 'MB', 'GB'];
@@ -419,6 +433,7 @@ export async function createHeader() {
 
     function BlastUploadChip({ blastRadius }) {
         const { isOpen, open, closeSoon } = useHoverPopover();
+        const [errorExpanded, setErrorExpanded] = useState(false);
 
         const upload = blastRadius && blastRadius.upload;
         const scoringKnown = blastRadius && blastRadius.status && blastRadius.status !== 'unavailable';
@@ -427,6 +442,7 @@ export async function createHeader() {
 
         const status = (upload && upload.status) || 'idle';
         const cfg = BLAST_CHIP_CONFIG[status] || BLAST_CHIP_CONFIG.idle;
+        const err = status === 'failed' && upload.error ? sanitizeError(upload.error) : null;
 
         return html`
             <div class="blast-chip-wrap" onMouseEnter=${open} onMouseLeave=${closeSoon}>
@@ -461,8 +477,13 @@ export async function createHeader() {
                             </div>
                         `}
 
-                        ${status === 'failed' && upload.error && html`
-                            <p class="blast-chip-error">${upload.error}</p>
+                        ${err && html`
+                            <p class="blast-chip-error">${errorExpanded ? err.full : err.short}</p>
+                            ${err.full !== err.short && html`
+                                <button class="blast-chip-expand-btn" onClick=${() => setErrorExpanded(v => !v)} type="button">
+                                    ${errorExpanded ? 'Show less' : 'Show full error'}
+                                </button>
+                            `}
                         `}
                     </div>
                 `}

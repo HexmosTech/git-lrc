@@ -2801,6 +2801,24 @@ body {
   color: #fecaca;
   font-size: 11px;
   line-height: 1.4;
+  word-break: break-word;
+}
+
+.blast-chip-expand-btn {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent-blue-light, #4fc3f7);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.blast-chip-expand-btn:hover {
+  color: #93c5fd;
 }
 
 .blast-methodology-wrap {
