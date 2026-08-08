@@ -4170,14 +4170,17 @@ body {
   margin-bottom: var(--space-md);
   border-bottom: 1px solid var(--border-subtle);
   overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .toolbar-performance {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
   min-width: 0;
+  overflow: hidden;
+  flex-shrink: 1;
 }
 
 .performance-pill {
@@ -4188,6 +4191,8 @@ body {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .performance-pill-label {
@@ -4208,6 +4213,7 @@ body {
   display: flex;
   gap: 8px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* Standardized action button in toolbar */
@@ -4428,8 +4434,10 @@ body {
 
 .quiz-option.chosen {
   border-color: var(--accent-blue);
-  background: var(--bg-active);
-  color: var(--text-primary);
+  border-left: 3px solid var(--accent-blue);
+  background: linear-gradient(135deg, rgba(0, 120, 212, 0.2), rgba(0, 120, 212, 0.1));
+  color: #eaf6ff;
+  box-shadow: 0 0 12px rgba(0, 120, 212, 0.15);
 }
 
 .quiz-option.correct {
@@ -4461,6 +4469,33 @@ body {
   flex: 1;
   min-width: 0;
   line-height: 1.4;
+}
+
+.quiz-code-inline {
+  display: inline;
+  padding: 1px 5px;
+  background: rgba(0, 120, 212, 0.15);
+  border: 1px solid rgba(0, 120, 212, 0.3);
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  color: var(--accent-blue-light, #4fc3f7);
+  word-break: break-word;
+}
+
+.quiz-code-block {
+  display: block;
+  margin: 6px 0;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  color: var(--text-primary);
+  line-height: 1.45;
 }
 
 .quiz-explanation {

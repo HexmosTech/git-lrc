@@ -5,6 +5,23 @@ import { waitForPreact } from './utils.js';
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
 
+function escapeHTML(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function renderQuizContent(text) {
+    if (!text) return '';
+    let result = escapeHTML(text);
+    result = result.replace(/```([\s\S]*?)```/g, (_, code) => {
+        return '<pre class="quiz-code-block"><code>' + code.trim() + '</code></pre>';
+    });
+    result = result.replace(/`([^`]+)`/g, '<code class="quiz-code-inline">$1</code>');
+    return result;
+}
+
 export async function createQuiz() {
     const { html, useState } = await waitForPreact();
 
@@ -45,7 +62,9 @@ export async function createQuiz() {
                 `}
                 ${quiz.map((q, qIdx) => html`
                     <div class="quiz-question" key=${qIdx}>
-                        <div class="quiz-question-text">${qIdx + 1}. ${q.question}</div>
+                        <div class="quiz-question-text">
+                            ${qIdx + 1 + '. '}<span dangerouslySetInnerHTML=${{ __html: renderQuizContent(q.question) }}></span>
+                        </div>
                         <div class="quiz-options">
                             ${(q.options || []).map((opt, oIdx) => {
                                 const isChosen = selected[qIdx] === oIdx;
@@ -61,13 +80,13 @@ export async function createQuiz() {
                                         disabled=${submitted}
                                     >
                                         <span class="quiz-option-letter">${OPTION_LETTERS[oIdx] || oIdx + 1}</span>
-                                        <span class="quiz-option-text">${opt}</span>
+                                        <span class="quiz-option-text" dangerouslySetInnerHTML=${{ __html: renderQuizContent(opt) }}></span>
                                     </button>
                                 `;
                             })}
                         </div>
                         ${submitted && q.explanation && html`
-                            <div class="quiz-explanation">${q.explanation}</div>
+                            <div class="quiz-explanation" dangerouslySetInnerHTML=${{ __html: renderQuizContent(q.explanation) }}></div>
                         `}
                     </div>
                 `)}

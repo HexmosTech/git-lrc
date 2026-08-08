@@ -21,7 +21,7 @@ type ReviewState struct {
 	FriendlyName   string    `json:"friendlyName"`
 	GeneratedTime  string    `json:"generatedTime"`
 	RepositoryPath string    `json:"repositoryPath,omitempty"`
-	StartedAt      time.Time `json:"-"`
+	StartedAt      time.Time `json:"startedAt"`
 
 	// Status
 	Status  string `json:"status"` // "in_progress", "completed", "failed", "blocked"

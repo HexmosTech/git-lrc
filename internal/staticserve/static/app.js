@@ -1024,6 +1024,16 @@ async function initApp() {
         }, [slidesEnabled, slideShowOpen]);
 
         useEffect(() => {
+            const startedAt = reviewData?.startedAt || reviewData?.StartedAt;
+            if (!startedAt) return;
+            const startedAtMs = new Date(startedAt).getTime();
+            if (isNaN(startedAtMs)) return;
+            const offsetMs = Date.now() - startedAtMs;
+            reviewStartMsRef.current = getPerformanceNow() - offsetMs;
+            setPerformanceNowMs(getPerformanceNow());
+        }, [reviewData?.startedAt, reviewData?.StartedAt]);
+
+        useEffect(() => {
             if (status === 'completed' || status === 'failed') {
                 if (reviewCompletedMsRef.current === null) {
                     const completedMs = getPerformanceNow();
