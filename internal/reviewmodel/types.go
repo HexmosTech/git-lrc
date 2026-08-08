@@ -38,6 +38,7 @@ type APIErrorPayload struct {
 type DiffReviewRequest struct {
 	DiffZipBase64 string `json:"diff_zip_base64"`
 	RepoName      string `json:"repo_name"`
+	BranchName    string `json:"branch_name"`
 }
 
 // DiffReviewResponse models the response from GET /api/v1/diff-review/:id.
