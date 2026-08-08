@@ -40,6 +40,21 @@ func CurrentTreeHash() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// CurrentBranchName returns the current git branch name, or "" if it cannot
+// be resolved (e.g. detached HEAD, or outside a git repo). Failures are
+// non-fatal since branch name is supplementary metadata for a review.
+func CurrentBranchName() string {
+	out, err := RunGitCommand("rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return ""
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "HEAD" {
+		return ""
+	}
+	return branch
+}
+
 func resolveGitPath(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	out, err := cmd.Output()
@@ -148,6 +163,7 @@ func SubmitReview(apiURL, apiKey, base64Diff, repoName string, verbose bool) (re
 	payload := reviewmodel.DiffReviewRequest{
 		DiffZipBase64: base64Diff,
 		RepoName:      repoName,
+		BranchName:    CurrentBranchName(),
 	}
 
 	if verbose {
