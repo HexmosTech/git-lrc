@@ -134,6 +134,30 @@ func TestGeneratedHooksUseResolvedGitDirPaths(t *testing.T) {
 	}
 }
 
+// TestPostCommitHookEnqueuesSyncBeforeCleanup guards against a regression
+// where "lrc review-cleanup" (which deletes every review-session row for
+// the current branch) ran before "lrc internal sync enqueue" (which needs
+// to read the row for the just-committed tree to find its review_id/
+// api_url/api_key). That ordering silently drops every commit's sync --
+// enqueue always finds nothing, since cleanup already deleted the row.
+func TestPostCommitHookEnqueuesSyncBeforeCleanup(t *testing.T) {
+	cfg := testTemplateConfig()
+	hook := GeneratePostCommitHook(cfg)
+
+	enqueueIdx := strings.Index(hook, "lrc internal sync enqueue")
+	cleanupIdx := strings.Index(hook, "lrc review-cleanup")
+
+	if enqueueIdx == -1 {
+		t.Fatal("expected generated post-commit hook to call 'lrc internal sync enqueue'")
+	}
+	if cleanupIdx == -1 {
+		t.Fatal("expected generated post-commit hook to call 'lrc review-cleanup'")
+	}
+	if enqueueIdx > cleanupIdx {
+		t.Fatalf("'lrc internal sync enqueue' (at %d) must run before 'lrc review-cleanup' (at %d), which deletes the review-session row enqueue depends on", enqueueIdx, cleanupIdx)
+	}
+}
+
 func TestPrepareCommitMsgHookPrefillsReviewedMessageBeforeEditor(t *testing.T) {
 	if _, err := exec.LookPath("script"); err != nil {
 		t.Skip("script command not available")

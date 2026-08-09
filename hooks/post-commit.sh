@@ -38,16 +38,22 @@ cleanup_attestation() {
 # Always clear attestation for the committed tree
 cleanup_attestation
 
+# Queue this commit for offline-first sync to LiveReview's backend, if it
+# corresponds to a review that was actually submitted (best-effort, never
+# blocks or fails the commit -- the commit already happened). This MUST run
+# before the review-session cleanup step below: that step deletes every
+# review-session row for the current branch, including the one for the
+# tree we just committed, which is exactly the row enqueue needs to read
+# to find the review_id/api_url/api_key to sync. Reversing this order
+# silently drops every commit's sync -- the enqueue step always finds
+# nothing.
+if command -v lrc >/dev/null 2>&1; then
+	lrc internal sync enqueue >/dev/null 2>&1 || true
+fi
+
 # Clean up review session DB for this branch (best-effort)
 if command -v lrc >/dev/null 2>&1; then
 	lrc review-cleanup 2>/dev/null || true
-fi
-
-# Queue this commit for offline-first sync to LiveReview's backend, if it
-# corresponds to a review that was actually submitted (best-effort, never
-# blocks or fails the commit -- the commit already happened).
-if command -v lrc >/dev/null 2>&1; then
-	lrc internal sync enqueue >/dev/null 2>&1 || true
 fi
 
 # If push was not requested, we're done
