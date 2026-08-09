@@ -166,7 +166,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				fmt.Fprintf(os.Stderr, "Warning: could not parse diff for coverage tracking: %v\n", parseErr)
 			} else {
 				var covErr error
-				cov, covErr = reviewdb.RecordAndComputeCoverage("skipped", parsedFiles, "", verbose)
+				cov, covErr = reviewdb.RecordAndComputeCoverage("skipped", parsedFiles, "", "", "", verbose)
 				if covErr != nil {
 					fmt.Fprintf(os.Stderr, "Warning: coverage computation failed: %v\n", covErr)
 				}
@@ -205,7 +205,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		if parseErr != nil {
 			return fmt.Errorf("failed to parse diff for vouch: %w", parseErr)
 		}
-		cov, _ := reviewdb.RecordAndComputeCoverage("vouched", parsedFiles, "", verbose)
+		cov, _ := reviewdb.RecordAndComputeCoverage("vouched", parsedFiles, "", "", "", verbose)
 		if cov.Iterations == 0 {
 			cov.Iterations = 1
 		}
@@ -396,6 +396,13 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		}
 	}
 
+	// Resolve commit_refs for --commit/--range reviews (best-effort: a
+	// resolution failure must not block a review that already has its diff).
+	commitRefs, refErr := resolveCommitRefs(opts)
+	if refErr != nil {
+		log.Printf("Warning: failed to resolve commit refs for submission: %v", refErr)
+	}
+
 	// Submit review
 	var submissionFailed bool
 	var submissionBlockedReason string
@@ -404,7 +411,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		submitResp = buildFakeSubmitResponse()
 	} else {
 		var updatedConfig Config
-		submitResp, updatedConfig, err = submitReviewWithRecovery(*config, base64Diff, repoName, verbose)
+		submitResp, updatedConfig, err = submitReviewWithRecovery(*config, base64Diff, repoName, commitRefs, verbose)
 		config = &updatedConfig
 	}
 	if err != nil {
@@ -1200,6 +1207,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 							liveCommitMsgPath:  liveCommitMsgPath,
 							diffContent:        diffContent,
 							reviewID:           reviewID,
+							apiURL:             config.APIURL,
+							apiKey:             config.APIKey,
 							attestationWritten: &attestationWritten,
 						})
 					}
@@ -1251,7 +1260,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				reviewStateMu.Unlock()
 			}
 			attestationAction = "reviewed"
-			if err := recordCoverageAndAttest("reviewed", diffContent, reviewID, verbose, &attestationWritten); err != nil {
+			if err := recordCoverageAndAttest("reviewed", diffContent, reviewID, config.APIURL, config.APIKey, verbose, &attestationWritten); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 			}
 		}
@@ -1270,6 +1279,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				liveCommitMsgPath:  liveCommitMsgPath,
 				diffContent:        diffContent,
 				reviewID:           reviewID,
+				apiURL:             config.APIURL,
+				apiKey:             config.APIKey,
 				attestationWritten: &attestationWritten,
 			})
 		}
@@ -1348,6 +1359,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					liveCommitMsgPath:  liveCommitMsgPath,
 					diffContent:        diffContent,
 					reviewID:           reviewID,
+					apiURL:             config.APIURL,
+					apiKey:             config.APIKey,
 					attestationWritten: &attestationWritten,
 				})
 			case <-pollDone:
@@ -1377,7 +1390,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 				}
 				reviewStateMu.Unlock()
 				attestationAction = "reviewed"
-				if err := recordCoverageAndAttest("reviewed", diffContent, reviewID, verbose, &attestationWritten); err != nil {
+				if err := recordCoverageAndAttest("reviewed", diffContent, reviewID, config.APIURL, config.APIKey, verbose, &attestationWritten); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 				}
 				fmt.Printf("Review complete. Choose commit, commit-push, skip, vouch, or abort in the browser before %s elapses.\n", blockingTimeout)
@@ -1555,6 +1568,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					liveCommitMsgPath:  liveCommitMsgPath,
 					diffContent:        diffContent,
 					reviewID:           reviewID,
+					apiURL:             config.APIURL,
+					apiKey:             config.APIKey,
 					attestationWritten: &attestationWritten,
 				})
 			} else {
@@ -1611,6 +1626,8 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 					liveCommitMsgPath:  liveCommitMsgPath,
 					diffContent:        diffContent,
 					reviewID:           reviewID,
+					apiURL:             config.APIURL,
+					apiKey:             config.APIKey,
 					attestationWritten: &attestationWritten,
 				})
 			}
@@ -1725,6 +1742,65 @@ func collectDiffWithOptions(opts reviewopts.Options) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("invalid diff-source: %s (must be staged, working, commit, range, or file)", diffSource)
 	}
+}
+
+// resolveCommitRefs computes the commit_refs to send alongside a review
+// submission: only --commit/--range reviews have concrete commits at
+// request time (staged/working diffs have no commit yet, so this returns
+// nil for them). For a range (either --range, or --commit given a "a..b"
+// value), every individual commit is expanded via `git rev-list` and sent
+// as its own "commit" ref, plus the literal range expression itself as a
+// "range" ref — so a later coverage lookup matches whichever identifier
+// form the caller supplies. Best-effort: a resolution failure here must
+// never block the review submission that already succeeded at collecting
+// the diff, so callers should log and continue on error rather than abort.
+func resolveCommitRefs(opts reviewopts.Options) ([]reviewmodel.CommitRef, error) {
+	switch opts.DiffSource {
+	case "commit":
+		commitVal := opts.CommitVal
+		if commitVal == "" {
+			return nil, nil
+		}
+		if strings.Contains(commitVal, "..") {
+			return expandRangeToCommitRefs(commitVal)
+		}
+		out, err := reviewapi.RunGitCommand("rev-parse", commitVal)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve commit %q: %w", commitVal, err)
+		}
+		sha := strings.TrimSpace(string(out))
+		if sha == "" {
+			return nil, nil
+		}
+		return []reviewmodel.CommitRef{{Ref: sha, Type: "commit"}}, nil
+
+	case "range":
+		if opts.RangeVal == "" {
+			return nil, nil
+		}
+		return expandRangeToCommitRefs(opts.RangeVal)
+
+	default:
+		return nil, nil
+	}
+}
+
+// expandRangeToCommitRefs resolves every commit reachable in a git range
+// expression (e.g. "a..b") to individual "commit" refs via `git rev-list`,
+// plus the literal range expression itself as a "range" ref.
+func expandRangeToCommitRefs(rangeVal string) ([]reviewmodel.CommitRef, error) {
+	out, err := reviewapi.RunGitCommand("rev-list", rangeVal)
+	if err != nil {
+		return nil, fmt.Errorf("failed to expand range %q: %w", rangeVal, err)
+	}
+	refs := []reviewmodel.CommitRef{{Ref: rangeVal, Type: "range"}}
+	for _, sha := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		sha = strings.TrimSpace(sha)
+		if sha != "" {
+			refs = append(refs, reviewmodel.CommitRef{Ref: sha, Type: "commit"})
+		}
+	}
+	return refs, nil
 }
 
 // runCommitAndMaybePush commits the staged changes and optionally pushes with safety checks.

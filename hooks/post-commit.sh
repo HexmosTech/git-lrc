@@ -43,6 +43,13 @@ if command -v lrc >/dev/null 2>&1; then
 	lrc review-cleanup 2>/dev/null || true
 fi
 
+# Queue this commit for offline-first sync to LiveReview's backend, if it
+# corresponds to a review that was actually submitted (best-effort, never
+# blocks or fails the commit -- the commit already happened).
+if command -v lrc >/dev/null 2>&1; then
+	lrc internal sync enqueue >/dev/null 2>&1 || true
+fi
+
 # If push was not requested, we're done
 if [ ! -f "$PUSH_FLAG" ]; then
 	exit 0

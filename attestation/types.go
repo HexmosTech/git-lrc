@@ -11,6 +11,26 @@ type ReviewSession struct {
 	Timestamp time.Time `json:"timestamp"`
 	DiffFiles string    `json:"diff_files"`
 	ReviewID  string    `json:"review_id"`
+	// APIURL/APIKey are the credentials that actually submitted this
+	// review, snapshotted at submission time -- see
+	// storage.InsertAttestationReviewSessionRow. Empty for sessions
+	// recorded before this field existed, or for "skipped" (no review was
+	// ever submitted).
+	APIURL string `json:"api_url,omitempty"`
+	APIKey string `json:"api_key,omitempty"`
+}
+
+// SyncCandidate is a review_sessions row worth syncing to a commit once one
+// is made from this tree: it represents a real backend submission (action
+// reviewed|vouched with a known review_id), with the credentials that made
+// it, snapshotted at the time.
+type SyncCandidate struct {
+	ID       int64
+	Branch   string
+	Action   string
+	ReviewID string
+	APIURL   string
+	APIKey   string
 }
 
 // FileEntry is a slim representation of a file diff for storage.

@@ -93,6 +93,24 @@ func currentBranch() string {
 	return strings.TrimSpace(string(out))
 }
 
+// ExtractOne returns the ReviewRecord for exactly one commit (by SHA or any
+// git-resolvable ref), or ok=false if the ref doesn't resolve to a commit.
+// Unlike Extract, this never walks ancestry — it's `git log -1 <ref>`, so a
+// bare single-commit ref reports on just that commit, not its full history.
+func ExtractOne(ref string) (ReviewRecord, bool, error) {
+	format := strings.Join([]string{"%H", "%h", "%an", "%ae", "%aI", "%s", "%B"}, fieldSep) + recordSep
+	out, err := exec.Command("git", "log", "-1", "--pretty=format:"+format, "--end-of-options", ref).Output()
+	if err != nil {
+		return ReviewRecord{}, false, fmt.Errorf("failed to read git log for %q (are you inside a git repo?): %w", ref, err)
+	}
+	raw := strings.TrimSuffix(strings.TrimSpace(string(out)), recordSep)
+	if raw == "" {
+		return ReviewRecord{}, false, nil
+	}
+	rec, ok := parseRecord(raw, currentBranch())
+	return rec, ok, nil
+}
+
 // Extract runs `git log` (scoped by filter) and returns one record per commit.
 func Extract(f Filter) ([]ReviewRecord, error) {
 	format := strings.Join([]string{"%H", "%h", "%an", "%ae", "%aI", "%s", "%B"}, fieldSep) + recordSep

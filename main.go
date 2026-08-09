@@ -68,6 +68,27 @@ func main() {
 	if err := selfupdate.EnsureGitLRCBinarySynced(false); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not resync git-lrc binary: %v\n", err)
 	}
+	// Opportunistic, cheap (single indexed COUNT query) check for pending
+	// offline commit-sync items; only spawns a detached background worker
+	// when there's actually something due. Runs on every invocation, any
+	// repo, so a machine that was offline when a commit's post-commit hook
+	// fired still catches up on the next `lrc` command run anywhere.
+	//
+	// Backgrounded (mirrors selfupdate's own auto-update check goroutine
+	// below) so this can never add latency to the foreground command: the
+	// SQLite busy-timeout on ~/.lrc/sync-queue.db is 5s, and without this a
+	// lock collision with a concurrently-running flush worker could stall
+	// every single `lrc` invocation by that much. Fire-and-forget is
+	// correct here -- if the process exits before this completes, the next
+	// invocation (or the post-commit-triggered worker) picks it up.
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "warning: opportunistic sync check panicked: %v\n", r)
+			}
+		}()
+		appcore.TriggerOpportunisticSyncFlush()
+	}()
 	appui.SetBuildInfo(version, buildTime, gitCommit)
 	appcore.Configure(version, reviewMode)
 
@@ -106,6 +127,13 @@ func main() {
 		RunQueryList:                    reviewquery.RunQueryList,
 		RunQueryView:                    reviewquery.RunQueryView,
 		RunQueryDelete:                  reviewquery.RunQueryDelete,
+		RunCoverage:                     appcore.RunCoverage,
+		RunSyncEnqueue:                  appcore.RunSyncEnqueue,
+		RunSyncFlushWorker:              appcore.RunSyncFlushWorker,
+		RunSyncFlush:                    appcore.RunSyncFlush,
+		RunSyncStatus:                   appcore.RunSyncStatus,
+		RunSyncList:                     appcore.RunSyncList,
+		RunSyncForget:                   appcore.RunSyncForget,
 	})
 
 	if err := app.Run(os.Args); err != nil {

@@ -70,6 +70,18 @@ func ReviewArtifactURL(apiURL, reviewID, artifactType string) string {
 	return strings.TrimSuffix(apiURL, "/") + "/api/v1/diff-review/" + reviewID + "/artifacts/" + artifactType
 }
 
+// ReviewCoverageURL builds the URL for the CI/CD-facing review-coverage
+// lookup: given commit SHAs/ranges, which backend-stored reviews cover them.
+func ReviewCoverageURL(apiURL string) string {
+	return strings.TrimSuffix(apiURL, "/") + "/api/v1/review-coverage"
+}
+
+// ReviewAttachCommitURL builds the URL for the offline commit-sync target:
+// records which commit a previously-submitted CLI diff review ended up in.
+func ReviewAttachCommitURL(apiURL, reviewID string) string {
+	return strings.TrimSuffix(apiURL, "/") + "/api/v1/diff-review/" + reviewID + "/commit"
+}
+
 func SelfUpdateManifestURL() string {
 	return selfUpdateReleaseManifestURL
 }

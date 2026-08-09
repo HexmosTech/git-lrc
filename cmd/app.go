@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/HexmosTech/git-lrc/internal/reviewopts"
 	"github.com/urfave/cli/v2"
 )
 
@@ -70,6 +71,13 @@ type Handlers struct {
 	RunQueryList                    cli.ActionFunc
 	RunQueryView                    cli.ActionFunc
 	RunQueryDelete                  cli.ActionFunc
+	RunCoverage                     cli.ActionFunc
+	RunSyncEnqueue                  cli.ActionFunc
+	RunSyncFlushWorker              cli.ActionFunc
+	RunSyncFlush                    cli.ActionFunc
+	RunSyncStatus                   cli.ActionFunc
+	RunSyncList                     cli.ActionFunc
+	RunSyncForget                   cli.ActionFunc
 }
 
 // BuildApp constructs the full CLI app with all command wiring.
@@ -483,6 +491,38 @@ EXAMPLES
 				},
 			},
 			{
+				Name:      "coverage",
+				Usage:     "Report review coverage for commits/ranges (CI/CD gate support)",
+				ArgsUsage: "<ref> [ref...]",
+				Description: `Given one or more commit SHAs and/or ranges (e.g. "a..b"), reports every
+scan/review found for them, merged from two sources:
+
+  - git_log:  parsed straight out of this repo's commit history (the
+              "LiveReview Pre-Commit Check" trailer git-lrc already writes
+              on every pre-commit review) -- no network call.
+  - database: review records LiveReview's backend has stored for these
+              refs, covering PR/MR, API, MCP, and --commit/--range CLI
+              reviews (POST /api/v1/review-coverage).
+
+A single ref can have several reports (reviewed once via git-lrc pre-commit
+and again later on its PR, for example) -- that's expected, not deduped.
+No pass/fail verdict is computed here; apply your own policy over the
+reports, e.g. with --json in a CI pipeline.
+
+EXAMPLES
+   lrc coverage HEAD                        # was HEAD reviewed?
+   lrc coverage abc123 def456                # two specific commits
+   lrc coverage main..feature                 # a range, expanded via git
+   lrc coverage $(git rev-list origin/main..HEAD) --json`,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "json", Usage: "output machine-readable JSON"},
+					&cli.StringFlag{Name: "api-url", Value: reviewopts.DefaultAPIURL, Usage: "LiveReview API base URL", EnvVars: []string{"LRC_API_URL"}},
+					&cli.StringFlag{Name: "api-key", Usage: "API key for authentication (can be set in ~/.lrc.toml or env var)", EnvVars: []string{"LRC_API_KEY"}},
+					&cli.BoolFlag{Name: "verbose", Usage: "enable verbose output", EnvVars: []string{"LRC_VERBOSE"}},
+				},
+				Action: h.RunCoverage,
+			},
+			{
 				Name:   "internal",
 				Usage:  "Internal back-office commands (not for direct use)",
 				Hidden: true,
@@ -550,6 +590,74 @@ EXAMPLES
 								},
 							},
 						},
+					},
+					{
+						Name:   "sync",
+						Usage:  "Offline commit-sync queue internals (invoked by hooks/post-commit.sh and the opportunistic background trigger)",
+						Hidden: true,
+						Subcommands: []*cli.Command{
+							{
+								Name:   "enqueue",
+								Usage:  "Queue the just-made HEAD commit for background sync, if it corresponds to a submitted review",
+								Hidden: true,
+								Flags: []cli.Flag{
+									&cli.BoolFlag{Name: "verbose", Usage: "enable verbose output", EnvVars: []string{"LRC_VERBOSE"}},
+								},
+								Action: h.RunSyncEnqueue,
+							},
+							{
+								Name:   "flush-worker",
+								Usage:  "Detached background worker: flush due sync queue items",
+								Hidden: true,
+								Flags: []cli.Flag{
+									&cli.BoolFlag{Name: "verbose", Usage: "enable verbose output", EnvVars: []string{"LRC_VERBOSE"}},
+								},
+								Action: h.RunSyncFlushWorker,
+							},
+						},
+					},
+				},
+			},
+			{
+				Name:  "sync",
+				Usage: "Inspect and manage the offline commit-sync queue",
+				Description: `Plain "lrc review" (staged/working, the default) has no commit yet at
+review time, so it can't tell LiveReview's backend which commit it ends up
+in the way --commit/--range reviews and PR/MR reviews can. Instead, once
+you actually commit, hooks/post-commit.sh queues that commit for background
+sync (offline-first: it retries with backoff, and survives being offline
+for days -- see 'lrc sync status').
+
+EXAMPLES
+   lrc sync status               # counts + oldest pending item's age
+   lrc sync list                 # every item
+   lrc sync list --status=failed
+   lrc sync flush                # force an immediate sync attempt now
+   lrc sync forget 42            # give up on one stuck item`,
+				Subcommands: []*cli.Command{
+					{
+						Name:   "status",
+						Usage:  "Summarize pending/synced/failed counts",
+						Action: h.RunSyncStatus,
+					},
+					{
+						Name:  "list",
+						Usage: "List sync queue items",
+						Flags: []cli.Flag{
+							&cli.StringFlag{Name: "status", Usage: "filter by status: pending, synced, or failed"},
+						},
+						Action: h.RunSyncList,
+					},
+					{
+						Name:   "flush",
+						Usage:  "Force an immediate foreground sync attempt",
+						Action: h.RunSyncFlush,
+					},
+					{
+						Name:      "forget",
+						Usage:     "Permanently remove one stuck item",
+						ArgsUsage: "<id>",
+						Action:    h.RunSyncForget,
 					},
 				},
 			},

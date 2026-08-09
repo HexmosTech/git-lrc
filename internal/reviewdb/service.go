@@ -16,8 +16,11 @@ type attestationHunkRange = attestation.HunkRange
 type coverageResult = attestation.CoverageResult
 
 const reviewDBSchema = `
--- schema_version:1
+-- schema_version:2
 -- NOTE: bump schema_version when review_sessions schema changes.
+-- v2 added api_url/api_key (see storage.EnsureReviewSessionsCommitSyncColumns,
+-- which migrates pre-v2 databases -- CREATE TABLE IF NOT EXISTS below only
+-- covers brand-new ones).
 CREATE TABLE IF NOT EXISTS review_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tree_hash TEXT NOT NULL,
@@ -25,7 +28,9 @@ CREATE TABLE IF NOT EXISTS review_sessions (
     action TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     diff_files TEXT,
-    review_id TEXT
+    review_id TEXT,
+    api_url TEXT,
+    api_key TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_review_sessions_branch ON review_sessions(branch);
 CREATE INDEX IF NOT EXISTS idx_review_sessions_tree ON review_sessions(tree_hash);
@@ -81,8 +86,8 @@ func filesToEntries(files []reviewmodel.DiffReviewFileResult) []attestationFileE
 }
 
 // insertReviewSession inserts a new review session into the database.
-func insertReviewSession(db *sql.DB, treeHash, branch, action string, files []attestationFileEntry, reviewID string) error {
-	return attestation.InsertReviewSession(db, treeHash, branch, action, files, reviewID)
+func insertReviewSession(db *sql.DB, treeHash, branch, action string, files []attestationFileEntry, reviewID, apiURL, apiKey string) error {
+	return attestation.InsertReviewSession(db, treeHash, branch, action, files, reviewID, apiURL, apiKey)
 }
 
 // countIterations returns the total number of review sessions for the given branch.
@@ -123,7 +128,7 @@ func computePriorCoverage(db *sql.DB, branch, currentTreeHash string, currentFil
 // recordAndComputeCoverage is a convenience function that opens the DB,
 // records the session, computes coverage, and returns the result.
 // It is the main entry point for all review actions (reviewed/skipped/vouched).
-func RecordAndComputeCoverage(action string, parsedFiles []reviewmodel.DiffReviewFileResult, reviewID string, verbose bool) (coverageResult, error) {
+func RecordAndComputeCoverage(action string, parsedFiles []reviewmodel.DiffReviewFileResult, reviewID, apiURL, apiKey string, verbose bool) (coverageResult, error) {
 	db, err := openReviewDB()
 	if err != nil {
 		if verbose {
@@ -156,13 +161,27 @@ func RecordAndComputeCoverage(action string, parsedFiles []reviewmodel.DiffRevie
 	// (not including the current one)
 
 	// Insert the current session
-	if err := insertReviewSession(db, treeHash, branch, action, entries, reviewID); err != nil {
+	if err := insertReviewSession(db, treeHash, branch, action, entries, reviewID, apiURL, apiKey); err != nil {
 		if verbose {
 			fmt.Printf("Warning: failed to record review session: %v\n", err)
 		}
 	}
 
 	return cov, nil
+}
+
+// GetSyncCandidateForTreeHash opens the current repo's review DB and looks
+// up the most recent syncable review session for treeHash (see
+// attestation.GetSyncCandidateForTreeHash). found=false, not an error, means
+// there's nothing to sync for this tree.
+func GetSyncCandidateForTreeHash(treeHash string) (attestation.SyncCandidate, bool, error) {
+	db, err := openReviewDB()
+	if err != nil {
+		return attestation.SyncCandidate{}, false, fmt.Errorf("could not open review DB: %w", err)
+	}
+	defer db.Close()
+
+	return attestation.GetSyncCandidateForTreeHash(db, treeHash)
 }
 
 // runReviewDBCleanup deletes all review sessions for the current branch.

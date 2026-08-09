@@ -28,12 +28,15 @@ func ensureAttestation(action string, verbose bool, written *bool) error {
 
 // recordCoverageAndAttest parses the diff, records a review session with coverage stats,
 // and writes a full attestation. Used by both the "reviewed" and "vouched" interactive paths.
-func recordCoverageAndAttest(action string, diffContent []byte, reviewID string, verbose bool, attestationWritten *bool) error {
+// apiURL/apiKey are the credentials that actually submitted reviewID, snapshotted into the
+// review session so the offline commit-sync queue (internal/syncqueue) always targets the
+// account a review really belongs to, regardless of what ~/.lrc.toml says later.
+func recordCoverageAndAttest(action string, diffContent []byte, reviewID, apiURL, apiKey string, verbose bool, attestationWritten *bool) error {
 	parsedFiles, parseErr := parseDiffToFiles(diffContent)
 	if parseErr != nil {
 		return fmt.Errorf("could not parse diff for coverage tracking: %w", parseErr)
 	}
-	cov, covErr := reviewdb.RecordAndComputeCoverage(action, parsedFiles, reviewID, verbose)
+	cov, covErr := reviewdb.RecordAndComputeCoverage(action, parsedFiles, reviewID, apiURL, apiKey, verbose)
 	if covErr != nil {
 		return fmt.Errorf("coverage computation failed: %w", covErr)
 	}

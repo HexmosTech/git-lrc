@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS review_sessions (
 
 func seedReviewSession(t *testing.T, db *sql.DB, branch string) {
 	t.Helper()
-	err := InsertAttestationReviewSessionRow(db, "tree", branch, "reviewed", "2026-03-17T00:00:00Z", "[]", "rid")
+	err := InsertAttestationReviewSessionRow(db, "tree", branch, "reviewed", "2026-03-17T00:00:00Z", "[]", "rid", "https://api.example.com", "test-key")
 	if err != nil {
 		t.Fatalf("failed to insert row: %v", err)
 	}

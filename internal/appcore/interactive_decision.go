@@ -20,6 +20,8 @@ type decisionExecutionContext struct {
 	liveCommitMsgPath  string
 	diffContent        []byte
 	reviewID           string
+	apiURL             string
+	apiKey             string
 	attestationWritten *bool
 }
 
@@ -96,7 +98,7 @@ func executeDecision(code int, message string, push bool, ctx decisionExecutionC
 		return nil
 	case decisionflow.DecisionVouch:
 		syncedPrintln("\n✅ Vouched, proceeding with commit")
-		if err := recordCoverageAndAttest("vouched", ctx.diffContent, ctx.reviewID, ctx.verbose, ctx.attestationWritten); err != nil {
+		if err := recordCoverageAndAttest("vouched", ctx.diffContent, ctx.reviewID, ctx.apiURL, ctx.apiKey, ctx.verbose, ctx.attestationWritten); err != nil {
 			return fmt.Errorf("vouch failed: %w", err)
 		}
 		if ctx.deferCommit {

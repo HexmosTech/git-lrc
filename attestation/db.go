@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,14 @@ func OpenSQLiteReviewDB(dbPath, schema string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to initialize review database schema: %w", err)
 	}
 
+	// Since schema_version:2, review_sessions holds a plaintext api_key
+	// (see storage.EnsureReviewSessionsCommitSyncColumns) -- best-effort,
+	// but a failure here is worth surfacing rather than swallowing, same
+	// reasoning as syncqueue.Open's hardening of ~/.lrc/sync-queue.db.
+	if err := storage.Chmod(dbPath, 0600); err != nil {
+		log.Printf("attestation: warning: failed to set permissions on %s: %v", dbPath, err)
+	}
+
 	return db, nil
 }
 
@@ -57,8 +66,12 @@ func CurrentBranch() string {
 	return strings.TrimSpace(string(out))
 }
 
-// InsertReviewSession inserts a new review session row.
-func InsertReviewSession(db *sql.DB, treeHash, branch, action string, files []FileEntry, reviewID string) error {
+// InsertReviewSession inserts a new review session row. apiURL/apiKey are
+// the credentials that actually submitted this review (empty for
+// "skipped"), snapshotted here so a later commit-sync attempt never has to
+// guess which account a review belongs to -- see storage.
+// InsertAttestationReviewSessionRow and internal/syncqueue.
+func InsertReviewSession(db *sql.DB, treeHash, branch, action string, files []FileEntry, reviewID, apiURL, apiKey string) error {
 	filesJSON, err := json.Marshal(files)
 	if err != nil {
 		return fmt.Errorf("failed to marshal diff files: %w", err)
@@ -72,11 +85,35 @@ func InsertReviewSession(db *sql.DB, treeHash, branch, action string, files []Fi
 		time.Now().UTC().Format(time.RFC3339),
 		string(filesJSON),
 		reviewID,
+		apiURL,
+		apiKey,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert review session: %w", err)
 	}
 	return nil
+}
+
+// GetSyncCandidateForTreeHash returns the most recent review_sessions row
+// for treeHash that represents a real, syncable backend submission, or
+// found=false (not an error) when there's nothing to sync -- e.g. the tree
+// was only "skipped", or its session predates the api_url/api_key columns.
+func GetSyncCandidateForTreeHash(db *sql.DB, treeHash string) (SyncCandidate, bool, error) {
+	id, branch, action, reviewID, apiURL, apiKey, found, err := storage.QueryAttestationSyncCandidateForTreeHash(db, treeHash)
+	if err != nil {
+		return SyncCandidate{}, false, fmt.Errorf("failed to look up sync candidate: %w", err)
+	}
+	if !found {
+		return SyncCandidate{}, false, nil
+	}
+	return SyncCandidate{
+		ID:       id,
+		Branch:   branch,
+		Action:   action,
+		ReviewID: reviewID,
+		APIURL:   apiURL,
+		APIKey:   apiKey,
+	}, true, nil
 }
 
 // CountIterations returns total review session count for a branch.

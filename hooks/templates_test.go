@@ -92,6 +92,7 @@ func TestGeneratedHooksUseResolvedGitDirPaths(t *testing.T) {
 				"DISABLED_GIT_FILE=\"$LRC_DIR/disabled-git\"",
 				"PUSH_FLAG=\"$GIT_DIR/livereview_push_request\"",
 				"LRC_DIR=\"$GIT_DIR/lrc\"",
+				"lrc internal sync enqueue >/dev/null 2>&1 || true",
 			},
 			forbidden: []string{
 				"PUSH_FLAG=\".git/livereview_push_request\"",

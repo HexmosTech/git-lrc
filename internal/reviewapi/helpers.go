@@ -160,10 +160,19 @@ func formatJSONParseError(body []byte, contentType string, parseErr error) error
 }
 
 func SubmitReview(apiURL, apiKey, base64Diff, repoName string, verbose bool) (reviewmodel.DiffReviewCreateResponse, error) {
+	return SubmitReviewWithCommitRefs(apiURL, apiKey, base64Diff, repoName, nil, verbose)
+}
+
+// SubmitReviewWithCommitRefs is SubmitReview plus commitRefs: the resolved
+// commit SHA(s) (and, for --range, the literal range expression too) that
+// the diff being submitted corresponds to. Only --commit/--range reviews
+// have these at submission time — staged/working diffs pass nil.
+func SubmitReviewWithCommitRefs(apiURL, apiKey, base64Diff, repoName string, commitRefs []reviewmodel.CommitRef, verbose bool) (reviewmodel.DiffReviewCreateResponse, error) {
 	payload := reviewmodel.DiffReviewRequest{
 		DiffZipBase64: base64Diff,
 		RepoName:      repoName,
 		BranchName:    CurrentBranchName(),
+		CommitRefs:    commitRefs,
 	}
 
 	if verbose {

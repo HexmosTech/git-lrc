@@ -25,6 +25,19 @@ func ReviewUploadArtifact(client *Client, apiURL, reviewID, artifactType string,
 	return client.DoJSON(http.MethodPost, ReviewArtifactURL(apiURL, reviewID, artifactType), payload, "", "", map[string]string{"X-API-Key": apiKey})
 }
 
+// ReviewCoverage asks LiveReview's backend which of the given commit
+// SHAs/ranges have a stored review, per the review-coverage endpoint.
+func ReviewCoverage(client *Client, apiURL string, payload any, apiKey string) (*Response, error) {
+	return client.DoJSON(http.MethodPost, ReviewCoverageURL(apiURL), payload, "", "", map[string]string{"X-API-Key": apiKey})
+}
+
+// ReviewAttachCommit tells LiveReview's backend which commit a previously-
+// submitted CLI diff review (reviewID) ended up in, via the offline
+// commit-sync queue (internal/syncqueue).
+func ReviewAttachCommit(client *Client, apiURL, reviewID string, payload any, apiKey string) (*Response, error) {
+	return client.DoJSON(http.MethodPost, ReviewAttachCommitURL(apiURL, reviewID), payload, "", "", map[string]string{"X-API-Key": apiKey})
+}
+
 // ReviewProxyRequest forwards a proxied review request with API key auth.
 func ReviewProxyRequest(client *Client, method, apiBase, path, rawQuery string, body []byte, apiKey string) (*Response, error) {
 	backendURL := ReviewProxyRequestURL(apiBase, path, rawQuery)
