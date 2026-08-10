@@ -1,1 +1,11 @@
 .env.prod
+dbctx
+*.dtx
+*.dtx-wal
+*.dtx-shm
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
