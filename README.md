@@ -34,6 +34,54 @@ Text-to-SQL / visualization / analytics system
 
 ---
 
+## Quick look
+
+### 1. Build an index
+
+```bash
+dbctx build postgres://user:pass@localhost/mydb --output mydb.dtx
+```
+
+*(screenshot coming soon)*
+
+---
+
+### 2. Query from the CLI
+
+```bash
+dbctx query mydb.dtx "How many failed GitHub reviews last month?"
+```
+
+The query finds relevant tables, surfaces JSONB structure, and highlights state-like fields — all in compact text output.
+
+![dbctx CLI query output](media/dbctx-3-query.png)
+
+---
+
+### 3. Explore in the UI
+
+```bash
+dbctx ui mydb.dtx
+```
+
+A local web interface for browsing everything dbctx extracted from your database.
+
+<table>
+<tr>
+<td align="center"><b>Overview</b><br><img src="media/dbctx-1-general-stats.png" width="420"></td>
+<td align="center"><b>Table details</b><br><img src="media/dbctx-4-table-details.png" width="420"></td>
+</tr>
+<tr>
+<td align="center"><b>JSONB expansion</b><br><img src="media/dbctx-6-jsonb-expansion.png" width="420"></td>
+<td align="center"><b>State &amp; categorical values</b><br><img src="media/dbctx-7-state-values.png" width="420"></td>
+</tr>
+<tr>
+<td align="center" colspan="2"><b>Query interface</b><br><img src="media/dbctx-5-query-ui.png" width="860"></td>
+</tr>
+</table>
+
+---
+
 ## Why does this need to exist?
 
 When building a system that lets users ask questions about a database in natural language, the first problem is usually presented as:
@@ -949,6 +997,44 @@ A downstream application can then construct whatever prompt or query representat
 
 ---
 
+# Web UI
+
+dbctx includes a built-in web explorer for browsing the database context interactively.
+
+```bash
+dbctx ui myapp.dtx
+```
+
+This starts a local web server and opens the explorer in your browser.
+
+The UI provides:
+
+* **Overview** — summary statistics at a glance (tables, columns, relationships, state fields, JSONB paths)
+* **Tables** — full table list with column counts, FK counts, and row estimates; click any table to explore
+* **Table detail** — columns with types, PK/FK tags, nullable flags, distinct counts; expandable value lists for state-like and categorical fields; JSONB path trees; clickable FK relationships for navigation
+* **Query** — natural language search against the context index; results ranked by relevance with collapsible detail sections for columns, values, relationships, and JSONB paths
+
+The UI is styled after VS Code and is embedded in the binary itself — no external dependencies or build steps required.
+
+```text
+┌──────────────────────────────────────────────────┐
+│  dbctx — Database Context Explorer               │
+├──────────────────────────────────────────────────┤
+│  Overview  │  Tables  │  Table  │  Query         │
+├─────────┬────────────────────────────────────────┤
+│ sidebar │  content area                          │
+│         │                                        │
+│ tables  │  stats / table detail / query results  │
+│ list    │                                        │
+│         │  • collapsible sections                │
+│         │  • expandable value lists              │
+│         │  • clickable FK navigation             │
+│         │  • JSONB path trees                    │
+└─────────┴────────────────────────────────────────┘
+```
+
+---
+
 # What dbctx is not
 
 dbctx is **not**:
@@ -989,19 +1075,20 @@ dbctx is currently being developed.
 
 The initial focus is:
 
-* [ ] PostgreSQL schema extraction
-* [ ] table and column graph
-* [ ] primary/foreign-key relationships
-* [ ] field statistics
-* [ ] categorical/state detection
-* [ ] representative values
-* [ ] JSONB structural inference
-* [ ] `.dtx` file format
+* [x] PostgreSQL schema extraction
+* [x] table and column graph
+* [x] primary/foreign-key relationships
+* [x] field statistics
+* [x] categorical/state detection
+* [x] representative values
+* [x] JSONB structural inference
+* [x] `.dtx` file format
 * [ ] incremental updates
-* [ ] fuzzy table/field/value retrieval
-* [ ] foreign-key expansion
-* [ ] compact context export
+* [x] fuzzy table/field/value retrieval
+* [x] foreign-key expansion
+* [x] compact context export
 * [ ] stable `.dtx` specification
+* [x] web UI explorer
 
 The ambition is to keep the core small enough that the entire system can remain understandable.
 

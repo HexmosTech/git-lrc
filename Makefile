@@ -1,4 +1,4 @@
-.PHONY: build install clean reindex query report
+.PHONY: build install clean reindex query report ui
 
 BINARY=dbctx
 INSTALL_DIR=$(HOME)/go/bin
@@ -27,3 +27,6 @@ query: $(DBCTX_DTX)
 
 report: $(DBCTX_DTX)
 	./$(BINARY) report $(DBCTX_DTX)
+
+ui: $(DBCTX_DTX)
+	./$(BINARY) ui $(DBCTX_DTX)

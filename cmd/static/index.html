@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dbctx</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#1e1e1e;--bg2:#252526;--bg3:#2d2d2d;--bg4:#3c3c3c;
+  --fg:#d4d4d4;--fg2:#9d9d9d;--fg3:#6a6a6a;
+  --accent:#007acc;--accent2:#1177bb;
+  --green:#4ec9b0;--yellow:#dcdcaa;--orange:#ce9178;--red:#f44747;
+  --purple:#c586c0;--blue:#569cd6;--cyan:#4fc1ff;
+  --border:#404040;--border2:#505050;
+  --sidebar:#252526;--titlebar:#323233;
+  --input-bg:#3c3c3c;--input-border:#505050;
+  --hover:#2a2d2e;--selected:#094771;
+  --radius:3px;
+}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;background:var(--bg);color:var(--fg);overflow:hidden;height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Layout */
+.app{display:flex;flex-direction:column;height:100vh}
+.titlebar{background:var(--titlebar);padding:6px 12px;font-size:12px;color:var(--fg2);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);flex-shrink:0}
+.titlebar .icon{color:var(--accent);font-weight:700}
+.main{display:flex;flex:1;overflow:hidden}
+.sidebar{width:220px;background:var(--sidebar);border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0}
+.content{flex:1;overflow-y:auto;padding:20px}
+
+/* Tabs */
+.tabs{display:flex;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{padding:8px 16px;cursor:pointer;color:var(--fg2);font-size:12px;border-bottom:2px solid transparent;user-select:none}
+.tab:hover{color:var(--fg);background:var(--hover)}
+.tab.active{color:var(--fg);border-bottom-color:var(--accent);background:var(--bg)}
+
+/* Sidebar */
+.sidebar-item{padding:6px 12px;cursor:pointer;font-size:12px;display:flex;justify-content:space-between;align-items:center;border-left:2px solid transparent}
+.sidebar-item:hover{background:var(--hover)}
+.sidebar-item.active{background:var(--selected);border-left-color:var(--accent)}
+.sidebar-item .badge{font-size:10px;color:var(--fg3);background:var(--bg4);padding:1px 5px;border-radius:2px}
+.sidebar-section{padding:8px 12px 4px;font-size:11px;color:var(--fg3);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.sidebar-filter{padding:6px 8px}
+.sidebar-filter input{width:100%;background:var(--input-bg);border:1px solid var(--input-border);color:var(--fg);padding:4px 8px;font-size:12px;border-radius:var(--radius);outline:none}
+.sidebar-filter input:focus{border-color:var(--accent)}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px}
+.card-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+.card-header:hover{background:var(--hover)}
+.card-header h3{font-size:13px;font-weight:600}
+.card-body{padding:12px 14px}
+.card-body.collapsed{display:none}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:20px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.stat-value{font-size:24px;font-weight:700;color:var(--accent)}
+.stat-label{font-size:11px;color:var(--fg2);margin-top:4px}
+
+/* Table */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:6px 10px;background:var(--bg3);color:var(--fg2);font-weight:600;border-bottom:1px solid var(--border);position:sticky;top:0}
+td{padding:5px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:hover td{background:var(--hover)}
+
+/* Tags */
+.tag{display:inline-block;padding:1px 6px;border-radius:2px;font-size:11px;margin-right:4px}
+.tag-pk{background:#3d1f00;color:var(--orange)}
+.tag-fk{background:#1a3a1a;color:var(--green)}
+.tag-state{background:#2d1a3d;color:var(--purple)}
+.tag-cat{background:#1a2d3d;color:var(--cyan)}
+.tag-type{color:var(--blue)}
+.tag-null{color:var(--fg3);font-style:italic}
+
+/* Values list */
+.values{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.value{background:var(--bg4);padding:1px 6px;border-radius:2px;font-size:11px;color:var(--fg2)}
+
+/* JSONB tree */
+.jsonb-path{font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;padding:2px 0}
+.jsonb-path .path{color:var(--yellow)}
+.jsonb-path .type{color:var(--blue);margin-left:8px}
+.jsonb-path .samples{color:var(--fg3);margin-left:8px;font-size:11px}
+
+/* Query */
+.query-bar{display:flex;gap:8px;margin-bottom:16px}
+.query-bar input{flex:1;background:var(--input-bg);border:1px solid var(--input-border);color:var(--fg);padding:8px 12px;font-size:13px;border-radius:var(--radius);outline:none;font-family:inherit}
+.query-bar input:focus{border-color:var(--accent)}
+.query-bar button{background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:600}
+.query-bar button:hover{background:var(--accent2)}
+.query-bar button.secondary{background:var(--bg4);color:var(--fg)}
+.query-bar button.secondary:hover{background:var(--border2)}
+.query-bar button:disabled{opacity:0.5;cursor:default}
+
+/* Result toolbar */
+.result-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:6px 0}
+.result-toolbar .count{color:var(--fg2);font-size:12px;margin-right:auto}
+.result-toolbar button{background:var(--bg4);color:var(--fg);border:1px solid var(--border);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-size:11px}
+.result-toolbar button:hover{background:var(--border)}
+.result-toolbar button.accent{background:var(--accent);color:#fff;border-color:var(--accent)}
+.result-toolbar button.accent:hover{background:var(--accent2)}
+
+/* Result card (collapsed) */
+.result-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;transition:border-color .15s}
+.result-card.selected{border-color:var(--accent)}
+.result-card-header{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;cursor:pointer;user-select:none}
+.result-card-header:hover{background:var(--hover)}
+.result-card-header .chevron{color:var(--fg3);font-size:10px;transition:transform .15s;margin-top:3px;flex-shrink:0}
+.result-card-header .chevron.open{transform:rotate(90deg)}
+.result-card-header .info{flex:1;min-width:0}
+.result-card-header .title-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.result-card-header .title{font-family:monospace;font-weight:600;font-size:13px}
+.result-card-header .score{color:var(--green);font-size:11px}
+.result-card-header .meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.result-card-header .meta-item{font-size:11px;color:var(--fg3)}
+.result-card-header .snippet{font-size:12px;color:var(--fg2);line-height:1.5}
+.result-card-header .snippet .hl{color:var(--fg);font-weight:500}
+.result-checkbox{width:16px;height:16px;accent-color:var(--accent);margin-top:2px;flex-shrink:0;cursor:pointer}
+.result-detail{border-top:1px solid var(--border);background:var(--bg2);border-radius:0 0 var(--radius) var(--radius);padding:8px 12px}
+
+/* Result sections */
+.result-section{border-bottom:1px solid var(--border)}
+.result-section:last-child{border-bottom:none}
+.result-section-header{padding:6px 0;font-size:11px;color:var(--fg2);text-transform:uppercase;letter-spacing:.5px;cursor:pointer;user-select:none}
+.result-section-header:hover{color:var(--fg)}
+.result-section-body{padding:4px 0 8px}
+.result-section-body.collapsed{display:none}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#555}
+
+/* Empty state */
+.empty{color:var(--fg3);text-align:center;padding:40px;font-size:13px}
+
+/* Relationship graph */
+.fk-link{font-size:12px;padding:2px 0}
+.fk-link .arrow{color:var(--fg3)}
+.fk-link .table-name{color:var(--green);cursor:pointer}
+.fk-link .table-name:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+import {h,render} from 'https://esm.sh/preact@10.25.4';
+import {useState,useEffect,useCallback,useRef} from 'https://esm.sh/preact@10.25.4/hooks';
+import htm from 'https://esm.sh/htm@3.1.1';
+
+const html = htm.bind(h);
+
+const api = {
+  stats: () => fetch('/api/stats').then(r=>r.json()),
+  tables: () => fetch('/api/tables').then(r=>r.json()),
+  table: (name) => fetch(`/api/tables/${name}`).then(r=>r.json()),
+  query: (q) => fetch(`/api/query?q=${encodeURIComponent(q)}`).then(r=>r.json()),
+};
+
+function Chevron({open}) {
+  return html`<span class="chevron ${open?'open':''}">\u25B6</span>`;
+}
+
+function Collapsible({title, children, defaultOpen=true, badge, className=''}) {
+  const [open,setOpen] = useState(defaultOpen);
+  return html`
+    <div class="card ${className}">
+      <div class="card-header" onClick=${()=>setOpen(!open)}>
+        <h3>${title}</h3>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${badge && html`<span class="badge">${badge}</span>`}
+          <${Chevron} open=${open} />
+        </span>
+      </div>
+      ${open && html`<div class="card-body">${children}</div>`}
+    </div>
+  `;
+}
+
+function Stats() {
+  const [stats,setStats] = useState(null);
+  useEffect(()=>{ api.stats().then(setStats) },[]);
+  if(!stats) return html`<div class="empty">Loading...</div>`;
+  const items = [
+    ['Tables',stats.tables],['Columns',stats.columns],['Foreign Keys',stats.foreign_keys],
+    ['State Fields',stats.state_fields],['Categorical',stats.categorical_fields],
+    ['JSONB Paths',stats.jsonb_paths],['Field Values',stats.field_values],
+  ];
+  return html`
+    <div>
+      <h2 style="margin-bottom:16px;font-size:16px;font-weight:600">Overview</h2>
+      <div class="stats-grid">
+        ${items.map(([label,val])=>html`
+          <div class="stat-card" key=${label}>
+            <div class="stat-value">${val?.toLocaleString()}</div>
+            <div class="stat-label">${label}</div>
+          </div>
+        `)}
+      </div>
+    </div>
+  `;
+}
+
+function ColumnRow({col, onNavigate}) {
+  const [showVals,setShowVals] = useState(false);
+  return html`
+    <tr>
+      <td>
+        <span style="font-family:monospace">${col.name}</span>
+        ${col.is_pk && html`<span class="tag tag-pk">PK</span>`}
+        ${col.fk_target && html`<span class="tag tag-fk" onClick=${(e)=>{e.stopPropagation();onNavigate(col.fk_target.split('.')[0])}} style="cursor:pointer">\u2192 ${col.fk_target}</span>`}
+        ${col.is_state && html`<span class="tag tag-state">state</span>`}
+        ${col.is_categoric && !col.is_state && html`<span class="tag tag-cat">cat</span>`}
+      </td>
+      <td><span class="tag-type">${col.type}</span></td>
+      <td>${col.nullable ? html`<span class="tag-null">null</span>` : ''}</td>
+      <td>${col.distinct > 0 ? col.distinct.toLocaleString() : ''}</td>
+      <td>
+        ${col.values?.length > 0 && html`
+          <span style="cursor:pointer;color:var(--accent);font-size:11px" onClick=${()=>setShowVals(!showVals)}>
+            ${showVals ? '\u25BC' : '\u25B6'} ${col.values.length} values
+          </span>
+          ${showVals && html`
+            <div class="values">
+              ${col.values.map(v=>html`<span class="value" key=${v.value}>${v.value}${v.frequency>0?` (${v.frequency})`:''}</span>`)}
+            </div>
+          `}
+        `}
+        ${col.jsonb_paths?.length > 0 && html`
+          <span style="cursor:pointer;color:var(--accent);font-size:11px" onClick=${()=>setShowVals(!showVals)}>
+            ${showVals ? '\u25BC' : '\u25B6'} ${col.jsonb_paths.length} JSONB paths
+          </span>
+          ${showVals && html`
+            <div style="margin-top:4px">
+              ${col.jsonb_paths.map(jp=>html`
+                <div class="jsonb-path" key=${jp.path}>
+                  <span class="path">${jp.path}</span>
+                  <span class="type">${jp.inferred_type}</span>
+                  ${jp.sample_values && html`<span class="samples">{${jp.sample_values}}</span>`}
+                </div>
+              `)}
+            </div>
+          `}
+        `}
+      </td>
+    </tr>
+  `;
+}
+
+function TableDetail({name, onNavigate}) {
+  const [data,setData] = useState(null);
+  useEffect(()=>{ setData(null); api.table(name).then(setData) },[name]);
+  if(!data) return html`<div class="empty">Loading ${name}...</div>`;
+
+  return html`
+    <div>
+      <h2 style="margin-bottom:4px;font-size:16px;font-weight:600">${data.name}</h2>
+      <div style="color:var(--fg2);font-size:12px;margin-bottom:16px">
+        ${data.schema} \u2022 ~${Math.round(data.row_estimate).toLocaleString()} rows \u2022 ${data.columns} columns
+      </div>
+
+      ${data.primary_key?.length > 0 && html`
+        <div style="margin-bottom:12px;font-size:12px">
+          <span style="color:var(--fg2)">PK:</span>
+          <span style="font-family:monospace;margin-left:4px">${data.primary_key.join(', ')}</span>
+        </div>
+      `}
+
+      ${data.foreign_keys?.length > 0 && html`
+        <${Collapsible} title="Relationships" badge=${data.foreign_keys.length} defaultOpen=${false}>
+          <div>
+            ${data.foreign_keys.map((fk,i)=>html`
+              <div class="fk-link" key=${i}>
+                <span style="font-family:monospace">${fk.src_columns}</span>
+                <span class="arrow"> \u2192 </span>
+                <span class="table-name" onClick=${()=>onNavigate(fk.ref_table)}>${fk.ref_table}</span>
+                ${fk.dst_columns !== 'id' && html`<span style="color:var(--fg3)">.${fk.dst_columns}</span>`}
+              </div>
+            `)}
+          </div>
+        <//>
+      `}
+
+      <${Collapsible} title="Columns" badge=${data.columns?.length}>
+        <table>
+          <thead><tr><th>Name</th><th>Type</th><th>Nullable</th><th>Distinct</th><th>Values</th></tr></thead>
+          <tbody>
+            ${data.columns?.map(col=>html`
+              <${ColumnRow} key=${col.name} col=${col} onNavigate=${onNavigate} />
+            `)}
+          </tbody>
+        </table>
+      <//>
+    </div>
+  `;
+}
+
+function Tables({onNavigate}) {
+  const [tables,setTables] = useState([]);
+  const [filter,setFilter] = useState('');
+  useEffect(()=>{ api.tables().then(setTables) },[]);
+  const filtered = tables.filter(t => !filter || t.name.includes(filter.toLowerCase()));
+  return html`
+    <div>
+      <h2 style="margin-bottom:16px;font-size:16px;font-weight:600">Tables (${tables.length})</h2>
+      <table>
+        <thead><tr><th>Table</th><th>Columns</th><th>FKs</th><th>~Rows</th></tr></thead>
+        <tbody>
+          ${filtered.map(t=>html`
+            <tr key=${t.name} onClick=${()=>onNavigate(t.name)} style="cursor:pointer">
+              <td style="font-family:monospace;color:var(--accent)">${t.name}</td>
+              <td>${t.columns}</td>
+              <td>${t.fk_count}</td>
+              <td>${Math.round(t.row_estimate).toLocaleString()}</td>
+            </tr>
+          `)}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function QuerySection({title, children, defaultOpen=false}) {
+  const [open,setOpen] = useState(defaultOpen);
+  if(!children || (Array.isArray(children) && children.length===0)) return null;
+  return html`
+    <div class="result-section">
+      <div class="result-section-header" onClick=${()=>setOpen(!open)}>
+        <${Chevron} open=${open} /> ${title}
+      </div>
+      <div class="result-section-body ${open?'':'collapsed'}">${children}</div>
+    </div>
+  `;
+}
+
+function buildSnippet(table) {
+  const parts = [];
+  // PK
+  if(table.primary_key?.length) parts.push(`PK: ${table.primary_key.join(', ')}`);
+  // FK relationships
+  if(table.foreign_keys?.length) {
+    for(const fk of table.foreign_keys) {
+      parts.push(`${fk.src_columns} \u2192 ${fk.ref_table}`);
+    }
+  }
+  // State/categorical columns with values
+  for(const col of (table.columns||[])) {
+    if(col.values?.length) {
+      const vals = col.values.slice(0,5).map(v=>v.value).join(', ');
+      const extra = col.values.length > 5 ? `, +${col.values.length-5}` : '';
+      parts.push(`${col.name}: {${vals}${extra}}`);
+    }
+  }
+  return parts;
+}
+
+function formatTableText(table) {
+  const lines = [];
+  lines.push(`${table.table_name} (score: ${table.match_score?.toFixed(2) || 0})`);
+  if(table.primary_key?.length) lines.push(`  PK: ${table.primary_key.join(', ')}`);
+  if(table.foreign_keys?.length) {
+    for(const fk of table.foreign_keys) {
+      const dst = fk.dst_columns !== 'id' ? `.${fk.dst_columns}` : '';
+      lines.push(`  ${fk.src_columns} \u2192 ${fk.ref_table}${dst}`);
+    }
+  }
+  lines.push('');
+  for(const col of (table.columns||[])) {
+    let flags = [];
+    if(col.is_pk) flags.push('^');
+    if(col.fk_target) flags.push(`>${col.fk_target}`);
+    if(col.is_state) flags.push('[state]');
+    if(col.is_categoric && !col.is_state) flags.push('[cat]');
+    if(col.nullable) flags.push('?');
+    const flagStr = flags.length ? ' ' + flags.join(' ') : '';
+    lines.push(`  ${col.name} ${col.type}${flagStr}`);
+    if(col.values?.length) {
+      lines.push(`    {${col.values.map(v=>v.value).join(', ')}}`);
+    }
+    if(col.jsonb_paths?.length) {
+      for(const jp of col.jsonb_paths) {
+        let s = `    ${jp.path} ${jp.inferred_type}`;
+        if(jp.sample_values) s += ` {${jp.sample_values}}`;
+        lines.push(s);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+function QueryResultCard({table, selected, onToggle, onNavigate}) {
+  const [open,setOpen] = useState(false);
+  const snippetParts = buildSnippet(table);
+
+  return html`
+    <div class="result-card ${selected ? 'selected' : ''}">
+      <div class="result-card-header" onClick=${()=>setOpen(!open)}>
+        <input type="checkbox" class="result-checkbox" checked=${selected}
+          onClick=${e=>e.stopPropagation()}
+          onChange=${()=>onToggle(table.table_name)} />
+        <span class="chevron ${open?'open':''}">\u25B6</span>
+        <div class="info">
+          <div class="title-row">
+            <span class="title">${table.table_name}</span>
+            ${table.match_score > 0 && html`<span class="score">${table.match_score.toFixed(2)}</span>`}
+          </div>
+          <div class="meta">
+            ${(table.columns||[]).length > 0 && html`<span class="meta-item">${(table.columns||[]).length} cols</span>`}
+            ${(table.foreign_keys||[]).length > 0 && html`<span class="meta-item">${(table.foreign_keys||[]).length} FKs</span>`}
+            ${table.primary_key?.length > 0 && html`<span class="meta-item">PK: ${table.primary_key.join(',')}</span>`}
+          </div>
+          ${!open && snippetParts.length > 0 && html`
+            <div class="snippet">
+              ${snippetParts.slice(0,4).map((p,i)=>html`<span key=${i}><span class="hl">${p}</span>${i < Math.min(snippetParts.length,4)-1 ? ' \u00B7 ' : ''}</span>`)}
+              ${snippetParts.length > 4 && html`<span style="color:var(--fg3)"> +${snippetParts.length-4} more</span>`}
+            </div>
+          `}
+        </div>
+      </div>
+      ${open && html`
+        <div class="result-detail">
+          <${QuerySection} title="Columns (${(table.columns||[]).length})" defaultOpen=${true}>
+            <table>
+              <thead><tr><th>Name</th><th>Type</th><th>Flags</th><th>Values</th></tr></thead>
+              <tbody>
+                ${(table.columns||[]).map(col=>{
+                  const [dv,setDv] = useState(false);
+                  const [dj,setDj] = useState(false);
+                  return html`
+                    <tr key=${col.name}>
+                      <td style="font-family:monospace">${col.name}</td>
+                      <td><span class="tag-type">${col.type}</span></td>
+                      <td>
+                        ${col.is_pk && html`<span class="tag tag-pk">PK</span>`}
+                        ${col.fk_target && html`<span class="tag tag-fk" onClick=${(e)=>{e.stopPropagation();onNavigate(col.fk_target.split('.')[0])}} style="cursor:pointer">\u2192 ${col.fk_target}</span>`}
+                        ${col.is_state && html`<span class="tag tag-state">state</span>`}
+                        ${col.is_categoric && !col.is_state && html`<span class="tag tag-cat">cat</span>`}
+                        ${col.nullable && html`<span class="tag-null">?</span>`}
+                      </td>
+                      <td>
+                        ${col.values?.length > 0 && html`
+                          <span style="cursor:pointer;color:var(--accent);font-size:11px" onClick=${()=>setDv(!dv)}>
+                            ${dv ? '\u25BC' : '\u25B6'} ${col.values.length} values
+                          </span>
+                          ${dv && html`
+                            <div class="values">
+                              ${col.values.map(v=>html`<span class="value" key=${v.value}>${v.value}</span>`)}
+                            </div>
+                          `}
+                        `}
+                        ${col.jsonb_paths?.length > 0 && html`
+                          <span style="cursor:pointer;color:var(--accent);font-size:11px" onClick=${()=>setDj(!dj)}>
+                            ${dj ? '\u25BC' : '\u25B6'} ${col.jsonb_paths.length} paths
+                          </span>
+                          ${dj && html`
+                            <div style="margin-top:4px">
+                              ${col.jsonb_paths.map(jp=>html`
+                                <div class="jsonb-path" key=${jp.path}>
+                                  <span class="path">${jp.path}</span>
+                                  <span class="type">${jp.inferred_type}</span>
+                                  ${jp.sample_values && html`<span class="samples">{${jp.sample_values}}</span>`}
+                                </div>
+                              `)}
+                            </div>
+                          `}
+                        `}
+                      </td>
+                    </tr>
+                  `;
+                })}
+              </tbody>
+            </table>
+          <//>
+
+          ${(table.foreign_keys||[]).length > 0 && html`
+            <${QuerySection} title="Relationships (${table.foreign_keys.length})">
+              ${table.foreign_keys.map((fk,i)=>html`
+                <div class="fk-link" key=${i}>
+                  <span style="font-family:monospace">${fk.src_columns}</span>
+                  <span class="arrow"> \u2192 </span>
+                  <span class="table-name" onClick=${()=>onNavigate(fk.ref_table)}>${fk.ref_table}</span>
+                </div>
+              `)}
+            <//>
+          `}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function Query({onNavigate}) {
+  const [input,setInput] = useState('');
+  const [results,setResults] = useState(null);
+  const [loading,setLoading] = useState(false);
+  const [selected,setSelected] = useState(new Set());
+  const [copied,setCopied] = useState(false);
+  const inputRef = useRef();
+
+  const runQuery = useCallback(async()=>{
+    if(!input.trim()) return;
+    setLoading(true);
+    setCopied(false);
+    try {
+      const data = await api.query(input.trim());
+      setResults(data);
+      // Default: select all matched (score > 0)
+      const s = new Set();
+      for(const t of (data.tables||[])) {
+        if(t.match_score > 0) s.add(t.table_name);
+      }
+      setSelected(s);
+    } finally {
+      setLoading(false);
+    }
+  },[input]);
+
+  const toggleTable = useCallback((name)=>{
+    setSelected(prev=>{
+      const next = new Set(prev);
+      if(next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  },[]);
+
+  const selectAll = useCallback(()=>{
+    if(!results) return;
+    setSelected(new Set(results.tables.map(t=>t.table_name)));
+  },[results]);
+
+  const selectNone = useCallback(()=>setSelected(new Set()),[]);
+
+  const selectMatched = useCallback(()=>{
+    if(!results) return;
+    const s = new Set();
+    for(const t of results.tables) if(t.match_score > 0) s.add(t.table_name);
+    setSelected(s);
+  },[results]);
+
+  const copySelected = useCallback(()=>{
+    if(!results) return;
+    const parts = [];
+    for(const t of results.tables) {
+      if(selected.has(t.table_name)) {
+        parts.push(formatTableText(t));
+      }
+    }
+    const text = parts.join('\n---\n\n');
+    navigator.clipboard.writeText(text).then(()=>{
+      setCopied(true);
+      setTimeout(()=>setCopied(false), 2000);
+    });
+  },[results,selected]);
+
+  useEffect(()=>{ inputRef.current?.focus() },[]);
+
+  const matchCount = results?.tables?.filter(t=>t.match_score>0).length || 0;
+
+  return html`
+    <div>
+      <h2 style="margin-bottom:16px;font-size:16px;font-weight:600">Query</h2>
+      <div class="query-bar">
+        <input ref=${inputRef} type="text" value=${input}
+          onInput=${e=>setInput(e.target.value)}
+          onKeyDown=${e=>{ if(e.key==='Enter') runQuery() }}
+          placeholder="Ask about your database... e.g. 'failed reviews last month'" />
+        <button onClick=${runQuery} disabled=${loading}>
+          ${loading ? 'Searching...' : 'Search'}
+        </button>
+      </div>
+      ${results && html`
+        <div class="result-toolbar">
+          <span class="count">${results.tables?.length || 0} tables (${matchCount} matched) \u00B7 ${selected.size} selected</span>
+          <button onClick=${selectMatched}>Matched</button>
+          <button onClick=${selectAll}>All</button>
+          <button onClick=${selectNone}>None</button>
+          <button class="accent" onClick=${copySelected}>${copied ? 'Copied!' : 'Copy Selected'}</button>
+        </div>
+        ${results.tables?.length === 0 && html`
+          <div class="empty">No tables matched your query.</div>
+        `}
+        ${results.tables?.map(t=>html`
+          <${QueryResultCard} key=${t.table_name} table=${t}
+            selected=${selected.has(t.table_name)}
+            onToggle=${toggleTable}
+            onNavigate=${onNavigate} />
+        `)}
+      `}
+      ${!results && !loading && html`
+        <div class="empty">
+          Enter a natural language query to find relevant tables, columns, and values.
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function App() {
+  const [tab,setTab] = useState('overview');
+  const [tables,setTables] = useState([]);
+  const [selectedTable,setSelectedTable] = useState(null);
+  const [tableFilter,setTableFilter] = useState('');
+
+  useEffect(()=>{ api.tables().then(setTables) },[]);
+
+  const navigateTo = useCallback((name)=>{
+    setTab('table');
+    setSelectedTable(name);
+  },[]);
+
+  const filteredTables = tables.filter(t => !tableFilter || t.name.includes(tableFilter.toLowerCase()));
+
+  return html`
+    <div class="app">
+      <div class="titlebar">
+        <span class="icon">dbctx</span>
+        <span>\u2014</span>
+        <span>Database Context Explorer</span>
+      </div>
+      <div class="tabs">
+        <div class="tab ${tab==='overview'?'active':''}" onClick=${()=>setTab('overview')}>Overview</div>
+        <div class="tab ${tab==='tables'?'active':''}" onClick=${()=>setTab('tables')}>Tables</div>
+        <div class="tab ${tab==='table'?'active':''}" onClick=${()=>setTab('table')}>${selectedTable||'Table'}</div>
+        <div class="tab ${tab==='query'?'active':''}" onClick=${()=>setTab('query')}>Query</div>
+      </div>
+      <div class="main">
+        <div class="sidebar">
+          <div class="sidebar-filter">
+            <input type="text" placeholder="Filter tables..." value=${tableFilter} onInput=${e=>setTableFilter(e.target.value)} />
+          </div>
+          <div class="sidebar-section">Tables (${filteredTables.length})</div>
+          ${filteredTables.map(t=>html`
+            <div key=${t.name}
+              class="sidebar-item ${selectedTable===t.name && tab==='table' ? 'active' : ''}"
+              onClick=${()=>navigateTo(t.name)}>
+              <span style="font-family:monospace;font-size:11px">${t.name}</span>
+              <span class="badge">${t.columns}</span>
+            </div>
+          `)}
+        </div>
+        <div class="content">
+          ${tab==='overview' && html`<${Stats} />`}
+          ${tab==='tables' && html`<${Tables} onNavigate=${navigateTo} />`}
+          ${tab==='table' && selectedTable && html`<${TableDetail} key=${selectedTable} name=${selectedTable} onNavigate=${navigateTo} />`}
+          ${tab==='table' && !selectedTable && html`<div class="empty">Select a table from the sidebar.</div>`}
+          ${tab==='query' && html`<${Query} onNavigate=${navigateTo} />`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+render(html`<${App} />`, document.getElementById('app'));
+</script>
+</body>
+</html>

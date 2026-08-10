@@ -9,53 +9,53 @@ import (
 )
 
 type MatchResult struct {
-	TableName string
-	Score     float64
-	Source    string
+	TableName string  `json:"table_name"`
+	Score     float64 `json:"score"`
+	Source    string  `json:"source"`
 }
 
 type TableContext struct {
-	TableName   string
-	Schema      string
-	Columns     []ColumnInfo
-	PrimaryKey  []string
-	ForeignKeys []FKInfo
-	IsMatch     bool
-	MatchScore  float64
+	TableName   string       `json:"table_name"`
+	Schema      string       `json:"schema"`
+	Columns     []ColumnInfo `json:"columns"`
+	PrimaryKey  []string     `json:"primary_key"`
+	ForeignKeys []FKInfo      `json:"foreign_keys"`
+	IsMatch     bool         `json:"is_match"`
+	MatchScore  float64      `json:"match_score"`
 }
 
 type ColumnInfo struct {
-	Name        string
-	Type        string
-	Nullable    bool
-	IsPK        bool
-	FKTarget    string
-	IsState     bool
-	IsCategoric bool
-	Values      []ValueInfo
-	JSONBPaths  []JSONBPathInfo
+	Name        string          `json:"name"`
+	Type        string          `json:"type"`
+	Nullable    bool            `json:"nullable"`
+	IsPK        bool            `json:"is_pk"`
+	FKTarget    string          `json:"fk_target,omitempty"`
+	IsState     bool            `json:"is_state"`
+	IsCategoric bool            `json:"is_categoric"`
+	Values      []ValueInfo     `json:"values,omitempty"`
+	JSONBPaths  []JSONBPathInfo `json:"jsonb_paths,omitempty"`
 }
 
 type ValueInfo struct {
-	Value     string
-	Frequency int
+	Value     string `json:"value"`
+	Frequency int    `json:"frequency"`
 }
 
 type JSONBPathInfo struct {
-	Path         string
-	InferredType string
-	SampleValues string
+	Path         string `json:"path"`
+	InferredType string `json:"inferred_type"`
+	SampleValues string `json:"sample_values,omitempty"`
 }
 
 type FKInfo struct {
-	SrcColumns string
-	RefTable   string
-	DstColumns string
+	SrcColumns string `json:"src_columns"`
+	RefTable   string `json:"ref_table"`
+	DstColumns string `json:"dst_columns"`
 }
 
 type SearchResult struct {
-	Tables []TableContext
-	Query  string
+	Tables []TableContext `json:"tables"`
+	Query  string         `json:"query"`
 }
 
 func PopulateFTS(store *db.Store) error {
