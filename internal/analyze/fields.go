@@ -150,6 +150,13 @@ func AnalyzeFields(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, 
 
 	fmt.Fprintf(os.Stderr, "  Processing %d tables...\n", len(ext.Tables))
 
+	// Wrap all writes in a single transaction
+	tx, err := store.DB().Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	for _, table := range ext.Tables {
 		cols := ext.Columns[table.OID]
 		if len(cols) == 0 {
@@ -158,7 +165,7 @@ func AnalyzeFields(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, 
 
 		for _, col := range cols {
 			var columnID int
-			err := store.DB().QueryRow(
+			err := tx.QueryRow(
 				"SELECT id FROM columns WHERE table_id = (SELECT id FROM tables WHERE schema = ? AND name = ?) AND name = ?",
 				table.Schema, table.Name, col.Name,
 			).Scan(&columnID)
@@ -183,7 +190,7 @@ func AnalyzeFields(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, 
 			isState := isStateLikeName(col.Name)
 			isCategorical := distinct > 0 && distinct <= 50
 
-			_, err = store.DB().Exec(
+			_, err = tx.Exec(
 				`INSERT INTO field_stats (column_id, distinct_count, null_count, is_state_like, is_categorical)
 				 VALUES (?, ?, ?, ?, ?)`,
 				columnID, distinct, int(nullFrac*100), isState && distinct <= 20, isCategorical,
@@ -205,7 +212,7 @@ func AnalyzeFields(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, 
 					if i < len(freqs) {
 						freq = int(freqs[i] * 1000) // as permille
 					}
-					store.DB().Exec(
+					tx.Exec(
 						`INSERT OR IGNORE INTO field_values (column_id, value, frequency) VALUES (?, ?, ?)`,
 						columnID, val, freq,
 					)
@@ -213,5 +220,5 @@ func AnalyzeFields(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, 
 			}
 		}
 	}
-	return nil
+	return tx.Commit()
 }

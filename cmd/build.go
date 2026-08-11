@@ -11,6 +11,7 @@ import (
 	"github.com/shrsv/dbctx/internal/analyze"
 	"github.com/shrsv/dbctx/internal/db"
 	"github.com/shrsv/dbctx/internal/schema"
+	"golang.org/x/sync/errgroup"
 )
 
 var buildCmd = &cobra.Command{
@@ -43,9 +44,9 @@ var buildCmd = &cobra.Command{
 		totalStart := time.Now()
 		var phaseStart time.Time
 
-		// Connect to PostgreSQL
+		// Connect to PostgreSQL (pool with 4 connections for parallel analysis)
 		fmt.Fprintf(os.Stderr, "Connecting to PostgreSQL...\n")
-		pg, err := db.Connect(ctx, dsn)
+		pg, err := db.ConnectWithMaxConns(ctx, dsn, 4)
 		if err != nil {
 			return err
 		}
@@ -76,19 +77,18 @@ var buildCmd = &cobra.Command{
 		fmt.Fprintf(os.Stderr, "  %d tables, %d constraints (%s)\n",
 			len(ext.Tables), len(ext.Constraints), time.Since(phaseStart).Round(time.Millisecond))
 
-		// Phase 2: Field analysis (uses pg_stats only — no table scans)
+		// Phase 2+3: Field analysis + JSONB analysis (concurrent)
 		phaseStart = time.Now()
-		fmt.Fprintf(os.Stderr, "2/4 Analyzing fields...\n")
-		if err := analyze.AnalyzeFields(ctx, pg, ext, store, schemas); err != nil {
-			return fmt.Errorf("field analysis: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "  done (%s)\n", time.Since(phaseStart).Round(time.Millisecond))
-
-		// Phase 3: JSONB analysis (uses TABLESAMPLE for large tables)
-		phaseStart = time.Now()
-		fmt.Fprintf(os.Stderr, "3/4 Analyzing JSONB fields...\n")
-		if err := analyze.AnalyzeJSONB(ctx, pg, ext, store); err != nil {
-			return fmt.Errorf("jsonb analysis: %w", err)
+		fmt.Fprintf(os.Stderr, "2/4 Analyzing fields + JSONB (concurrent)...\n")
+		g, gctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			return analyze.AnalyzeFields(gctx, pg, ext, store, schemas)
+		})
+		g.Go(func() error {
+			return analyze.AnalyzeJSONB(gctx, pg, ext, store)
+		})
+		if err := g.Wait(); err != nil {
+			return fmt.Errorf("analysis: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "  done (%s)\n", time.Since(phaseStart).Round(time.Millisecond))
 

@@ -450,10 +450,6 @@ func TestOpen(t *testing.T) {
 	}
 	defer idx2.Close()
 
-	// Open doesn't close the ready channel (Build does that),
-	// so we need to close it manually for the test.
-	close(idx2.ready)
-
 	// Should be able to query
 	tables, err := idx2.Tables()
 	if err != nil {

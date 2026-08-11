@@ -110,17 +110,18 @@ Real-world numbers against a production PostgreSQL database with **60 tables, 75
 ### Full build
 
 ```text
-Phase          Duration     Share
-─────────────────────────────────
-Connect          1.3s       0.9%
-Schema          18.8s      13.6%
-Store            0.0s      0.0%
-Fields          32.8s      23.7%
-JSONB           1m25s      61.8%
-FTS              0.0s      0.0%
-─────────────────────────────────
-Total          ~1m15s        100%
+Phase              Duration     Share
+──────────────────────────────────────────
+Connect              0.3ms      0.0%
+Schema               2.5s      21.0%
+Store                13ms      0.1%
+Fields + JSONB ∥     9.3s      78.5%  (concurrent: 4 PG conns + 4 workers)
+FTS                  48ms      0.4%
+──────────────────────────────────────────
+Total               ~11.4s        100%
 ```
+
+Fields and JSONB analysis run concurrently via a connection pool (`pgxpool`, 4 connections) and a worker pool (4 goroutines). SQLite writes are batched in transactions.
 
 The `.dtx` file is **448 KB** for this database.
 
@@ -129,32 +130,32 @@ The `.dtx` file is **448 KB** for this database.
 ```text
 Query                          Duration    Matched    Text render
 ──────────────────────────────────────────────────────────────────
-"id"                              130ms     11 tables      122µs
-"reviews"                          88ms      7 tables       99µs
-"failed reviews last month"       116ms     11 tables       98µs
-"revews" (fuzzy)                   83ms      6 tables       68µs
+"id"                              138ms     11 tables      270µs
+"reviews"                          76ms      7 tables       47µs
+"failed reviews last month"       105ms     11 tables      615µs
+"revews" (fuzzy)                   81ms      6 tables       90µs
 "nonexistent_xyz" (no match)        2ms      0 tables        2µs
 ```
 
-### Library benchmarks (in-memory, 4-table fixture)
+### Library benchmarks (in-memory, 4-table fixture, 3-run average)
 
 ```text
-BenchmarkQuery_Short         ~696 µs/op     38 KB/op
-BenchmarkQuery_Medium        ~878 µs/op     41 KB/op
-BenchmarkQuery_Fuzzy         ~675 µs/op     38 KB/op
+BenchmarkQuery_Short         ~816 µs/op     38 KB/op
+BenchmarkQuery_Medium        ~854 µs/op     41 KB/op
+BenchmarkQuery_Fuzzy         ~660 µs/op     38 KB/op
 BenchmarkMatchedText         ~4.4 µs/op    3.4 KB/op
 BenchmarkMatchedTextRaw      ~3.9 µs/op    2.4 KB/op
 BenchmarkAllText             ~7.8 µs/op    5.9 KB/op
-BenchmarkReport              ~370 µs/op     14 KB/op
+BenchmarkReport              ~378 µs/op     14 KB/op
 BenchmarkTables               ~28 µs/op    1.7 KB/op
-BenchmarkTableDetail         ~144 µs/op     11 KB/op
+BenchmarkTableDetail         ~147 µs/op     11 KB/op
 BenchmarkStats                ~33 µs/op    3.2 KB/op
 ```
 
 Key takeaways:
 
-* **Query + text rendering** completes in **~100ms** for a real 60-table database — fast enough for interactive use
-* **Build** takes ~75 seconds, dominated by JSONB sampling (61.8% of time); field analysis via `pg_stats` adds ~33s with zero table scans
+* **Full build** completes in **~11 seconds** for a real 60-table database
+* **Query + text rendering** completes in **~100ms** — fast enough for interactive use
 * **Text rendering** itself is sub-millisecond — the FTS query dominates latency
 * **Fuzzy search** adds negligible overhead over exact match
 * The resulting `.dtx` is **448 KB** — small enough to ship, cache, or embed
