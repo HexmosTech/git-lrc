@@ -82,7 +82,6 @@ func getStatsFromPG(ctx context.Context, pg *db.PG, schemas string) ([]pgStatRow
 	return stats, rows.Err()
 }
 
-// parsePGArray parses a PostgreSQL array literal like {a,b,c} into a slice
 func parsePGArray(s string) []string {
 	s = strings.TrimSpace(s)
 	if s == "" || s == "{}" {
@@ -119,13 +118,12 @@ func parsePGArray(s string) []string {
 	return result
 }
 
-// parseFloats parses a PostgreSQL float array like {0.1,0.2,0.3}
 func parseFloats(s string) []float64 {
 	s = strings.TrimSpace(s)
 	if s == "" || s == "{}" {
 		return nil
 	}
-	s = s[1 : len(s)-1] // strip braces
+	s = s[1 : len(s)-1]
 	var result []float64
 	for _, part := range strings.Split(s, ",") {
 		var f float64
@@ -150,7 +148,6 @@ func AnalyzeFields(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, 
 
 	fmt.Fprintf(os.Stderr, "  Processing %d tables...\n", len(ext.Tables))
 
-	// Wrap all writes in a single transaction
 	tx, err := store.DB().Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -199,8 +196,6 @@ func AnalyzeFields(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, 
 				return fmt.Errorf("insert field_stats: %w", err)
 			}
 
-			// Use pg_stats most_common_vals + most_common_freqs for values.
-			// This avoids any table scan — stats are pre-computed by ANALYZE.
 			if hasStats && st.MostCommonVals != "" {
 				vals := parsePGArray(st.MostCommonVals)
 				freqs := parseFloats(st.MostCommonFreqs)
@@ -210,7 +205,7 @@ func AnalyzeFields(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, 
 					}
 					freq := 0
 					if i < len(freqs) {
-						freq = int(freqs[i] * 1000) // as permille
+						freq = int(freqs[i] * 1000)
 					}
 					tx.Exec(
 						`INSERT OR IGNORE INTO field_values (column_id, value, frequency) VALUES (?, ?, ?)`,

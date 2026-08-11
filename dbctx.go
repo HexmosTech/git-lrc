@@ -89,7 +89,6 @@ import (
 	"github.com/shrsv/dbctx/internal/report"
 	"github.com/shrsv/dbctx/internal/schema"
 	"github.com/shrsv/dbctx/internal/search"
-	"golang.org/x/sync/errgroup"
 )
 
 // Index is a compiled database context index. It provides methods to query
@@ -191,18 +190,18 @@ func Build(ctx context.Context, dsn string, opts *Options) (*Index, error) {
 	}
 	fmt.Fprintf(log, "  %d tables, %d constraints\n", len(ext.Tables), len(ext.Constraints))
 
-	// Phase 2+3: Field analysis + JSONB analysis (concurrent)
-	fmt.Fprintf(log, "2/4 Analyzing fields + JSONB (concurrent)...\n")
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return analyze.AnalyzeFields(gctx, pg, ext, store, schemas)
-	})
-	g.Go(func() error {
-		return analyze.AnalyzeJSONB(gctx, pg, ext, store)
-	})
-	if err := g.Wait(); err != nil {
+	// Phase 2: Field analysis
+	fmt.Fprintf(log, "2/4 Analyzing fields...\n")
+	if err := analyze.AnalyzeFields(ctx, pg, ext, store, schemas); err != nil {
 		store.Close()
-		return nil, fmt.Errorf("analysis: %w", err)
+		return nil, fmt.Errorf("field analysis: %w", err)
+	}
+
+	// Phase 3: JSONB analysis
+	fmt.Fprintf(log, "3/4 Analyzing JSONB fields...\n")
+	if err := analyze.AnalyzeJSONB(ctx, pg, ext, store); err != nil {
+		store.Close()
+		return nil, fmt.Errorf("jsonb analysis: %w", err)
 	}
 
 	// Phase 4: Build search index
@@ -314,17 +313,17 @@ func BuildAsync(ctx context.Context, dsn string, opts *Options) (*Index, <-chan 
 		}
 		fmt.Fprintf(log, "  %d tables, %d constraints\n", len(ext.Tables), len(ext.Constraints))
 
-		fmt.Fprintf(log, "2/4 Analyzing fields + JSONB (concurrent)...\n")
-		g, gctx := errgroup.WithContext(ctx)
-		g.Go(func() error {
-			return analyze.AnalyzeFields(gctx, pg, ext, store, schemas)
-		})
-		g.Go(func() error {
-			return analyze.AnalyzeJSONB(gctx, pg, ext, store)
-		})
-		if err := g.Wait(); err != nil {
+		fmt.Fprintf(log, "2/4 Analyzing fields...\n")
+		if err := analyze.AnalyzeFields(ctx, pg, ext, store, schemas); err != nil {
 			store.Close()
-			idx.err = fmt.Errorf("analysis: %w", err)
+			idx.err = fmt.Errorf("field analysis: %w", err)
+			return
+		}
+
+		fmt.Fprintf(log, "3/4 Analyzing JSONB fields...\n")
+		if err := analyze.AnalyzeJSONB(ctx, pg, ext, store); err != nil {
+			store.Close()
+			idx.err = fmt.Errorf("jsonb analysis: %w", err)
 			return
 		}
 

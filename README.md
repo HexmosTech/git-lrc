@@ -112,16 +112,17 @@ Real-world numbers against a production PostgreSQL database with **60 tables, 75
 ```text
 Phase              Duration     Share
 ──────────────────────────────────────────
-Connect              0.3ms      0.0%
-Schema               2.5s      21.0%
-Store                13ms      0.1%
-Fields + JSONB ∥     9.3s      78.5%  (concurrent: 4 PG conns + 4 workers)
-FTS                  48ms      0.4%
+Connect              0.1ms      0.0%
+Schema               2.5s      20.2%
+Store                11ms      0.1%
+Fields               3.2s      26.2%
+JSONB                6.5s      53.1%  (4 workers, connection pool)
+FTS                  49ms      0.4%
 ──────────────────────────────────────────
-Total               ~11.4s        100%
+Total               ~12s          100%
 ```
 
-Fields and JSONB analysis run concurrently via a connection pool (`pgxpool`, 4 connections) and a worker pool (4 goroutines). SQLite writes are batched in transactions.
+JSONB analysis uses a connection pool (`pgxpool`, 4 connections) and a worker pool (4 goroutines) for parallel PostgreSQL queries. SQLite writes are batched in transactions.
 
 The `.dtx` file is **448 KB** for this database.
 
@@ -154,7 +155,7 @@ BenchmarkStats                ~33 µs/op    3.2 KB/op
 
 Key takeaways:
 
-* **Full build** completes in **~11 seconds** for a real 60-table database
+* **Full build** completes in **~12 seconds** for a real 60-table database
 * **Query + text rendering** completes in **~100ms** — fast enough for interactive use
 * **Text rendering** itself is sub-millisecond — the FTS query dominates latency
 * **Fuzzy search** adds negligible overhead over exact match

@@ -63,9 +63,8 @@ func inferType(val interface{}) string {
 // sampleQuery returns a SQL expression that samples rows efficiently.
 // For small tables (< threshold), it just does LIMIT.
 // For large tables, it uses TABLESAMPLE BERNOULLI to avoid full scans.
-// Always caps at `limit` rows and filters out oversized JSONB values.
+// Always caps at limit rows and filters out oversized JSONB values.
 func sampleQuery(colExpr, tblName, whereClause string, rowEstimate float64, limit int) string {
-	// Cap individual value size to 10KB to avoid transferring massive JSONB blobs
 	sizeFilter := fmt.Sprintf("octet_length(%s::text) < 10240", colExpr)
 	if whereClause == "" {
 		whereClause = "WHERE " + sizeFilter
@@ -74,7 +73,7 @@ func sampleQuery(colExpr, tblName, whereClause string, rowEstimate float64, limi
 	}
 
 	if rowEstimate < 5000 || rowEstimate == 0 {
-		return fmt.Sprintf(`SELECT %s FROM %s %s LIMIT %d`, colExpr, tblName, whereClause, limit)
+		return fmt.Sprintf("SELECT %s FROM %s %s LIMIT %d", colExpr, tblName, whereClause, limit)
 	}
 	pct := 1.0
 	if rowEstimate > 100000 {
@@ -85,37 +84,30 @@ func sampleQuery(colExpr, tblName, whereClause string, rowEstimate float64, limi
 		pct = 0.5
 	}
 	return fmt.Sprintf(
-		`SELECT %s FROM %s TABLESAMPLE BERNOULLI(%.2f) %s LIMIT %d`,
+		"SELECT %s FROM %s TABLESAMPLE BERNOULLI(%.2f) %s LIMIT %d",
 		colExpr, tblName, pct, whereClause, limit,
 	)
 }
 
-// jsonbTask represents a single table's JSONB analysis work.
 type jsonbTask struct {
-	Table       schema.Table
-	Cols        []schema.Column
-	ColumnIDs   map[string]int // colName -> columnID
+	Table     schema.Table
+	Cols      []schema.Column
+	ColumnIDs map[string]int
 }
 
-// jsonbResult holds the analysis results for one JSONB column.
 type jsonbResult struct {
 	ColumnID int
 	Paths    []jsonbPathEntry
 }
 
 type jsonbPathEntry struct {
-	Path         string
-	InferredType string
+	Path          string
+	InferredType  string
 	DistinctCount int
-	SampleValues string
+	SampleValues  string
 }
 
-// jsonbWorker processes JSONB tables concurrently. Each worker pulls tasks
-// from the work channel, queries PostgreSQL for JSONB samples, and sends
-// results to the results channel. SQLite writes are handled by a separate
-// goroutine to avoid contention.
 func AnalyzeJSONB(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, store *db.Store) error {
-	// Collect all JSONB-bearing tables with their column IDs
 	var tasks []jsonbTask
 	for _, table := range ext.Tables {
 		cols := ext.Columns[table.OID]
@@ -131,7 +123,6 @@ func AnalyzeJSONB(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, s
 			continue
 		}
 
-		// Look up column IDs from SQLite (must happen before workers start)
 		colIDs := make(map[string]int)
 		for _, col := range cols {
 			dt := strings.ToLower(col.DataType)
@@ -162,22 +153,19 @@ func AnalyzeJSONB(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, s
 		return nil
 	}
 
-	// Determine worker count (cap at number of tasks)
 	numWorkers := 4
 	if len(tasks) < numWorkers {
 		numWorkers = len(tasks)
 	}
 
-	// Results channel: workers send results, writer goroutine consumes them
 	results := make(chan jsonbResult, numWorkers*2)
 
-	// Start writer goroutine (serializes all SQLite writes)
+	// Writer goroutine: owns a single SQLite transaction for all JSONB writes
 	var writeErr error
 	var writeWg sync.WaitGroup
 	writeWg.Add(1)
 	go func() {
 		defer writeWg.Done()
-		// Open a single transaction for all writes
 		tx, err := store.DB().Begin()
 		if err != nil {
 			writeErr = fmt.Errorf("begin jsonb tx: %w", err)
@@ -188,8 +176,7 @@ func AnalyzeJSONB(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, s
 		for result := range results {
 			for _, entry := range result.Paths {
 				tx.Exec(
-					`INSERT OR REPLACE INTO jsonb_paths (column_id, path, inferred_type, distinct_count, sample_values)
-					 VALUES (?, ?, ?, ?, ?)`,
+					"INSERT OR REPLACE INTO jsonb_paths (column_id, path, inferred_type, distinct_count, sample_values) VALUES (?, ?, ?, ?, ?)",
 					result.ColumnID, entry.Path, entry.InferredType, entry.DistinctCount, entry.SampleValues,
 				)
 			}
@@ -200,7 +187,6 @@ func AnalyzeJSONB(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, s
 		}
 	}()
 
-	// Start workers
 	work := make(chan jsonbTask, numWorkers)
 	var wg sync.WaitGroup
 
@@ -214,24 +200,19 @@ func AnalyzeJSONB(ctx context.Context, pg *db.PG, ext *schema.ExtractedSchema, s
 		}()
 	}
 
-	// Send tasks
 	for _, task := range tasks {
 		work <- task
 	}
 	close(work)
 
-	// Wait for workers, then close results channel
 	wg.Wait()
 	close(results)
 
-	// Wait for writer
 	writeWg.Wait()
 
 	return writeErr
 }
 
-// processJSONBTask analyzes all JSONB columns in a single table and sends
-// results to the results channel.
 func processJSONBTask(ctx context.Context, pg *db.PG, task jsonbTask, results chan<- jsonbResult) {
 	tblName := schema.QuoteIdent(task.Table.Name)
 	if task.Table.Schema != "public" {
@@ -278,7 +259,6 @@ func processJSONBTask(ctx context.Context, pg *db.PG, task jsonbTask, results ch
 		}
 		rows.Close()
 
-		// Build path entries
 		paths := make([]string, 0, len(pathTypes))
 		for p := range pathTypes {
 			paths = append(paths, p)

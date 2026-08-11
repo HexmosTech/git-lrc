@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -11,7 +13,6 @@ import (
 	"github.com/shrsv/dbctx/internal/analyze"
 	"github.com/shrsv/dbctx/internal/db"
 	"github.com/shrsv/dbctx/internal/schema"
-	"golang.org/x/sync/errgroup"
 )
 
 var buildCmd = &cobra.Command{
@@ -22,6 +23,7 @@ var buildCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		output, _ := cmd.Flags().GetString("output")
 		schemas, _ := cmd.Flags().GetString("schemas")
+		overwrite, _ := cmd.Flags().GetBool("overwrite")
 
 		// Get DSN
 		dsn := ""
@@ -38,6 +40,31 @@ var buildCmd = &cobra.Command{
 
 		if output == "" {
 			output = "dbctx.dtx"
+		}
+
+		// Handle existing file
+		if _, err := os.Stat(output); err == nil {
+			if overwrite {
+				if err := os.Remove(output); err != nil {
+					return fmt.Errorf("remove existing %s: %w", output, err)
+				}
+			} else {
+				// Check if stdin is a terminal
+				if !isTerminal() {
+					return fmt.Errorf("%s already exists; use --overwrite to replace it", output)
+				}
+				fmt.Fprintf(os.Stderr, "%s already exists. Overwrite? [y/N] ", output)
+				reader := bufio.NewReader(os.Stdin)
+				answer, _ := reader.ReadString('\n')
+				answer = strings.TrimSpace(strings.ToLower(answer))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+				if err := os.Remove(output); err != nil {
+					return fmt.Errorf("remove existing %s: %w", output, err)
+				}
+			}
 		}
 
 		ctx := context.Background()
@@ -77,19 +104,21 @@ var buildCmd = &cobra.Command{
 		fmt.Fprintf(os.Stderr, "  %d tables, %d constraints (%s)\n",
 			len(ext.Tables), len(ext.Constraints), time.Since(phaseStart).Round(time.Millisecond))
 
-		// Phase 2+3: Field analysis + JSONB analysis (concurrent)
+		// Phase 2: Field analysis
 		phaseStart = time.Now()
-		fmt.Fprintf(os.Stderr, "2/4 Analyzing fields + JSONB (concurrent)...\n")
-		g, gctx := errgroup.WithContext(ctx)
-		g.Go(func() error {
-			return analyze.AnalyzeFields(gctx, pg, ext, store, schemas)
-		})
-		g.Go(func() error {
-			return analyze.AnalyzeJSONB(gctx, pg, ext, store)
-		})
-		if err := g.Wait(); err != nil {
-			return fmt.Errorf("analysis: %w", err)
+		fmt.Fprintf(os.Stderr, "2/4 Analyzing fields...\n")
+		if err := analyze.AnalyzeFields(ctx, pg, ext, store, schemas); err != nil {
+			return fmt.Errorf("field analysis: %w", err)
 		}
+		fmt.Fprintf(os.Stderr, "  done (%s)\n", time.Since(phaseStart).Round(time.Millisecond))
+
+		// Phase 3: JSONB analysis
+		phaseStart = time.Now()
+		fmt.Fprintf(os.Stderr, "3/4 Analyzing JSONB fields...\n")
+		if err := analyze.AnalyzeJSONB(ctx, pg, ext, store); err != nil {
+			return fmt.Errorf("jsonb analysis: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "  done (%s)\n", time.Since(phaseStart).Round(time.Millisecond))
 		fmt.Fprintf(os.Stderr, "  done (%s)\n", time.Since(phaseStart).Round(time.Millisecond))
 
 		// Phase 4: Build FTS index
@@ -112,7 +141,16 @@ var buildCmd = &cobra.Command{
 func init() {
 	buildCmd.Flags().StringP("output", "o", "", "Output .dtx file path (default: dbctx.dtx)")
 	buildCmd.Flags().StringP("schemas", "s", "public", "Comma-separated PostgreSQL schemas to extract")
+	buildCmd.Flags().Bool("overwrite", false, "Overwrite existing .dtx file without prompting")
 	rootCmd.AddCommand(buildCmd)
+}
+
+func isTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func storeSchema(store *db.Store, ext *schema.ExtractedSchema) error {
