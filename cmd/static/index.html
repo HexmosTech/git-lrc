@@ -543,13 +543,21 @@ function Query({onNavigate}) {
 
   const copySelected = useCallback(()=>{
     if(!results) return;
-    const parts = [];
+    const legend = `--- notation ---
+PK: primary key           col \u2192 table  foreign key
+^  is primary key         ?  nullable   >target  FK target
+[state] state-like categorical (< 100 distinct values)
+[cat]   categorical field
+{a, b, c}  representative values (from pg_stats)
+$.path  type  {samples}  JSONB path with inferred type
+(score: X.XX)  relevance score from query matching`;
+    const parts = [legend];
     for(const t of results.tables) {
       if(selected.has(t.table_name)) {
         parts.push(formatTableText(t));
       }
     }
-    const text = parts.join('\n---\n\n');
+    const text = parts.join('\n\n');
     navigator.clipboard.writeText(text).then(()=>{
       setCopied(true);
       setTimeout(()=>setCopied(false), 2000);
