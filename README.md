@@ -1460,4 +1460,4 @@ are especially welcome.
 
 ## License
 
-[License to be decided]
+MIT License. See [LICENSE](LICENSE) for details.
