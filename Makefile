@@ -1,4 +1,4 @@
-.PHONY: all build install clean reindex query report ui doc test test-short test-cover test-integration
+.PHONY: all build install clean reindex query report ui doc test test-short test-cover test-integration bench
 
 BINARY=dbctx
 INSTALL_DIR=$(HOME)/go/bin
@@ -49,4 +49,7 @@ test-cover:
 	go tool cover -func=coverage.out
 
 test-integration:
-	go test -tags integration . -v -count=1 -timeout 120s
+	go test -tags integration . -v -count=1 -timeout 300s
+
+bench:
+	go test -bench=Benchmark -benchmem -run=^$ -count=1 .

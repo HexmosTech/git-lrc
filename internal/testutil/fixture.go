@@ -228,22 +228,22 @@ func seedJSONBPaths(store *db.Store, colIDs map[string]int64) {
 // schema, field data, and JSONB paths. Does NOT build the FTS index —
 // call search.PopulateFTS separately if needed (avoids import cycle for
 // search package tests).
-func NewSeedStore(t *testing.T) *db.Store {
-	t.Helper()
+func NewSeedStore(tb testing.TB) *db.Store {
+	tb.Helper()
 
 	store, err := db.OpenStore("")
 	if err != nil {
-		t.Fatalf("open store: %v", err)
+		tb.Fatalf("open store: %v", err)
 	}
-	t.Cleanup(func() { store.Close() })
+	tb.Cleanup(func() { store.Close() })
 
 	if err := store.InitSchema(); err != nil {
-		t.Fatalf("init schema: %v", err)
+		tb.Fatalf("init schema: %v", err)
 	}
 
 	ext := FixtureSchema()
 	if err := SeedStore(store, ext); err != nil {
-		t.Fatalf("seed store: %v", err)
+		tb.Fatalf("seed store: %v", err)
 	}
 
 	return store
@@ -257,17 +257,17 @@ func NewSeedStore(t *testing.T) *db.Store {
 // This function accepts a populateFTS function to avoid importing the
 // search package at the testutil level (which would create an import cycle
 // when search tests import testutil).
-func NewTestStore(t *testing.T, populateFTS func(*db.Store) error) *db.Store {
-	t.Helper()
+func NewTestStore(tb testing.TB, populateFTS func(*db.Store) error) *db.Store {
+	tb.Helper()
 
-	store := NewSeedStore(t)
+	store := NewSeedStore(tb)
 
 	if err := store.InitFTS(); err != nil {
-		t.Fatalf("init fts: %v", err)
+		tb.Fatalf("init fts: %v", err)
 	}
 
 	if err := populateFTS(store); err != nil {
-		t.Fatalf("populate fts: %v", err)
+		tb.Fatalf("populate fts: %v", err)
 	}
 
 	return store

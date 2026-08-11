@@ -44,6 +44,7 @@ To add new test scenarios, extend `FixtureSchema()` or create additional seed da
 - Store operations: seed with `testutil.NewSeedStore(t)`, verify reads
 - HTTP handlers: use `net/http/httptest` with seeded store
 - Text rendering: verify output contains expected substrings
+- Benchmarks: use `*testing.B` with `testutil.NewTestStore(b, search.PopulateFTS)`
 
 ### What NOT to test
 
@@ -61,3 +62,11 @@ make test-integration
 ```
 
 These test the full `Build()` pipeline against real PostgreSQL. They are not run in CI by default.
+
+## Performance tests
+
+- `dbctx_bench_test.go` — benchmarks for Query, Text(), Report, Tables, TableDetail, Stats (uses in-memory fixture)
+- `dbctx_perf_test.go` — integration tests that time each build phase and query types against real PostgreSQL
+
+Run benchmarks: `go test -bench=Benchmark -benchmem -run=^$ .`
+Run perf tests: `source .env.prod && DATABASE_URL="$DATABASE_URL" go test -tags integration -run='TestIntegration_Perf' -v .`
