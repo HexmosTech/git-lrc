@@ -142,18 +142,30 @@ func main() {
     }
 
     // Get compact schema for matched tables only — ready for an LLM prompt
-    fmt.Println(result.Matched().Text())
+    fmt.Println(result.Matched().Text())         // includes notation legend
 
     // Or refine the selection
     fmt.Println(result.All().Text())                             // all tables
     fmt.Println(result.Include("reviews", "orgs").Text())        // specific tables
     fmt.Println(result.Matched().Exclude("migrations").Text())   // matched minus one
+
+    // Use TextRaw() to omit the legend (tighter token budget)
+    fmt.Println(result.Matched().TextRaw())
 }
 ```
 
-The `Text()` output is a compact, LLM-ready representation:
+The `Text()` output is a compact, LLM-ready representation with a notation legend:
 
 ```text
+--- notation ---
+PK: primary key           col → table  foreign key
+^  is primary key         ?  nullable   >target  FK target
+[state] state-like categorical (< 100 distinct values)
+[cat]   categorical field
+{a, b, c}  representative values (from pg_stats)
+$.path  type  {samples}  JSONB path with inferred type
+(score: X.XX)  relevance score from query matching
+
 reviews  (score: 15.24)
   PK: id
   org_id → orgs
@@ -263,12 +275,13 @@ If the background build fails, `idx.Err()` returns the error and all query metho
 // Query — returns a ResultSet for selection and text rendering
 result, _ := idx.Query("failed reviews last month")
 
-// ResultSet — select tables and render
+// ResultSet — select tables and render (includes notation legend)
 result.Matched().Text()                          // matched tables only (score > 0)
 result.All().Text()                              // all tables including FK-expanded
 result.Include("reviews", "orgs").Text()         // specific tables by name
 result.Matched().Exclude("migrations").Text()    // matched minus exclusions
 result.Matched().Include("extra").Text()         // matched plus extras
+result.Matched().TextRaw()                       // same as Text() but without the legend
 result.Matched().Tables()                        // get []TableContext for custom logic
 result.Matched().Len()                           // count of selected tables
 result.TableMap()                                // map[string]TableContext for lookup

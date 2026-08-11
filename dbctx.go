@@ -753,21 +753,24 @@ func (s *Selection) Len() int {
 	return len(s.names)
 }
 
-// Text renders the selected tables as compact, human-readable text.
+// Text renders the selected tables as compact, human-readable text with
+// a notation legend at the top. The legend explains every symbol and
+// annotation used in the output so that an LLM (or human) can interpret
+// the schema without external documentation.
+//
+// Use [Selection.TextRaw] to omit the legend.
+func (s *Selection) Text() string {
+	return legend() + "\n" + s.TextRaw()
+}
+
+// TextRaw renders the selected tables as compact, human-readable text
+// without the notation legend. Use this when the caller already knows
+// the notation, or when token budget is tight and the legend would be
+// wasted context.
+//
 // The output includes table names, scores, primary keys, foreign keys,
 // columns with type/flags, state/categorical values, and JSONB paths.
-//
-// This is designed to be directly usable as context for LLMs and
-// text-to-SQL systems. The output format:
-//
-//	reviews  (score: 15.24)
-//	  PK: id
-//	  org_id → orgs
-//	  status character varying(50) [state]
-//	    {completed, failed, created, in_progress}
-//	  metadata jsonb
-//	    $.provider  string  {github, gitlab}
-func (s *Selection) Text() string {
+func (s *Selection) TextRaw() string {
 	tableMap := s.rs.TableMap()
 	var buf strings.Builder
 	for i, name := range s.names {
@@ -933,6 +936,21 @@ func convertColumnInfo(c search.ColumnInfo) ColumnInfo {
 		})
 	}
 	return ci
+}
+
+// legend returns the notation guide prepended to Text() output. It explains
+// every symbol and annotation so that an LLM (or human reader) can interpret
+// the compact schema without external documentation.
+func legend() string {
+	return `--- notation ---
+PK: primary key           col → table  foreign key
+^  is primary key         ?  nullable   >target  FK target
+[state] state-like categorical (< 100 distinct values)
+[cat]   categorical field
+{a, b, c}  representative values (from pg_stats)
+$.path  type  {samples}  JSONB path with inferred type
+(score: X.XX)  relevance score from query matching
+`
 }
 
 // writeTableText writes a single table's compact text representation to buf.
