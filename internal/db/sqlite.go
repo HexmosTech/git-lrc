@@ -11,13 +11,22 @@ type Store struct {
 	db *sql.DB
 }
 
+// OpenStore opens or creates a SQLite database at the given path.
+// If path is empty, an in-memory database is used (no file created).
+// In-memory databases are useful for ephemeral indexes or testing.
 func OpenStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	dsn := path
+	if dsn == "" {
+		dsn = "file::memory:?cache=shared"
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	db.Exec("PRAGMA journal_mode=WAL")
-	db.Exec("PRAGMA synchronous=NORMAL")
+	if path != "" {
+		db.Exec("PRAGMA journal_mode=WAL")
+		db.Exec("PRAGMA synchronous=NORMAL")
+	}
 	return &Store{db: db}, nil
 }
 

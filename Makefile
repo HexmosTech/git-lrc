@@ -1,11 +1,11 @@
-.PHONY: build install clean reindex query report ui
+.PHONY: build install clean reindex query report ui doc
 
 BINARY=dbctx
 INSTALL_DIR=$(HOME)/go/bin
 DBCTX_DTX=dbctx.dtx
 
 build:
-	go build -o $(BINARY) .
+	go build -o $(BINARY) ./cmd/dbctx
 
 install: build
 	cp $(BINARY) $(INSTALL_DIR)/$(BINARY)
@@ -30,3 +30,8 @@ report: $(DBCTX_DTX)
 
 ui: $(DBCTX_DTX)
 	./$(BINARY) ui $(DBCTX_DTX)
+
+doc:
+	@echo "Serving docs at http://localhost:6060/pkg/github.com/shrsv/dbctx/"
+	@echo "Press Ctrl+C to stop."
+	godoc -http=:6060

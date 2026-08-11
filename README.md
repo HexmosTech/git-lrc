@@ -1035,6 +1035,174 @@ The UI is styled after VS Code and is embedded in the binary itself — no exter
 
 ---
 
+# Library Usage
+
+dbctx is a Go library that can be imported directly into your application. This is the intended integration path for text-to-SQL systems, AI agents, analytics tools, and database-aware applications.
+
+## Install
+
+```bash
+go get github.com/shrsv/dbctx
+```
+
+## Basic usage
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/shrsv/dbctx"
+)
+
+func main() {
+    ctx := context.Background()
+
+    // Build an in-memory index (no file created)
+    idx, err := dbctx.Build(ctx, "postgres://localhost/mydb", nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer idx.Close()
+
+    // Query with natural language
+    result, err := idx.Query("failed reviews last month")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    for _, t := range result.Tables {
+        fmt.Printf("%s (score: %.2f)\n", t.TableName, t.MatchScore)
+        for _, c := range t.Columns {
+            if c.IsState {
+                fmt.Printf("  %s: state field\n", c.Name)
+            }
+        }
+    }
+}
+```
+
+## Persist to a .dtx file
+
+```go
+// Build and save to disk
+idx, err := dbctx.Build(ctx, dsn, &dbctx.Options{
+    Path:    "mydb.dtx",
+    Schemas: "public,app",
+})
+
+// Later: open the existing file (read-only, no PostgreSQL needed)
+idx, err := dbctx.Open("mydb.dtx")
+```
+
+## In-memory mode
+
+When `Options.Path` is empty (or opts is nil), the index lives in memory only. No files are created. This is useful for:
+
+* ephemeral indexes rebuilt on each startup
+* testing
+* environments where file I/O is undesirable
+
+```go
+idx, _ := dbctx.Build(ctx, dsn, nil) // in-memory, no .dtx file
+```
+
+In-memory indexes are faster to build (no disk I/O) but must be rebuilt each time the process starts.
+
+## Non-blocking startup
+
+For applications that need database context available at startup without blocking the main thread, use `BuildAsync`. It starts the build in a background goroutine and returns immediately. Queries made before the build completes will block until the index is ready.
+
+This pattern is useful for binary startup where you want to begin serving requests immediately while the index builds in the background:
+
+```go
+func main() {
+    ctx := context.Background()
+
+    // Start building in background — returns immediately
+    idx, ready, err := dbctx.BuildAsync(ctx, dsn, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer idx.Close()
+
+    // Register idx with your application server, handlers, etc.
+    // The index is safe to pass around even before the build completes.
+
+    // Start serving HTTP immediately
+    http.HandleFunc("/query", func(w http.ResponseWriter, r *http.Request) {
+        // This call blocks automatically if the index isn't ready yet
+        result, err := idx.Query(r.URL.Query().Get("q"))
+        if err != nil {
+            http.Error(w, err.Error(), 500)
+            return
+        }
+        json.NewEncoder(w).Encode(result)
+    })
+
+    // Log when the index is ready
+    go func() {
+        <-ready
+        log.Println("dbctx index is ready")
+    }()
+
+    log.Println("server starting on :8080 (index building in background)")
+    http.ListenAndServe(":8080", nil)
+}
+```
+
+For a non-blocking readiness check instead of waiting:
+
+```go
+select {
+case <-idx.Ready():
+    // index is ready, serve with full context
+    result, _ := idx.Query(query)
+default:
+    // index still building, return a fallback response
+    w.Write([]byte("database context is loading, please retry"))
+}
+```
+
+If the background build fails, `idx.Err()` returns the error and all query methods will return it.
+
+## Available methods
+
+```go
+// Query — natural language search against the index
+result, err := idx.Query("failed reviews last month")
+
+// Tables — list all tables with summary info
+tables, err := idx.Tables()
+
+// TableDetail — full column/relationship/value detail for one table
+detail, err := idx.TableDetail("reviews")
+
+// Stats — summary counts (tables, columns, FKs, state fields, etc.)
+stats, err := idx.Stats()
+
+// Report — dump human-readable report to a writer
+idx.Report(os.Stdout)
+
+// Ready — channel that closes when the index is ready
+<-idx.Ready()
+
+// Err — returns build error (for async builds)
+if err := idx.Err(); err != nil { ... }
+
+// Close — release resources
+idx.Close()
+```
+
+## Full API reference
+
+See the [pkg.go.dev documentation](https://pkg.go.dev/github.com/shrsv/dbctx) or run `go doc github.com/shrsv/dbctx` locally.
+
+---
+
 # What dbctx is not
 
 dbctx is **not**:
