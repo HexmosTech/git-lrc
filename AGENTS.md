@@ -70,3 +70,47 @@ These test the full `Build()` pipeline against real PostgreSQL. They are not run
 
 Run benchmarks: `go test -bench=Benchmark -benchmem -run=^$ .`
 Run perf tests: `source .env.prod && DATABASE_URL="$DATABASE_URL" go test -tags integration -run='TestIntegration_Perf' -v .`
+
+## Publishing to pkg.go.dev
+
+### Best practices checklist
+
+Before tagging a release, verify:
+
+1. **`go.mod` exists** — module path is `github.com/shrsv/dbctx`
+2. **LICENSE file exists** — MIT at repo root (pkg.go.dev checks redistributability)
+3. **Package doc comment** — first sentence is indexed by pkg.go.dev search; must be concise and keyword-rich
+4. **Example test functions** — render as "Examples" section on pkg.go.dev (`Example()`, `ExampleOpen()`, `ExampleIndex_TableDetail()`, etc. in `example_test.go`)
+5. **All tests pass** — `make test`
+6. **`go vet` clean** — `go vet ./...`
+7. **Tagged version** — use semver (`v0.1.0`, `v0.2.0`, etc.)
+
+### Release procedure
+
+```bash
+# 1. Run all checks
+make release-check
+
+# 2. Tag and push
+make tag V=v0.1.0
+
+# 3. Verify on pkg.go.dev (takes a few minutes to index)
+# Visit: https://pkg.go.dev/github.com/shrsv/dbctx@v0.1.0
+# Click "Request" if not yet indexed
+```
+
+### Versioning rules
+
+- Follow semver: `vMAJOR.MINOR.PATCH`
+- **v0.x.x** = experimental (current state); breaking changes allowed in minor bumps
+- **v1.0.0+** = stable; breaking changes require major version bump
+- Always tag from a clean working tree
+- Write a brief release note for each tag (what changed, what's new)
+
+### Godoc conventions
+
+- Package doc comment: first sentence = one-line summary (indexed for search)
+- All exported types and functions must have doc comments
+- Example functions in `example_test.go` render on pkg.go.dev — add them for all public APIs
+- Use `[TypeName]` bracket syntax for cross-references in doc comments (renders as links)
+- Use `# Heading` in doc comments for godoc section headers

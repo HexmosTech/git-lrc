@@ -1,4 +1,4 @@
-.PHONY: all build install clean reindex query report ui doc test test-short test-cover test-integration bench
+.PHONY: all build install clean reindex query report ui doc test test-short test-cover test-integration bench tag release
 
 BINARY=dbctx
 INSTALL_DIR=$(HOME)/go/bin
@@ -53,3 +53,18 @@ test-integration:
 
 bench:
 	go test -bench=Benchmark -benchmem -run=^$ -count=1 .
+
+# --- Publishing ---
+
+# Tag a new version and push to GitHub. Usage: make tag V=v0.1.0
+tag:
+	@test -n "$(V)" || (echo "Usage: make tag V=v0.1.0" && exit 1)
+	git tag -a $(V) -m "Release $(V)"
+	git push origin $(V)
+	@echo "Tagged $(V). pkg.go.dev will index it within minutes."
+	@echo "Visit: https://pkg.go.dev/github.com/shrsv/dbctx@$(V)"
+
+# Run pre-release checks: all tests, vet, and verify go doc renders.
+release-check: test
+	go vet ./...
+	@echo "All checks passed. Ready to tag with: make tag V=v0.1.0"

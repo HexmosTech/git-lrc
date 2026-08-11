@@ -1,13 +1,21 @@
-// Package dbctx provides a PostgreSQL database context compiler and index.
+// Package dbctx compiles a PostgreSQL database into a compact, queryable
+// context index for text-to-SQL systems, AI agents, and database-aware
+// applications.
 //
-// dbctx connects to PostgreSQL, extracts schema, analyzes fields, values,
-// and JSONB structure, and stores everything in a queryable SQLite index.
-// The index can be stored on disk as a .dtx file or kept entirely in memory.
+// dbctx connects to PostgreSQL, extracts schema metadata, analyzes field
+// statistics from pg_stats, discovers JSONB structure via sampling, and
+// builds a full-text search index — all without requiring an LLM or
+// external services. The result is a [Index] that answers natural-language
+// queries about which tables, columns, values, and relationships are
+// relevant to a given question.
 //
-// # Building an index
+// The index can be stored on disk as a portable .dtx file (SQLite) or
+// kept entirely in memory for ephemeral use. It is safe for concurrent
+// access from multiple goroutines.
 //
-// The simplest way to create an index is [Build], which connects to PostgreSQL,
-// extracts everything, and returns a ready-to-query index:
+// # Quick start
+//
+// Build an in-memory index and query it:
 //
 //	idx, err := dbctx.Build(ctx, "postgres://localhost/mydb", nil)
 //	if err != nil {
@@ -19,61 +27,62 @@
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	for _, t := range result.Tables {
-//	    fmt.Printf("%s (score: %.2f)\n", t.TableName, t.MatchScore)
-//	}
+//	fmt.Println(result.Matched().Text())
 //
-// To save the index to a .dtx file for later reuse:
+// The [Selection.Text] output is a compact, notation-annotated schema
+// ready to pass to an LLM or text-to-SQL system:
+//
+//	--- notation ---
+//	PK: primary key           col → table  foreign key
+//	...
+//
+//	reviews  (score: 15.24)
+//	  PK: id
+//	  org_id → orgs
+//	  status character varying(50) [state]
+//	    {completed, failed, created, in_progress}
+//	  metadata jsonb
+//	    $.provider  string  {github, gitlab}
+//
+// # Persisting the index
+//
+// Save the index to a .dtx file for later reuse — no PostgreSQL needed:
 //
 //	idx, err := dbctx.Build(ctx, dsn, &dbctx.Options{Path: "mydb.dtx"})
-//
-// To open an existing .dtx file:
-//
-//	idx, err := dbctx.Open("mydb.dtx")
+//	// ...later...
+//	idx, err = dbctx.Open("mydb.dtx")
 //
 // # Non-blocking startup
 //
-// For applications that need database context available at startup without
-// blocking, use [BuildAsync]. It starts the build in a background goroutine
-// and returns immediately. Queries made before the build completes will
-// block until the index is ready:
+// For applications that need the index available without blocking startup,
+// use [BuildAsync]. Queries made before the build completes will block
+// automatically:
 //
 //	idx, ready, err := dbctx.BuildAsync(ctx, dsn, nil)
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
 //	defer idx.Close()
+//	// Register idx with your application immediately...
+//	<-ready // or: <-idx.Ready()
 //
-//	// idx is available immediately for configuration
-//	// Register it with your application, set up handlers, etc.
+// # Selection API
 //
-//	go func() {
-//	    <-ready
-//	    log.Println("dbctx index ready")
-//	}()
+// Query results can be filtered and rendered in several ways:
 //
-//	// Queries automatically wait for the index to be ready:
-//	result, err := idx.Query("some query") // blocks if build still running
+//	result, _ := idx.Query("failed reviews")
+//	result.Matched().Text()                          // matched tables with legend
+//	result.Matched().TextRaw()                       // matched tables, no legend
+//	result.All().Text()                              // all tables including FK-expanded
+//	result.Include("reviews", "orgs").Text()         // specific tables
+//	result.Matched().Exclude("migrations").Text()    // matched minus exclusions
 //
-// For a non-blocking check instead of waiting:
+// # Use cases
 //
-//	select {
-//	case <-idx.Ready():
-//	    // index is ready, query now
-//	default:
-//	    // index still building, use fallback
-//	}
-//
-// # In-memory index
-//
-// When Options.Path is empty (or nil Options), the index is stored in memory
-// using SQLite's in-memory mode. No files are created. This is useful for
-// ephemeral indexes, testing, or when the .dtx file is not needed:
-//
-//	idx, _ := dbctx.Build(ctx, dsn, nil) // in-memory
-//
-// In-memory indexes are faster to build (no disk I/O) but must be rebuilt
-// each time the process starts.
+// dbctx is designed for any system that needs to understand a PostgreSQL
+// database at query time: text-to-SQL generation, natural-language analytics,
+// AI agents, database explorers, BI tools, and developer assistants.
+// It replaces repeated full-schema dumps with a deterministic, queryable index.
 package dbctx
 
 import (

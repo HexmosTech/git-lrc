@@ -1,8 +1,27 @@
 # dbctx
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/shrsv/dbctx.svg)](https://pkg.go.dev/github.com/shrsv/dbctx)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shrsv/dbctx)](https://goreportcard.com/report/github.com/shrsv/dbctx)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ### Compile a PostgreSQL database into compact, queryable context.
 
-**dbctx** builds a `.dtx` database context index from PostgreSQL: tables, relationships, field semantics, representative values, state-like fields, JSONB structure, and query-relevant metadata — without using an LLM.
+**dbctx** is a Go library and CLI tool that compiles a PostgreSQL database into a portable, queryable context index (`.dtx` file). It extracts schema, relationships, field semantics, representative values, JSONB structure, and builds a full-text search index — all without requiring an LLM, embeddings, or external services.
+
+Use it to give text-to-SQL systems, AI agents, and database-aware applications a compact, relevant slice of your database schema at query time, instead of dumping the entire `information_schema` into every prompt.
+
+**Key features:**
+
+- **Natural-language query** — find relevant tables, columns, and relationships from a text question
+- **JSONB intelligence** — discover paths, types, and representative values inside JSONB columns
+- **State/categorical detection** — identify implicit enums (status, plan, role) with their values
+- **FK expansion** — automatically include related tables through foreign-key graph traversal
+- **Compact text output** — LLM-ready schema notation with notation legend, optimized for token budget
+- **Portable .dtx format** — SQLite-based, ship/cache/version/inspect it like any file
+- **Zero LLM dependency** — deterministic introspection, statistics, and heuristics only
+- **Go library API** — embed directly in your Go application, no subprocess needed
+- **In-memory mode** — ephemeral indexes for testing or ephemeral workloads
+- **Web UI** — built-in browser-based database explorer
 
 It is designed to be the missing layer between a real database and systems that need to understand it:
 
