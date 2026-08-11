@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1327" height="330" viewBox="0 0 1327 330" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="glow" cx="8%" cy="10%" r="60%">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.10"/>
+      <stop offset="70%" stop-color="#ef4444" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .bold { font-family: 'Liberation Sans', Arial, sans-serif; font-weight: 700; }
+      .reg  { font-family: 'Liberation Sans', Arial, sans-serif; font-weight: 400; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1327" height="330" fill="#ffffff"/>
+  <rect x="0" y="0" width="1327" height="330" fill="url(#glow)"/>
+
+  <!-- Line 1 -->
+  <text x="0" y="66" class="bold" font-size="54">
+    <tspan fill="#dc2626">Blast-Radius Aware</tspan><tspan fill="#0f172a"> AI Code Review</tspan>
+  </text>
+  <rect x="0" y="78" width="459" height="3" fill="#f87171"/>
+
+  <!-- Line 2 -->
+  <text x="0" y="140" class="bold" font-size="54">
+    <tspan fill="#0f172a">for </tspan><tspan fill="#1d56f0">Business-Critical Systems</tspan><tspan fill="#0f172a">.</tspan>
+  </text>
+  <rect x="98" y="152" width="623" height="3" fill="#93b4fb"/>
+
+  <!-- Paragraph -->
+  <text x="0" y="212" class="reg" font-size="23" fill="#475569">
+    <tspan x="0" dy="0">Your team&#8217;s attention is limited. Spend review effort where</tspan>
+    <tspan x="0" dy="34"><tspan class="bold" fill="#0f172a">business risk is highest</tspan> — not spread evenly across every</tspan>
+    <tspan x="0" dy="34">diff.</tspan>
+  </text>
+</svg>

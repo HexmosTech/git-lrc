@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="260" viewBox="0 0 1200 260" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <radialGradient id="redGlow" cx="10%" cy="0%" r="55%">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="blueGlow" cx="95%" cy="100%" r="65%">
+      <stop offset="0%" stop-color="#1d56f0" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#1d56f0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ctaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d56f0"/>
+    </linearGradient>
+    <clipPath id="clip">
+      <rect x="0" y="0" width="1200" height="260" rx="20"/>
+    </clipPath>
+    <style>
+      .bold { font-family: 'Liberation Sans', Arial, sans-serif; font-weight: 700; }
+      .reg  { font-family: 'Liberation Sans', Arial, sans-serif; font-weight: 400; }
+    </style>
+  </defs>
+
+  <g clip-path="url(#clip)">
+    <rect x="0" y="0" width="1200" height="260" fill="url(#bg)"/>
+    <rect x="0" y="0" width="1200" height="260" fill="url(#redGlow)"/>
+    <rect x="0" y="0" width="1200" height="260" fill="url(#blueGlow)"/>
+  </g>
+  <rect x="0.75" y="0.75" width="1198.5" height="258.5" rx="19.25" fill="none" stroke="#1e293b" stroke-width="1.5"/>
+
+  <!-- LiveReview eye icon -->
+  <g transform="translate(112,130)">
+    <circle cx="0" cy="0" r="58" fill="#1E429F" opacity="0.22"/>
+    <circle cx="0" cy="0" r="48" fill="#111827"/>
+    <circle cx="0" cy="0" r="48" fill="none" stroke="#3B82F6" stroke-width="4"/>
+    <circle cx="0" cy="0" r="24" fill="#60A5FA"/>
+    <circle cx="0" cy="0" r="12" fill="#1E40AF"/>
+    <circle cx="-8.5" cy="-9" r="6" fill="#ffffff" opacity="0.85"/>
+  </g>
+
+  <!-- Wordmark + tagline -->
+  <g transform="translate(200,0)">
+    <text x="0" y="112" class="bold" font-size="46">
+      <tspan fill="#f8fafc">Live</tspan><tspan fill="#3b82f6">Review</tspan>
+    </text>
+    <text x="0" y="146" class="reg" font-size="19" fill="#94a3b8">
+      Blast-Radius Aware AI Code Review
+    </text>
+    <text x="0" y="171" class="reg" font-size="19" fill="#94a3b8">
+      for Business-Critical Systems
+    </text>
+  </g>
+
+  <!-- CTA -->
+  <g transform="translate(870,92)">
+    <rect x="0" y="0" width="248" height="56" rx="28" fill="url(#ctaGrad)"/>
+    <text x="124" y="35" text-anchor="middle" class="bold" font-size="19" fill="#ffffff">Explore LiveReview</text>
+    <path d="M 216 28 L 228 28 M 222 22 L 228 28 L 222 34" stroke="#ffffff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="994" y="176" text-anchor="middle" class="reg" font-size="16" fill="#64748b">hexmos.com/livereview</text>
+</svg>

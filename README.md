@@ -1540,3 +1540,13 @@ are especially welcome.
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+# See More
+
+Your team's attention is limited. Spend review effort where **business risk is highest** — not spread evenly across every diff.
+
+If dbctx is about giving AI systems compact, relevant context on your *database*, [**LiveReview**](https://hexmos.com/livereview) does the analogous thing for your *code changes*: instead of reviewing every diff with equal effort, it scores each change by blast radius — how far its impact reaches through your call graph — so review attention goes where it actually matters.
+
+[![LiveReview — Blast-Radius Aware AI Code Review for Business-Critical Systems](media/livereview-banner.png)](https://hexmos.com/livereview)
