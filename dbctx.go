@@ -389,9 +389,13 @@ func (idx *Index) Err() error {
 // If the index was created with [BuildAsync] and the build is still in
 // progress, Query blocks until the build completes.
 //
-// Returns a [SearchResult] containing matched tables ranked by relevance,
-// with columns, values, relationships, and JSONB paths included.
-func (idx *Index) Query(query string) (*SearchResult, error) {
+// Returns a [ResultSet] that can be filtered and converted to compact text:
+//
+//	result, _ := idx.Query("failed reviews last month")
+//	text := result.Matched().Text()         // only matched tables
+//	text := result.All().Text()             // all tables including FK-expanded
+//	text := result.Include("reviews").Text() // specific tables
+func (idx *Index) Query(query string) (*ResultSet, error) {
 	<-idx.ready
 	if idx.err != nil {
 		return nil, idx.err
@@ -403,7 +407,7 @@ func (idx *Index) Query(query string) (*SearchResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return convertSearchResult(raw), nil
+	return newResultSet(raw), nil
 }
 
 // Tables returns a summary of all tables in the index. Each entry includes
@@ -625,11 +629,158 @@ func (idx *Index) Report(w io.Writer) error {
 
 // --- Types ---
 
-// SearchResult contains the results of a natural language query against
-// the index. Tables are ranked by relevance score.
-type SearchResult struct {
-	Query  string        `json:"query"`
+// ResultSet holds the results of a query and provides methods to select
+// subsets of matched tables and render them as compact text.
+//
+// The typical flow is:
+//
+//	result, _ := idx.Query("failed reviews")
+//	text := result.Matched().Text()  // compact schema of matched tables only
+type ResultSet struct {
+	// Query is the original query string.
+	Query string `json:"query"`
+	// Tables contains all tables in the result, including both directly
+	// matched tables (score > 0) and FK-expanded tables (score = 0).
 	Tables []TableContext `json:"tables"`
+}
+
+// Matched returns a [Selection] containing only tables with a match score > 0.
+// These are the tables most relevant to the query.
+func (rs *ResultSet) Matched() *Selection {
+	names := make([]string, 0)
+	for _, t := range rs.Tables {
+		if t.MatchScore > 0 {
+			names = append(names, t.TableName)
+		}
+	}
+	return &Selection{rs: rs, names: names}
+}
+
+// All returns a [Selection] containing all tables in the result set,
+// including FK-expanded tables that were not directly matched.
+func (rs *ResultSet) All() *Selection {
+	names := make([]string, 0, len(rs.Tables))
+	for _, t := range rs.Tables {
+		names = append(names, t.TableName)
+	}
+	return &Selection{rs: rs, names: names}
+}
+
+// Include returns a [Selection] containing only the named tables.
+// Tables not found in the result set are silently ignored.
+func (rs *ResultSet) Include(names ...string) *Selection {
+	valid := make(map[string]bool)
+	for _, t := range rs.Tables {
+		valid[t.TableName] = true
+	}
+	filtered := make([]string, 0, len(names))
+	for _, n := range names {
+		if valid[n] {
+			filtered = append(filtered, n)
+		}
+	}
+	return &Selection{rs: rs, names: filtered}
+}
+
+// TableMap returns a map of table name to [TableContext] for quick lookup.
+func (rs *ResultSet) TableMap() map[string]TableContext {
+	m := make(map[string]TableContext, len(rs.Tables))
+	for _, t := range rs.Tables {
+		m[t.TableName] = t
+	}
+	return m
+}
+
+// Selection represents a subset of tables from a [ResultSet]. It provides
+// methods to refine the selection and render it as compact text suitable
+// for passing to an LLM or text-to-SQL system.
+type Selection struct {
+	rs    *ResultSet
+	names []string
+}
+
+// Include adds the named tables to the selection. Tables not in the
+// result set are silently ignored.
+func (s *Selection) Include(names ...string) *Selection {
+	valid := make(map[string]bool)
+	for _, t := range s.rs.Tables {
+		valid[t.TableName] = true
+	}
+	existing := make(map[string]bool, len(s.names))
+	for _, n := range s.names {
+		existing[n] = true
+	}
+	for _, n := range names {
+		if valid[n] && !existing[n] {
+			s.names = append(s.names, n)
+			existing[n] = true
+		}
+	}
+	return s
+}
+
+// Exclude removes the named tables from the selection.
+func (s *Selection) Exclude(names ...string) *Selection {
+	exclude := make(map[string]bool, len(names))
+	for _, n := range names {
+		exclude[n] = true
+	}
+	filtered := s.names[:0]
+	for _, n := range s.names {
+		if !exclude[n] {
+			filtered = append(filtered, n)
+		}
+	}
+	s.names = filtered
+	return s
+}
+
+// Tables returns the [TableContext] objects in this selection, in the
+// same order they appear in the original result set.
+func (s *Selection) Tables() []TableContext {
+	tableMap := s.rs.TableMap()
+	result := make([]TableContext, 0, len(s.names))
+	for _, name := range s.names {
+		if t, ok := tableMap[name]; ok {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+// Len returns the number of tables in the selection.
+func (s *Selection) Len() int {
+	return len(s.names)
+}
+
+// Text renders the selected tables as compact, human-readable text.
+// The output includes table names, scores, primary keys, foreign keys,
+// columns with type/flags, state/categorical values, and JSONB paths.
+//
+// This is designed to be directly usable as context for LLMs and
+// text-to-SQL systems. The output format:
+//
+//	reviews  (score: 15.24)
+//	  PK: id
+//	  org_id → orgs
+//	  status character varying(50) [state]
+//	    {completed, failed, created, in_progress}
+//	  metadata jsonb
+//	    $.provider  string  {github, gitlab}
+func (s *Selection) Text() string {
+	tableMap := s.rs.TableMap()
+	var buf strings.Builder
+	for i, name := range s.names {
+		t, ok := tableMap[name]
+		if !ok {
+			continue
+		}
+		if i > 0 {
+			buf.WriteString("\n\n")
+		}
+		writeTableText(&buf, t)
+	}
+	return buf.String()
 }
 
 // TableContext represents a table in a query result with its relevance score
@@ -729,11 +880,11 @@ type Stats struct {
 
 // --- internal helpers ---
 
-func convertSearchResult(raw *search.SearchResult) *SearchResult {
+func newResultSet(raw *search.SearchResult) *ResultSet {
 	if raw == nil {
 		return nil
 	}
-	r := &SearchResult{Query: raw.Query}
+	r := &ResultSet{Query: raw.Query}
 	for _, t := range raw.Tables {
 		r.Tables = append(r.Tables, convertTableContext(t))
 	}
@@ -782,6 +933,74 @@ func convertColumnInfo(c search.ColumnInfo) ColumnInfo {
 		})
 	}
 	return ci
+}
+
+// writeTableText writes a single table's compact text representation to buf.
+func writeTableText(buf *strings.Builder, t TableContext) {
+	// Header: table name + score
+	buf.WriteString(t.TableName)
+	if t.MatchScore > 0 {
+		fmt.Fprintf(buf, "  (score: %.2f)", t.MatchScore)
+	}
+	buf.WriteByte('\n')
+
+	// Primary key
+	if len(t.PrimaryKey) > 0 {
+		fmt.Fprintf(buf, "  PK: %s\n", strings.Join(t.PrimaryKey, ", "))
+	}
+
+	// Foreign keys
+	for _, fk := range t.ForeignKeys {
+		dst := fk.RefTable
+		if fk.DstColumns != "id" {
+			dst += "." + fk.DstColumns
+		}
+		fmt.Fprintf(buf, "  %s → %s\n", fk.SrcColumns, dst)
+	}
+
+	// Columns
+	for _, c := range t.Columns {
+		var flags []string
+		if c.IsPK {
+			flags = append(flags, "^")
+		}
+		if c.Nullable {
+			flags = append(flags, "?")
+		}
+		if c.FKTarget != "" {
+			flags = append(flags, ">"+c.FKTarget)
+		}
+		if c.IsState {
+			flags = append(flags, "[state]")
+		}
+		if c.IsCategoric && !c.IsState {
+			flags = append(flags, "[cat]")
+		}
+
+		fmt.Fprintf(buf, "  %s %s", c.Name, c.Type)
+		if len(flags) > 0 {
+			buf.WriteString(" " + strings.Join(flags, " "))
+		}
+		buf.WriteByte('\n')
+
+		// Representative values
+		if len(c.Values) > 0 {
+			vals := make([]string, 0, len(c.Values))
+			for _, v := range c.Values {
+				vals = append(vals, v.Value)
+			}
+			fmt.Fprintf(buf, "    {%s}\n", strings.Join(vals, ", "))
+		}
+
+		// JSONB paths
+		for _, jp := range c.JSONBPaths {
+			fmt.Fprintf(buf, "    %s  %s", jp.Path, jp.InferredType)
+			if jp.SampleValues != "" {
+				fmt.Fprintf(buf, "  {%s}", jp.SampleValues)
+			}
+			buf.WriteByte('\n')
+		}
+	}
 }
 
 // storeSchema writes the extracted PostgreSQL schema into the SQLite store.

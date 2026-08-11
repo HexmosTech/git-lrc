@@ -1074,15 +1074,34 @@ func main() {
         log.Fatal(err)
     }
 
-    for _, t := range result.Tables {
-        fmt.Printf("%s (score: %.2f)\n", t.TableName, t.MatchScore)
-        for _, c := range t.Columns {
-            if c.IsState {
-                fmt.Printf("  %s: state field\n", c.Name)
-            }
-        }
-    }
+    // Get compact schema for matched tables only — ready for an LLM prompt
+    fmt.Println(result.Matched().Text())
+
+    // Or refine the selection
+    fmt.Println(result.All().Text())                             // all tables
+    fmt.Println(result.Include("reviews", "orgs").Text())        // specific tables
+    fmt.Println(result.Matched().Exclude("migrations").Text())   // matched minus one
 }
+```
+
+The `Text()` output is a compact, LLM-ready representation:
+
+```text
+reviews  (score: 15.24)
+  PK: id
+  org_id → orgs
+  pull_request_id → pull_requests
+  status character varying(50) [state]
+    {completed, failed, created, in_progress}
+  metadata jsonb
+    $.provider  string  {github, gitlab}
+  created_at timestamp with time zone
+
+orgs  (score: 3.12)
+  PK: id
+  name text
+  plan text [state]
+    {free, pro, enterprise}
 ```
 
 ## Persist to a .dtx file
@@ -1140,7 +1159,9 @@ func main() {
             http.Error(w, err.Error(), 500)
             return
         }
-        json.NewEncoder(w).Encode(result)
+        // Return compact text of matched tables
+        w.Header().Set("Content-Type", "text/plain")
+        w.Write([]byte(result.Matched().Text()))
     })
 
     // Log when the index is ready
@@ -1172,17 +1193,27 @@ If the background build fails, `idx.Err()` returns the error and all query metho
 ## Available methods
 
 ```go
-// Query — natural language search against the index
-result, err := idx.Query("failed reviews last month")
+// Query — returns a ResultSet for selection and text rendering
+result, _ := idx.Query("failed reviews last month")
+
+// ResultSet — select tables and render
+result.Matched().Text()                          // matched tables only (score > 0)
+result.All().Text()                              // all tables including FK-expanded
+result.Include("reviews", "orgs").Text()         // specific tables by name
+result.Matched().Exclude("migrations").Text()    // matched minus exclusions
+result.Matched().Include("extra").Text()         // matched plus extras
+result.Matched().Tables()                        // get []TableContext for custom logic
+result.Matched().Len()                           // count of selected tables
+result.TableMap()                                // map[string]TableContext for lookup
 
 // Tables — list all tables with summary info
-tables, err := idx.Tables()
+tables, _ := idx.Tables()
 
 // TableDetail — full column/relationship/value detail for one table
-detail, err := idx.TableDetail("reviews")
+detail, _ := idx.TableDetail("reviews")
 
 // Stats — summary counts (tables, columns, FKs, state fields, etc.)
-stats, err := idx.Stats()
+stats, _ := idx.Stats()
 
 // Report — dump human-readable report to a writer
 idx.Report(os.Stdout)
