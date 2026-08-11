@@ -1,5 +1,5 @@
 .env.prod
-./dbctx
+/dbctx
 *.dtx
 *.dtx-wal
 *.dtx-shm
