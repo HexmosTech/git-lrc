@@ -1,7 +1,6 @@
 # dbctx
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/shrsv/dbctx.svg)](https://pkg.go.dev/github.com/shrsv/dbctx)
-[![Go Report Card](https://goreportcard.com/badge/github.com/shrsv/dbctx)](https://goreportcard.com/report/github.com/shrsv/dbctx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ### Compile a PostgreSQL database into compact, queryable context.
