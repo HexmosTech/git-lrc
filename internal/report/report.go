@@ -261,7 +261,16 @@ func reportStats(w io.Writer, store *db.Store) {
 }
 
 func FormatQueryResult(w io.Writer, result *search.SearchResult) {
-	fmt.Fprintf(w, "Query: %s\n\n", result.Query)
+	fmt.Fprintf(w, "Query: %s\n", result.Query)
+
+	t := result.Timing
+	if t.SemanticRan {
+		fmt.Fprintf(w, "Time: %.2fms total  (lexical %.2fms, semantic %.2fms, expand %.2fms)\n\n",
+			t.TotalMs, t.LexicalMs, t.SemanticMs, t.ExpandMs)
+	} else {
+		fmt.Fprintf(w, "Time: %.2fms total  (lexical %.2fms, expand %.2fms)\n\n",
+			t.TotalMs, t.LexicalMs, t.ExpandMs)
+	}
 
 	fmt.Fprintln(w, "TABLES (ranked)")
 	for _, t := range result.Tables {

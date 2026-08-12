@@ -299,6 +299,204 @@ func TestQueryHybrid_SurfacesTableLexicalMissed(t *testing.T) {
 	}
 }
 
+func almostEqual(a, b float64) bool {
+	const eps = 1e-9
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return d < eps
+}
+
+func TestQueryHybrid_ScoreBreakdown_LexicalOnly(t *testing.T) {
+	store := seedTestStore(t)
+
+	result, err := QueryHybrid(store, "reviews", nil)
+	if err != nil {
+		t.Fatalf("QueryHybrid: %v", err)
+	}
+
+	var reviews *TableContext
+	for i := range result.Tables {
+		if result.Tables[i].TableName == "reviews" {
+			reviews = &result.Tables[i]
+		}
+	}
+	if reviews == nil {
+		t.Fatal("reviews not found in results")
+	}
+	if reviews.Score == nil {
+		t.Fatal("expected a ScoreBreakdown on a directly-matched table")
+	}
+
+	bd := reviews.Score
+	if bd.Semantic != nil {
+		t.Error("Semantic should be nil when no SemanticScorer was passed")
+	}
+
+	// Every weight must match the documented constants exactly — this is
+	// what a UI renders as "the formula", so it must be the literal
+	// number used in computation, not an approximation.
+	if bd.FTS.Weight != FTSWeight || bd.Fuzzy.Weight != FuzzyWeight ||
+		bd.Value.Weight != ValueWeight || bd.Terminology.Weight != TerminologyWeight {
+		t.Errorf("breakdown weights don't match the exported constants: %+v", bd)
+	}
+
+	// contribution = raw * weight, for every signal.
+	if !almostEqual(bd.FTS.Contribution, bd.FTS.Raw*FTSWeight) {
+		t.Errorf("FTS.Contribution = %v, want raw*weight = %v", bd.FTS.Contribution, bd.FTS.Raw*FTSWeight)
+	}
+	if !almostEqual(bd.Fuzzy.Contribution, bd.Fuzzy.Raw*FuzzyWeight) {
+		t.Errorf("Fuzzy.Contribution = %v, want raw*weight = %v", bd.Fuzzy.Contribution, bd.Fuzzy.Raw*FuzzyWeight)
+	}
+	if !almostEqual(bd.Value.Contribution, bd.Value.Raw*ValueWeight) {
+		t.Errorf("Value.Contribution = %v, want raw*weight = %v", bd.Value.Contribution, bd.Value.Raw*ValueWeight)
+	}
+	if !almostEqual(bd.Terminology.Contribution, bd.Terminology.Raw*TerminologyWeight) {
+		t.Errorf("Terminology.Contribution = %v, want raw*weight = %v", bd.Terminology.Contribution, bd.Terminology.Raw*TerminologyWeight)
+	}
+
+	// lexical_total = sum of contributions
+	wantTotal := bd.FTS.Contribution + bd.Fuzzy.Contribution + bd.Value.Contribution + bd.Terminology.Contribution
+	if !almostEqual(bd.LexicalTotal, wantTotal) {
+		t.Errorf("LexicalTotal = %v, want %v", bd.LexicalTotal, wantTotal)
+	}
+
+	// With no semantic signal, final score == lexical total == the
+	// table's MatchScore.
+	if !almostEqual(bd.FinalScore, bd.LexicalTotal) {
+		t.Errorf("FinalScore = %v, want == LexicalTotal (%v) with no semantic signal", bd.FinalScore, bd.LexicalTotal)
+	}
+	if !almostEqual(bd.FinalScore, reviews.MatchScore) {
+		t.Errorf("FinalScore = %v, want == MatchScore (%v)", bd.FinalScore, reviews.MatchScore)
+	}
+}
+
+func TestQueryHybrid_ScoreBreakdown_WithSemantic(t *testing.T) {
+	store := seedTestStore(t)
+
+	sem := &fakeScorer{
+		scores: map[string]float64{"orgs": 0.75},
+		hits:   []SemanticHit{{TableName: "orgs", Kind: "table", Text: "orgs organizations account", Score: 0.512}},
+	}
+
+	// "xyznonexistent" matches nothing lexically, so the fusion scale
+	// falls back to 1.0 (see strongestLexicalScale) — makes the expected
+	// numbers easy to hand-verify.
+	result, err := QueryHybrid(store, "xyznonexistent", sem)
+	if err != nil {
+		t.Fatalf("QueryHybrid: %v", err)
+	}
+
+	var orgs *TableContext
+	for i := range result.Tables {
+		if result.Tables[i].TableName == "orgs" {
+			orgs = &result.Tables[i]
+		}
+	}
+	if orgs == nil || orgs.Score == nil {
+		t.Fatal("expected orgs with a ScoreBreakdown")
+	}
+
+	sc := orgs.Score.Semantic
+	if sc == nil {
+		t.Fatal("expected a non-nil Semantic breakdown")
+	}
+	if sc.Cosine != 0.512 {
+		t.Errorf("Cosine = %v, want the raw hit score 0.512", sc.Cosine)
+	}
+	if sc.Normalized != 0.75 {
+		t.Errorf("Normalized = %v, want the scorer's normalized score 0.75", sc.Normalized)
+	}
+	if sc.Weight != semanticFusionWeight {
+		t.Errorf("Weight = %v, want semanticFusionWeight (%v)", sc.Weight, semanticFusionWeight)
+	}
+	if sc.Scale != 1.0 {
+		t.Errorf("Scale = %v, want 1.0 (no lexical signal at all)", sc.Scale)
+	}
+	wantContribution := semanticFusionWeight * 0.75 * 1.0
+	if !almostEqual(sc.Contribution, wantContribution) {
+		t.Errorf("Contribution = %v, want weight*normalized*scale = %v", sc.Contribution, wantContribution)
+	}
+	if sc.EvidenceText != "orgs organizations account" {
+		t.Errorf("EvidenceText = %q, want the hit's Text", sc.EvidenceText)
+	}
+
+	// final = lexical_total + semantic contribution
+	wantFinal := orgs.Score.LexicalTotal + sc.Contribution
+	if !almostEqual(orgs.Score.FinalScore, wantFinal) {
+		t.Errorf("FinalScore = %v, want lexical_total + semantic contribution = %v", orgs.Score.FinalScore, wantFinal)
+	}
+}
+
+func TestExpandAndBuild_FKOnlyTablesHaveNoScoreBreakdown(t *testing.T) {
+	store := seedTestStore(t)
+
+	// "orgs" pulls in reviews/pull_requests via FK expansion; comments is
+	// two hops away and enters purely through expansion too.
+	result, err := QueryHybrid(store, "orgs", nil)
+	if err != nil {
+		t.Fatalf("QueryHybrid: %v", err)
+	}
+
+	sawUnscored := false
+	for _, tbl := range result.Tables {
+		if !tbl.IsMatch {
+			if tbl.Score != nil {
+				t.Errorf("table %q was only FK-expanded (not matched) but has a non-nil Score breakdown", tbl.TableName)
+			}
+			sawUnscored = true
+		}
+	}
+	if !sawUnscored {
+		t.Skip("fixture didn't produce any FK-expanded-only tables for this query; nothing to assert")
+	}
+}
+
+func TestQueryHybrid_Timing_LexicalOnly(t *testing.T) {
+	store := seedTestStore(t)
+
+	result, err := QueryHybrid(store, "reviews", nil)
+	if err != nil {
+		t.Fatalf("QueryHybrid: %v", err)
+	}
+
+	if result.Timing.SemanticRan {
+		t.Error("SemanticRan should be false when no SemanticScorer was passed")
+	}
+	if result.Timing.SemanticMs != 0 {
+		t.Errorf("SemanticMs = %v, want 0 when semantic didn't run", result.Timing.SemanticMs)
+	}
+	if result.Timing.TotalMs <= 0 {
+		t.Errorf("TotalMs = %v, want > 0", result.Timing.TotalMs)
+	}
+	if result.Timing.TotalMs < result.Timing.LexicalMs+result.Timing.ExpandMs-0.01 {
+		// allow tiny floating rounding slack; total should be >= the sum
+		// of its measured phases.
+		t.Errorf("TotalMs (%v) should be >= LexicalMs+ExpandMs (%v)", result.Timing.TotalMs, result.Timing.LexicalMs+result.Timing.ExpandMs)
+	}
+}
+
+func TestQueryHybrid_Timing_WithSemantic(t *testing.T) {
+	store := seedTestStore(t)
+
+	sem := &fakeScorer{
+		scores: map[string]float64{"orgs": 0.9},
+		hits:   []SemanticHit{{TableName: "orgs", Kind: "table", Text: "orgs", Score: 0.9}},
+	}
+	result, err := QueryHybrid(store, "orgs", sem)
+	if err != nil {
+		t.Fatalf("QueryHybrid: %v", err)
+	}
+
+	if !result.Timing.SemanticRan {
+		t.Error("SemanticRan should be true when a SemanticScorer was passed")
+	}
+	if result.Timing.TotalMs <= 0 {
+		t.Errorf("TotalMs = %v, want > 0", result.Timing.TotalMs)
+	}
+}
+
 func TestQueryHybrid_ScorerErrorFallsBackToLexical(t *testing.T) {
 	store := seedTestStore(t)
 

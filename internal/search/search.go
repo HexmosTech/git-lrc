@@ -3,6 +3,7 @@ package search
 import (
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sahilm/fuzzy"
 	"github.com/shrsv/dbctx/internal/db"
@@ -22,6 +23,61 @@ type TableContext struct {
 	ForeignKeys []FKInfo     `json:"foreign_keys"`
 	IsMatch     bool         `json:"is_match"`
 	MatchScore  float64      `json:"match_score"`
+	// Score documents exactly how MatchScore was computed, signal by
+	// signal. Nil for tables that were only pulled in via foreign-key
+	// expansion (MatchScore == 0) — nothing was scored for those, so
+	// there's nothing to explain.
+	Score *ScoreBreakdown `json:"score,omitempty"`
+}
+
+// ScoreBreakdown is the "show your work" behind TableContext.MatchScore:
+// every lexical signal's raw score, its fixed weight, and the resulting
+// weighted contribution, plus the semantic signal's contribution if one
+// ran — so a result's ranking is inspectable rather than a single opaque
+// number. Callers (the web UI, in particular) can render this as a
+// step-by-step computation instead of asking users to trust a score.
+type ScoreBreakdown struct {
+	FTS          SignalContribution `json:"fts"`
+	Fuzzy        SignalContribution `json:"fuzzy"`
+	Value        SignalContribution `json:"value"`
+	Terminology  SignalContribution `json:"terminology"`
+	LexicalTotal float64            `json:"lexical_total"`
+
+	// Semantic is nil if semantic search was disabled/unavailable for
+	// this query, or ran but this table wasn't among its scored
+	// candidates at all.
+	Semantic *SemanticContribution `json:"semantic,omitempty"`
+
+	FinalScore float64 `json:"final_score"`
+}
+
+// SignalContribution is one lexical signal's raw score, its fixed weight
+// (see FTSWeight etc.), and the resulting weighted contribution
+// (Raw * Weight) to ScoreBreakdown.LexicalTotal.
+type SignalContribution struct {
+	Raw          float64 `json:"raw"`
+	Weight       float64 `json:"weight"`
+	Contribution float64 `json:"contribution"`
+}
+
+// SemanticContribution documents how the semantic signal contributed to a
+// table's final score — the exact inputs to FuseScores's formula:
+//
+//	contribution = Weight * Normalized * Scale
+//
+// Cosine is the best-matching embedded object's raw similarity to the
+// query (see SemanticHit); Normalized is that same table's score after
+// Scorer.Score's query-relative min-max normalization; Scale is the
+// strongest lexical score found anywhere in this query (or 1.0 if lexical
+// found nothing at all — see FuseScores).
+type SemanticContribution struct {
+	Cosine       float64 `json:"cosine"`
+	Normalized   float64 `json:"normalized"`
+	Weight       float64 `json:"weight"`
+	Scale        float64 `json:"scale"`
+	Contribution float64 `json:"contribution"`
+	EvidenceKind string  `json:"evidence_kind"`
+	EvidenceText string  `json:"evidence_text"`
 }
 
 type ColumnInfo struct {
@@ -57,6 +113,30 @@ type SearchResult struct {
 	Tables       []TableContext `json:"tables"`
 	Query        string         `json:"query"`
 	SemanticHits []SemanticHit  `json:"semantic_hits,omitempty"`
+	// Timing breaks down how long each phase of the query took, so query
+	// latency is inspectable the same way scoring is — "how long did this
+	// take, and where did the time go" rather than a single opaque number.
+	Timing QueryTiming `json:"timing"`
+}
+
+// QueryTiming records how long each phase of QueryHybrid took, in
+// milliseconds. SemanticMs/SemanticRan are only meaningful when a
+// SemanticScorer was actually passed to QueryHybrid — SemanticRan
+// distinguishes "semantic search took 0ms" (impossible in practice, but
+// meaningful as a concept) from "semantic search did not run at all".
+type QueryTiming struct {
+	LexicalMs   float64 `json:"lexical_ms"`
+	SemanticMs  float64 `json:"semantic_ms"`
+	SemanticRan bool    `json:"semantic_ran"`
+	ExpandMs    float64 `json:"expand_ms"`
+	TotalMs     float64 `json:"total_ms"`
+}
+
+// millisSince rounds an elapsed duration to microsecond precision (three
+// decimal places of a millisecond) — enough resolution to be useful for a
+// sub-millisecond phase without printing a dozen meaningless digits.
+func millisSince(start time.Time) float64 {
+	return float64(time.Since(start).Microseconds()) / 1000.0
 }
 
 // SemanticHit is one inspectable piece of evidence a [SemanticScorer]
@@ -157,34 +237,94 @@ func Query(store *db.Store, query string) (*SearchResult, error) {
 // proceeds lexically — a missing/broken semantic index must never fail an
 // otherwise-valid query.
 func QueryHybrid(store *db.Store, query string, sem SemanticScorer) (*SearchResult, error) {
+	queryStart := time.Now()
 	result := &SearchResult{Query: query}
 
-	lexical := ComputeLexicalScores(store, query)
+	lexStart := time.Now()
+	lexBreakdown := computeLexicalBreakdown(store, query)
+	lexical := make(map[string]float64, len(lexBreakdown))
+	for t, b := range lexBreakdown {
+		lexical[t] = b.weighted()
+	}
 	merged := lexical
+	result.Timing.LexicalMs = millisSince(lexStart)
 
+	var semScores map[string]float64
+	hitByTable := make(map[string]SemanticHit)
 	if sem != nil {
-		semScores, hits, err := sem.Score(query)
-		if err == nil && len(semScores) > 0 {
+		semStart := time.Now()
+		s, hits, err := sem.Score(query)
+		result.Timing.SemanticMs = millisSince(semStart)
+		result.Timing.SemanticRan = true
+		if err == nil && len(s) > 0 {
+			semScores = s
 			merged = FuseScores(lexical, semScores)
 			result.SemanticHits = hits
+			for _, h := range hits {
+				hitByTable[h.TableName] = h
+			}
 		}
 	}
+	scale := strongestLexicalScale(lexical)
 
-	tables, err := expandAndBuild(store, merged)
+	expandStart := time.Now()
+	tables, err := expandAndBuild(store, merged, lexBreakdown, semScores, hitByTable, scale)
 	if err != nil {
 		return nil, err
 	}
+	result.Timing.ExpandMs = millisSince(expandStart)
 	result.Tables = tables
+	result.Timing.TotalMs = millisSince(queryStart)
 	return result, nil
 }
 
 // ComputeLexicalScores runs the deterministic retrieval signals — FTS5
-// full-text search, fuzzy table-name matching, and value matching — and
-// combines them into a single per-table score map. This is the "table /
-// field / value matching" step of dbctx's retrieval pipeline, kept
-// separate from FK expansion and context building so a semantic score can
-// be fused in before expansion happens.
+// full-text search, fuzzy table-name matching, value matching, and
+// terminology — and combines them into a single per-table score map. This
+// is the "table / field / value matching" step of dbctx's retrieval
+// pipeline, kept separate from FK expansion and context building so a
+// semantic score can be fused in before expansion happens.
+//
+// This collapses each table's per-signal breakdown (see
+// computeLexicalBreakdown) down to one number; use QueryHybrid if you need
+// the breakdown itself (e.g. to explain a result), not just the merged
+// score.
 func ComputeLexicalScores(store *db.Store, query string) map[string]float64 {
+	breakdown := computeLexicalBreakdown(store, query)
+	scores := make(map[string]float64, len(breakdown))
+	for t, b := range breakdown {
+		scores[t] = b.weighted()
+	}
+	return scores
+}
+
+// Signal weights used to combine dbctx's lexical retrieval signals into a
+// single per-table score. Named constants (rather than inline literals)
+// so ScoreBreakdown can report back the exact numbers actually used —
+// there is one source of truth between the computation and anything that
+// explains it, including the web UI's score breakdown panel.
+const (
+	FTSWeight         = 1.0
+	FuzzyWeight       = 0.8
+	ValueWeight       = 1.2
+	TerminologyWeight = 1.5
+)
+
+// lexicalBreakdown holds one table's raw (unweighted) score from each
+// lexical signal, before they're combined into a single number.
+type lexicalBreakdown struct {
+	FTS, Fuzzy, Value, Terminology float64
+}
+
+func (b lexicalBreakdown) weighted() float64 {
+	return b.FTS*FTSWeight + b.Fuzzy*FuzzyWeight + b.Value*ValueWeight + b.Terminology*TerminologyWeight
+}
+
+// computeLexicalBreakdown runs every lexical signal and returns each
+// table's raw per-signal scores, unweighted and unmerged. ComputeLexicalScores
+// and QueryHybrid's score explanations both build on this rather than
+// duplicating the underlying signal queries.
+func computeLexicalBreakdown(store *db.Store, query string) map[string]lexicalBreakdown {
 	tokens := strings.Fields(strings.ToLower(query))
 
 	// 1. FTS5 search
@@ -200,20 +340,28 @@ func ComputeLexicalScores(store *db.Store, query string) map[string]float64 {
 	// see internal/terminology). Empty/absent terminology has no effect.
 	termScores := terminologyMatch(store, query)
 
-	merged := make(map[string]float64)
+	out := make(map[string]lexicalBreakdown)
 	for t, s := range ftsScores {
-		merged[t] += s * 1.0
+		b := out[t]
+		b.FTS = s
+		out[t] = b
 	}
 	for t, s := range fuzzyScores {
-		merged[t] += s * 0.8
+		b := out[t]
+		b.Fuzzy = s
+		out[t] = b
 	}
 	for t, s := range valueScores {
-		merged[t] += s * 1.2
+		b := out[t]
+		b.Value = s
+		out[t] = b
 	}
 	for t, s := range termScores {
-		merged[t] += s * 1.5
+		b := out[t]
+		b.Terminology = s
+		out[t] = b
 	}
-	return merged
+	return out
 }
 
 // minTerminologyAbbrevLen bounds the "alias contains query" direction of
@@ -299,28 +447,52 @@ const semanticFusionWeight = 0.6
 // against the lexical score scale.
 func FuseScores(lexical, semantic map[string]float64) map[string]float64 {
 	merged := make(map[string]float64, len(lexical)+len(semantic))
-	var maxLexical float64
 	for t, s := range lexical {
 		merged[t] = s
-		if s > maxLexical {
-			maxLexical = s
-		}
 	}
-	scale := maxLexical
-	if scale <= 0 {
-		scale = 1.0
-	}
+	scale := strongestLexicalScale(lexical)
 	for t, s := range semantic {
 		merged[t] += semanticFusionWeight * s * scale
 	}
 	return merged
 }
 
+// strongestLexicalScale is the "scale" factor in FuseScores's formula: the
+// strongest lexical score found anywhere in this query, or 1.0 if lexical
+// matched nothing at all (so a pure paraphrase/terminology-only match
+// still gets a modest, present contribution rather than being multiplied
+// by zero). Shared between FuseScores and the score-breakdown explanation
+// in expandAndBuild so both report the same number.
+func strongestLexicalScale(lexical map[string]float64) float64 {
+	var max float64
+	for _, s := range lexical {
+		if s > max {
+			max = s
+		}
+	}
+	if max <= 0 {
+		return 1.0
+	}
+	return max
+}
+
 // expandAndBuild expands a scored table set via foreign keys and builds
 // full [TableContext] results, sorted by score with FK-expanded (score 0)
 // tables trailing. This is the "candidate tables -> foreign-key expansion
 // -> relevant fields" portion of dbctx's retrieval pipeline.
-func expandAndBuild(store *db.Store, merged map[string]float64) ([]TableContext, error) {
+//
+// lexBreakdown, semScores, hitByTable, and semScale carry the intermediate
+// scoring detail needed to attach a [ScoreBreakdown] to every actually-
+// scored table (see buildScoreBreakdown) — purely-FK-expanded tables get
+// no breakdown, since nothing was scored for them.
+func expandAndBuild(
+	store *db.Store,
+	merged map[string]float64,
+	lexBreakdown map[string]lexicalBreakdown,
+	semScores map[string]float64,
+	hitByTable map[string]SemanticHit,
+	semScale float64,
+) ([]TableContext, error) {
 	type scored struct {
 		name  string
 		score float64
@@ -349,7 +521,9 @@ func expandAndBuild(store *db.Store, merged map[string]float64) ([]TableContext,
 			continue
 		}
 		seen[s.name] = true
-		tables = append(tables, buildTableContext(store, s.name, s.score))
+		tc := buildTableContext(store, s.name, s.score)
+		tc.Score = buildScoreBreakdown(s.name, s.score, lexBreakdown, semScores, hitByTable, semScale)
+		tables = append(tables, tc)
 	}
 
 	// Add FK-expanded tables that weren't in the original match
@@ -362,6 +536,46 @@ func expandAndBuild(store *db.Store, merged map[string]float64) ([]TableContext,
 	}
 
 	return tables, nil
+}
+
+// buildScoreBreakdown assembles the "show your work" explanation for one
+// table's final score, using exactly the same weight constants and scale
+// factor that produced it (see computeLexicalBreakdown, FuseScores).
+func buildScoreBreakdown(
+	table string,
+	final float64,
+	lexBreakdown map[string]lexicalBreakdown,
+	semScores map[string]float64,
+	hitByTable map[string]SemanticHit,
+	semScale float64,
+) *ScoreBreakdown {
+	// Zero value if table only matched via semantic search and never had
+	// any lexical signal at all.
+	lb := lexBreakdown[table]
+
+	bd := &ScoreBreakdown{
+		FTS:         SignalContribution{Raw: lb.FTS, Weight: FTSWeight, Contribution: lb.FTS * FTSWeight},
+		Fuzzy:       SignalContribution{Raw: lb.Fuzzy, Weight: FuzzyWeight, Contribution: lb.Fuzzy * FuzzyWeight},
+		Value:       SignalContribution{Raw: lb.Value, Weight: ValueWeight, Contribution: lb.Value * ValueWeight},
+		Terminology: SignalContribution{Raw: lb.Terminology, Weight: TerminologyWeight, Contribution: lb.Terminology * TerminologyWeight},
+		FinalScore:  final,
+	}
+	bd.LexicalTotal = bd.FTS.Contribution + bd.Fuzzy.Contribution + bd.Value.Contribution + bd.Terminology.Contribution
+
+	if normalized, ok := semScores[table]; ok {
+		hit := hitByTable[table]
+		bd.Semantic = &SemanticContribution{
+			Cosine:       hit.Score,
+			Normalized:   normalized,
+			Weight:       semanticFusionWeight,
+			Scale:        semScale,
+			Contribution: semanticFusionWeight * normalized * semScale,
+			EvidenceKind: hit.Kind,
+			EvidenceText: hit.Text,
+		}
+	}
+
+	return bd
 }
 
 func ftsSearch(store *db.Store, tokens []string) map[string]float64 {

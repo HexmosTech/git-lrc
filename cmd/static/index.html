@@ -97,7 +97,9 @@ tr:hover td{background:var(--hover)}
 
 /* Result toolbar */
 .result-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:6px 0}
-.result-toolbar .count{color:var(--fg2);font-size:12px;margin-right:auto}
+.result-toolbar .count{color:var(--fg2);font-size:12px;margin-right:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.timing-badge{font-family:'Cascadia Code','Fira Code',monospace;font-size:11px;color:var(--green);background:#0d3d2a;padding:2px 8px;border-radius:2px}
+.timing-badge .breakdown{color:var(--fg2);font-weight:normal;margin-left:4px}
 .result-toolbar button{background:var(--bg4);color:var(--fg);border:1px solid var(--border);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-size:11px}
 .result-toolbar button:hover{background:var(--border)}
 .result-toolbar button.accent{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -143,6 +145,52 @@ tr:hover td{background:var(--hover)}
 .fk-link .arrow{color:var(--fg3)}
 .fk-link .table-name{color:var(--green);cursor:pointer}
 .fk-link .table-name:hover{text-decoration:underline}
+
+/* Signal badges — at-a-glance summary of which scoring signals fired */
+.signal-badges{display:inline-flex;gap:3px;margin-left:8px;flex-wrap:wrap}
+.signal-badge{font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;letter-spacing:.3px;text-transform:uppercase}
+.signal-badge-fts{background:#0d3d52;color:var(--cyan)}
+.signal-badge-fuzzy{background:#1a3a52;color:var(--blue)}
+.signal-badge-value{background:#3d2f0d;color:var(--orange)}
+.signal-badge-term{background:#2d1a3d;color:var(--purple)}
+.signal-badge-semantic{background:#0d3d2a;color:var(--green)}
+
+/* Score breakdown — "show your work" */
+.score-math{font-size:12px}
+.score-math-step{margin-bottom:14px}
+.score-math-step:last-child{margin-bottom:0}
+.score-math-title{font-size:11px;color:var(--fg2);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
+.score-math-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px}
+.score-math-table td{padding:4px 6px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--fg)}
+.score-math-table tr:last-child td{border-bottom:none}
+.score-math-table .sig-label{color:var(--fg)}
+.score-math-table .mono{font-family:'Cascadia Code','Fira Code',monospace;text-align:right;white-space:nowrap;color:var(--fg)}
+.score-math-table .mono.zero{color:var(--fg3)}
+.score-math-table .mono.pos{color:var(--green);font-weight:600}
+.score-math-table .op{color:var(--fg2);text-align:center;padding:0 4px;width:1%}
+.score-math-total-row td{border-top:1px solid var(--border2);border-bottom:none!important;padding-top:6px;font-weight:600}
+.score-math-total-row .sig-label{color:var(--fg)}
+.score-math-evidence{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin-bottom:8px}
+.score-math-evidence-label{font-size:11px;color:var(--fg2);margin-bottom:4px}
+.score-math-evidence-text{font-family:'Cascadia Code','Fira Code',monospace;font-size:11px;color:var(--fg);white-space:pre-wrap;word-break:break-word}
+.score-math-formula{font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;line-height:1.7;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--fg)}
+.score-math-formula .result{color:var(--green);font-weight:700}
+.score-math-formula .indent{padding-left:1.5em;display:inline-block}
+.score-math-final{background:var(--bg3);border:1px solid var(--accent);border-radius:var(--radius);padding:10px}
+.score-math-note{color:var(--fg2);font-size:12px;font-style:italic;padding:6px 0}
+
+/* Scoring explainer — readable prose + a distinct formula callout,
+   deliberately NOT styled as dim "code comments" (that read as low
+   contrast and hard to parse for what is actually the primary content). */
+.explainer-p{color:var(--fg);font-size:12.5px;line-height:1.6;margin-bottom:12px}
+.explainer-p b{color:var(--fg);font-weight:600}
+.explainer-hint{color:var(--fg2);font-size:12px}
+.explainer-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px}
+.explainer-table th{text-align:left;padding:5px 8px;color:var(--fg2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border2)}
+.explainer-table td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--fg);vertical-align:top}
+.explainer-table tr:last-child td{border-bottom:none}
+.explainer-table .mono{font-family:'Cascadia Code','Fira Code',monospace;color:var(--cyan);white-space:nowrap}
+.explainer-formula{font-family:'Cascadia Code','Fira Code',monospace;font-size:12.5px;line-height:1.6;background:var(--bg3);border:1px solid var(--accent);border-radius:var(--radius);padding:10px 12px;color:var(--fg);margin-bottom:14px;overflow-x:auto;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -324,6 +372,178 @@ function Tables({onNavigate}) {
   `;
 }
 
+function fmt3(n) {
+  if(n === undefined || n === null || Number.isNaN(n)) return '0.000';
+  return n.toFixed(3);
+}
+
+// Signal badges: at-a-glance summary, next to the score, of which
+// components actually contributed — before the user even expands the
+// row. Only shown for signals with a nonzero contribution.
+function SignalBadges({score}) {
+  if(!score) return null;
+  const badges = [];
+  if(score.fts?.contribution > 0) badges.push(['FTS','fts']);
+  if(score.fuzzy?.contribution > 0) badges.push(['Fuzzy','fuzzy']);
+  if(score.value?.contribution > 0) badges.push(['Value','value']);
+  if(score.terminology?.contribution > 0) badges.push(['Term','term']);
+  if(score.semantic?.contribution > 0) badges.push(['Semantic','semantic']);
+  if(badges.length === 0) return null;
+  return html`
+    <span class="signal-badges">
+      ${badges.map(([label,cls])=>html`<span class="signal-badge signal-badge-${cls}" key=${cls} title="This signal contributed to the score">${label}</span>`)}
+    </span>
+  `;
+}
+
+// The "show your work" panel: every signal's raw score, its fixed weight,
+// and the resulting contribution — then, if semantic ran, its formula
+// worked out with this table's actual numbers substituted in — then the
+// final sum. Mirrors internal/search.ScoreBreakdown exactly; every number
+// shown here is the literal value the Go scoring code produced, not a
+// re-derivation, so it can't drift out of sync with how the score was
+// really computed.
+function ScoreMath({score}) {
+  if(!score) {
+    return html`<div class="score-math-note">This table was included via foreign-key expansion from a matched table — it wasn't scored directly, so there's no formula to show.</div>`;
+  }
+  const signals = [
+    ['FTS (full-text search)', score.fts],
+    ['Fuzzy (table name match)', score.fuzzy],
+    ['Value match', score.value],
+    ['Terminology', score.terminology],
+  ];
+  const sem = score.semantic;
+
+  return html`
+    <div class="score-math">
+      <div class="score-math-step">
+        <div class="score-math-title">1. Lexical signals</div>
+        <table class="score-math-table">
+          <tbody>
+            ${signals.map(([label,sig])=>html`
+              <tr key=${label}>
+                <td class="sig-label">${label}</td>
+                <td class="mono ${sig.raw===0?'zero':''}">${fmt3(sig.raw)}</td>
+                <td class="op">×</td>
+                <td class="mono">${fmt3(sig.weight)}</td>
+                <td class="op">=</td>
+                <td class="mono ${sig.contribution>0?'pos':'zero'}">${fmt3(sig.contribution)}</td>
+              </tr>
+            `)}
+            <tr class="score-math-total-row">
+              <td class="sig-label" colspan="5">Lexical total</td>
+              <td class="mono">${fmt3(score.lexical_total)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      ${sem && html`
+        <div class="score-math-step">
+          <div class="score-math-title">2. Semantic signal</div>
+          <div class="score-math-evidence">
+            <div class="score-math-evidence-label">Best-matching embedded object (${sem.evidence_kind}):</div>
+            <div class="score-math-evidence-text">${sem.evidence_text}</div>
+          </div>
+          <table class="score-math-table">
+            <tbody>
+              <tr><td class="sig-label">raw cosine similarity</td><td class="mono" colspan="5">${fmt3(sem.cosine)}</td></tr>
+              <tr><td class="sig-label">normalized (relative to this query's candidates)</td><td class="mono" colspan="5">${fmt3(sem.normalized)}</td></tr>
+              <tr><td class="sig-label">fusion weight</td><td class="mono" colspan="5">${fmt3(sem.weight)}</td></tr>
+              <tr><td class="sig-label">scale (strongest lexical score this query)</td><td class="mono" colspan="5">${fmt3(sem.scale)}</td></tr>
+            </tbody>
+          </table>
+          <div class="score-math-formula">
+            contribution = weight × normalized × scale<br/>
+            <span class="indent">= ${fmt3(sem.weight)} × ${fmt3(sem.normalized)} × ${fmt3(sem.scale)}</span><br/>
+            <span class="indent">= <span class="result">${fmt3(sem.contribution)}</span></span>
+          </div>
+        </div>
+      `}
+
+      <div class="score-math-step">
+        <div class="score-math-title">${sem ? '3' : '2'}. Final score</div>
+        <div class="score-math-formula score-math-final">
+          final = lexical total${sem ? ' + semantic contribution' : ''}<br/>
+          <span class="indent">= ${fmt3(score.lexical_total)}${sem ? ` + ${fmt3(sem.contribution)}` : ''}</span><br/>
+          <span class="indent">= <span class="result">${fmt3(score.final_score)}</span></span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+const SIGNAL_EXPLAINERS = [
+  ['FTS', '1.0', 'Full-text match on table/column names and sampled values (SQLite FTS5).'],
+  ['Fuzzy', '0.8', 'Subsequence fuzzy match on table names — tolerates typos.'],
+  ['Value', '1.2', 'Query text found among sampled representative column values.'],
+  ['Terminology', '1.5', 'User-imported alias ↔ table/column/JSONB-path mappings.'],
+  ['Semantic', '0.6 × scale', 'Local embedding cosine similarity to schema text (optional, on by default).'],
+];
+
+function fmtMs(n) {
+  if(n === undefined || n === null) return '0';
+  return n < 10 ? n.toFixed(2) : n.toFixed(1);
+}
+
+// TimingBadge surfaces query latency directly in the results toolbar —
+// visible immediately, not hidden behind a click — broken down by phase
+// so a slow query is diagnosable (is it the lexical signals, the
+// embedding model, or FK expansion?) rather than a single opaque number.
+function TimingBadge({timing}) {
+  if(!timing) return null;
+  const parts = [`lexical ${fmtMs(timing.lexical_ms)}ms`];
+  if(timing.semantic_ran) parts.push(`semantic ${fmtMs(timing.semantic_ms)}ms`);
+  parts.push(`expand ${fmtMs(timing.expand_ms)}ms`);
+  return html`
+    <span class="timing-badge">
+      ${fmtMs(timing.total_ms)}ms
+      <span class="breakdown">(${parts.join(' + ')})</span>
+    </span>
+  `;
+}
+
+function ScoringExplainer() {
+  return html`
+    <${Collapsible} title="How scoring works" defaultOpen=${false} className="scoring-explainer">
+      <p class="explainer-p">
+        Every matched table's score is the sum of up to five weighted signals,
+        computed fresh for each query:
+      </p>
+
+      <table class="explainer-table">
+        <thead><tr><th>Signal</th><th>Weight</th><th>What it measures</th></tr></thead>
+        <tbody>
+          ${SIGNAL_EXPLAINERS.map(([name,weight,desc])=>html`
+            <tr key=${name}>
+              <td class="mono">${name}</td>
+              <td class="mono">× ${weight}</td>
+              <td>${desc}</td>
+            </tr>
+          `)}
+        </tbody>
+      </table>
+
+      <div class="explainer-formula">
+        final score = FTS×1.0 + Fuzzy×0.8 + Value×1.2 + Terminology×1.5 + Semantic×0.6×scale
+      </div>
+
+      <p class="explainer-p">
+        <b>scale</b> is the strongest lexical score found anywhere in this query
+        (or <b>1.0</b> if lexical matched nothing at all). It keeps a purely
+        semantic match modest instead of zero, without ever letting it
+        outrank a real lexical or exact-name match.
+      </p>
+
+      <p class="explainer-p explainer-hint">
+        Expand any matched table's <b>Score breakdown</b> section below to see
+        these numbers worked out step by step for that specific result.
+      </p>
+    <//>
+  `;
+}
+
 function QuerySection({title, children, defaultOpen=false}) {
   const [open,setOpen] = useState(defaultOpen);
   if(!children || (Array.isArray(children) && children.length===0)) return null;
@@ -407,6 +627,7 @@ function QueryResultCard({table, selected, onToggle, onNavigate}) {
           <div class="title-row">
             <span class="title">${table.table_name}</span>
             ${table.match_score > 0 && html`<span class="score">${table.match_score.toFixed(2)}</span>`}
+            <${SignalBadges} score=${table.score} />
           </div>
           <div class="meta">
             ${(table.columns||[]).length > 0 && html`<span class="meta-item">${(table.columns||[]).length} cols</span>`}
@@ -423,6 +644,10 @@ function QueryResultCard({table, selected, onToggle, onNavigate}) {
       </div>
       ${open && html`
         <div class="result-detail">
+          <${QuerySection} title="Score breakdown — show your work" defaultOpen=${false}>
+            <${ScoreMath} score=${table.score} />
+          <//>
+
           <${QuerySection} title="Columns (${(table.columns||[]).length})" defaultOpen=${true}>
             <table>
               <thead><tr><th>Name</th><th>Type</th><th>Flags</th><th>Values</th></tr></thead>
@@ -571,6 +796,7 @@ $.path  type  {samples}  JSONB path with inferred type
   return html`
     <div>
       <h2 style="margin-bottom:16px;font-size:16px;font-weight:600">Query</h2>
+      <${ScoringExplainer} />
       <div class="query-bar">
         <input ref=${inputRef} type="text" value=${input}
           onInput=${e=>setInput(e.target.value)}
@@ -582,7 +808,10 @@ $.path  type  {samples}  JSONB path with inferred type
       </div>
       ${results && html`
         <div class="result-toolbar">
-          <span class="count">${results.tables?.length || 0} tables (${matchCount} matched) \u00B7 ${selected.size} selected</span>
+          <span class="count">
+            <span>${results.tables?.length || 0} tables (${matchCount} matched) \u00B7 ${selected.size} selected</span>
+            <${TimingBadge} timing=${results.timing} />
+          </span>
           <button onClick=${selectMatched}>Matched</button>
           <button onClick=${selectAll}>All</button>
           <button onClick=${selectNone}>None</button>

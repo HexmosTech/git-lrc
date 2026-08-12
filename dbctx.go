@@ -943,6 +943,21 @@ type ResultSet struct {
 	// score. See the design principle: "Engineers should be able to
 	// understand why a particular table or field appeared."
 	SemanticHits []SemanticHit `json:"semantic_hits,omitempty"`
+	// Timing breaks down how long each phase of the query took, so
+	// latency is inspectable the same way scoring is.
+	Timing QueryTiming `json:"timing"`
+}
+
+// QueryTiming records how long each phase of a query took, in
+// milliseconds. SemanticRan distinguishes "semantic search ran and took
+// SemanticMs" from "semantic search did not run at all" (SemanticMs left
+// at zero either way).
+type QueryTiming struct {
+	LexicalMs   float64 `json:"lexical_ms"`
+	SemanticMs  float64 `json:"semantic_ms"`
+	SemanticRan bool    `json:"semantic_ran"`
+	ExpandMs    float64 `json:"expand_ms"`
+	TotalMs     float64 `json:"total_ms"`
 }
 
 // SemanticHit is one piece of evidence the semantic retrieval signal
@@ -1107,6 +1122,49 @@ type TableContext struct {
 	ForeignKeys []FKInfo     `json:"foreign_keys"`
 	IsMatch     bool         `json:"is_match"`
 	MatchScore  float64      `json:"match_score"`
+	// Score documents exactly how MatchScore was computed, signal by
+	// signal (FTS, fuzzy, value, terminology, and — if it ran — semantic).
+	// Nil for tables that were only pulled in via foreign-key expansion.
+	Score *ScoreBreakdown `json:"score,omitempty"`
+}
+
+// ScoreBreakdown is the "show your work" behind TableContext.MatchScore:
+// every lexical signal's raw score, its fixed weight, and the resulting
+// weighted contribution, plus the semantic signal's contribution if one
+// ran. See [search.ScoreBreakdown] (internal/search) for the full formula
+// documentation this mirrors.
+type ScoreBreakdown struct {
+	FTS          SignalContribution    `json:"fts"`
+	Fuzzy        SignalContribution    `json:"fuzzy"`
+	Value        SignalContribution    `json:"value"`
+	Terminology  SignalContribution    `json:"terminology"`
+	LexicalTotal float64               `json:"lexical_total"`
+	Semantic     *SemanticContribution `json:"semantic,omitempty"`
+	FinalScore   float64               `json:"final_score"`
+}
+
+// SignalContribution is one lexical signal's raw score, its fixed weight,
+// and the resulting weighted contribution (Raw * Weight).
+type SignalContribution struct {
+	Raw          float64 `json:"raw"`
+	Weight       float64 `json:"weight"`
+	Contribution float64 `json:"contribution"`
+}
+
+// SemanticContribution documents how the optional semantic signal
+// contributed to a table's final score: contribution = Weight *
+// Normalized * Scale. Cosine is the best-matching embedded object's raw
+// similarity to the query; Normalized is that score after query-relative
+// min-max normalization; Scale is the strongest lexical score found
+// anywhere in the query (or 1.0 if lexical found nothing at all).
+type SemanticContribution struct {
+	Cosine       float64 `json:"cosine"`
+	Normalized   float64 `json:"normalized"`
+	Weight       float64 `json:"weight"`
+	Scale        float64 `json:"scale"`
+	Contribution float64 `json:"contribution"`
+	EvidenceKind string  `json:"evidence_kind"`
+	EvidenceText string  `json:"evidence_text"`
 }
 
 // ColumnInfo describes a column in a query result, including its type,
@@ -1260,6 +1318,13 @@ func newResultSet(raw *search.SearchResult) *ResultSet {
 			Score:     h.Score,
 		})
 	}
+	r.Timing = QueryTiming{
+		LexicalMs:   raw.Timing.LexicalMs,
+		SemanticMs:  raw.Timing.SemanticMs,
+		SemanticRan: raw.Timing.SemanticRan,
+		ExpandMs:    raw.Timing.ExpandMs,
+		TotalMs:     raw.Timing.TotalMs,
+	}
 	return r
 }
 
@@ -1269,6 +1334,7 @@ func convertTableContext(t search.TableContext) TableContext {
 		Schema:     t.Schema,
 		IsMatch:    t.IsMatch,
 		MatchScore: t.MatchScore,
+		Score:      convertScoreBreakdown(t.Score),
 	}
 	tc.PrimaryKey = append(tc.PrimaryKey, t.PrimaryKey...)
 	for _, fk := range t.ForeignKeys {
@@ -1282,6 +1348,35 @@ func convertTableContext(t search.TableContext) TableContext {
 		tc.Columns = append(tc.Columns, convertColumnInfo(c))
 	}
 	return tc
+}
+
+func convertScoreBreakdown(bd *search.ScoreBreakdown) *ScoreBreakdown {
+	if bd == nil {
+		return nil
+	}
+	convertSignal := func(s search.SignalContribution) SignalContribution {
+		return SignalContribution{Raw: s.Raw, Weight: s.Weight, Contribution: s.Contribution}
+	}
+	out := &ScoreBreakdown{
+		FTS:          convertSignal(bd.FTS),
+		Fuzzy:        convertSignal(bd.Fuzzy),
+		Value:        convertSignal(bd.Value),
+		Terminology:  convertSignal(bd.Terminology),
+		LexicalTotal: bd.LexicalTotal,
+		FinalScore:   bd.FinalScore,
+	}
+	if bd.Semantic != nil {
+		out.Semantic = &SemanticContribution{
+			Cosine:       bd.Semantic.Cosine,
+			Normalized:   bd.Semantic.Normalized,
+			Weight:       bd.Semantic.Weight,
+			Scale:        bd.Semantic.Scale,
+			Contribution: bd.Semantic.Contribution,
+			EvidenceKind: bd.Semantic.EvidenceKind,
+			EvidenceText: bd.Semantic.EvidenceText,
+		}
+	}
+	return out
 }
 
 func convertColumnInfo(c search.ColumnInfo) ColumnInfo {

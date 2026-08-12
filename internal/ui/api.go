@@ -117,15 +117,15 @@ func (a *API) handleTables(w http.ResponseWriter, r *http.Request) {
 }
 
 type columnDetail struct {
-	Name        string         `json:"name"`
-	Type        string         `json:"type"`
-	Nullable    bool           `json:"nullable"`
-	IsPK        bool           `json:"is_pk"`
-	FKTarget    string         `json:"fk_target,omitempty"`
-	Distinct    int            `json:"distinct"`
-	IsState     bool           `json:"is_state"`
-	IsCategoric bool           `json:"is_categoric"`
-	Values      []valueInfo    `json:"values,omitempty"`
+	Name        string          `json:"name"`
+	Type        string          `json:"type"`
+	Nullable    bool            `json:"nullable"`
+	IsPK        bool            `json:"is_pk"`
+	FKTarget    string          `json:"fk_target,omitempty"`
+	Distinct    int             `json:"distinct"`
+	IsState     bool            `json:"is_state"`
+	IsCategoric bool            `json:"is_categoric"`
+	Values      []valueInfo     `json:"values,omitempty"`
 	JSONBPaths  []jsonbPathInfo `json:"jsonb_paths,omitempty"`
 }
 
@@ -296,9 +296,10 @@ func (a *API) handleTableDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 type queryResult struct {
-	Query        string               `json:"query"`
+	Query        string                `json:"query"`
 	Tables       []search.TableContext `json:"tables"`
 	SemanticHits []search.SemanticHit  `json:"semantic_hits,omitempty"`
+	Timing       search.QueryTiming    `json:"timing"`
 }
 
 func (a *API) handleQuery(w http.ResponseWriter, r *http.Request) {
@@ -314,5 +315,5 @@ func (a *API) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonResp(w, queryResult{Query: result.Query, Tables: result.Tables, SemanticHits: result.SemanticHits})
+	jsonResp(w, queryResult{Query: result.Query, Tables: result.Tables, SemanticHits: result.SemanticHits, Timing: result.Timing})
 }
