@@ -19,7 +19,7 @@ type TableContext struct {
 	Schema      string       `json:"schema"`
 	Columns     []ColumnInfo `json:"columns"`
 	PrimaryKey  []string     `json:"primary_key"`
-	ForeignKeys []FKInfo      `json:"foreign_keys"`
+	ForeignKeys []FKInfo     `json:"foreign_keys"`
 	IsMatch     bool         `json:"is_match"`
 	MatchScore  float64      `json:"match_score"`
 }
@@ -54,8 +54,37 @@ type FKInfo struct {
 }
 
 type SearchResult struct {
-	Tables []TableContext `json:"tables"`
-	Query  string         `json:"query"`
+	Tables       []TableContext `json:"tables"`
+	Query        string         `json:"query"`
+	SemanticHits []SemanticHit  `json:"semantic_hits,omitempty"`
+}
+
+// SemanticHit is one inspectable piece of evidence a [SemanticScorer]
+// contributed to a query: the best-matching embedded object for a table,
+// and its similarity to the query. Surfacing these (rather than just a
+// fused number) is what makes a semantic-influenced result explainable —
+// callers can show "why" a table not matched lexically still appeared.
+type SemanticHit struct {
+	TableName string  `json:"table_name"`
+	Kind      string  `json:"kind"` // "table" | "column" | "jsonb_path"
+	Text      string  `json:"text"`
+	Score     float64 `json:"score"`
+}
+
+// SemanticScorer is the interface an optional embedding-based retrieval
+// signal implements to participate in [QueryHybrid]. It is defined here
+// (rather than in whatever package implements it) so that this package
+// never has to import an embedding backend — lexical search stays usable,
+// dependency-light, and CGO-free even when semantic search is compiled in
+// elsewhere in the program.
+//
+// Score returns a per-table relevance score for query (implementations
+// should normalize into a comparable 0..1 range — see internal/semantic)
+// plus the evidence used to compute it. Returning an error is treated as
+// "semantic signal unavailable for this query" by [QueryHybrid], which
+// falls back to lexical-only scoring rather than failing the query.
+type SemanticScorer interface {
+	Score(query string) (scores map[string]float64, hits []SemanticHit, err error)
 }
 
 func PopulateFTS(store *db.Store) error {
@@ -107,8 +136,55 @@ func PopulateFTS(store *db.Store) error {
 	return rows.Err()
 }
 
+// Query searches the index using lexical signals only (FTS, fuzzy table
+// name matching, and value matching), expands via foreign keys, and
+// returns ranked table contexts. This is the original, unchanged retrieval
+// path — it never consults a semantic index even if one is present on the
+// store, and has no dependency on an embedding backend.
+//
+// Use [QueryHybrid] to additionally fold in a [SemanticScorer].
 func Query(store *db.Store, query string) (*SearchResult, error) {
+	return QueryHybrid(store, query, nil)
+}
+
+// QueryHybrid searches the index using lexical signals plus, if sem is
+// non-nil, an additional semantic retrieval signal fused into the same
+// per-table score used for ranking and foreign-key expansion. Passing a
+// nil sem is equivalent to [Query].
+//
+// If sem.Score returns an error (e.g. the embedding backend is
+// unavailable), the semantic signal is silently dropped and the query
+// proceeds lexically — a missing/broken semantic index must never fail an
+// otherwise-valid query.
+func QueryHybrid(store *db.Store, query string, sem SemanticScorer) (*SearchResult, error) {
 	result := &SearchResult{Query: query}
+
+	lexical := ComputeLexicalScores(store, query)
+	merged := lexical
+
+	if sem != nil {
+		semScores, hits, err := sem.Score(query)
+		if err == nil && len(semScores) > 0 {
+			merged = FuseScores(lexical, semScores)
+			result.SemanticHits = hits
+		}
+	}
+
+	tables, err := expandAndBuild(store, merged)
+	if err != nil {
+		return nil, err
+	}
+	result.Tables = tables
+	return result, nil
+}
+
+// ComputeLexicalScores runs the deterministic retrieval signals — FTS5
+// full-text search, fuzzy table-name matching, and value matching — and
+// combines them into a single per-table score map. This is the "table /
+// field / value matching" step of dbctx's retrieval pipeline, kept
+// separate from FK expansion and context building so a semantic score can
+// be fused in before expansion happens.
+func ComputeLexicalScores(store *db.Store, query string) map[string]float64 {
 	tokens := strings.Fields(strings.ToLower(query))
 
 	// 1. FTS5 search
@@ -120,7 +196,10 @@ func Query(store *db.Store, query string) (*SearchResult, error) {
 	// 3. Value match
 	valueScores := valueMatch(store, tokens)
 
-	// Merge scores
+	// 4. Terminology match (optional user-supplied alias -> object mappings;
+	// see internal/terminology). Empty/absent terminology has no effect.
+	termScores := terminologyMatch(store, query)
+
 	merged := make(map[string]float64)
 	for t, s := range ftsScores {
 		merged[t] += s * 1.0
@@ -131,8 +210,92 @@ func Query(store *db.Store, query string) (*SearchResult, error) {
 	for t, s := range valueScores {
 		merged[t] += s * 1.2
 	}
+	for t, s := range termScores {
+		merged[t] += s * 1.5
+	}
+	return merged
+}
 
-	// Sort by score
+// terminologyMatch checks query (as a whole, case-insensitive substring
+// match — terminology aliases are often multi-word phrases like "line of
+// code", so this can't be tokenized the way the other signals are) against
+// any user-imported terminology aliases, scoring the alias's target table.
+// A store that never had terminology imported simply has no `terminology`
+// table yet; that's treated as "no matches" rather than an error, the same
+// way the other signals silently no-op when their prerequisites are
+// missing.
+func terminologyMatch(store *db.Store, query string) map[string]float64 {
+	scores := make(map[string]float64)
+	rows, err := store.DB().Query("SELECT alias, target_table FROM terminology")
+	if err != nil {
+		return scores // no terminology table (never imported) — not an error
+	}
+	defer rows.Close()
+
+	lowerQuery := strings.ToLower(query)
+	for rows.Next() {
+		var alias, table string
+		if rows.Scan(&alias, &table) != nil {
+			continue
+		}
+		if alias == "" {
+			continue
+		}
+		if strings.Contains(lowerQuery, strings.ToLower(alias)) {
+			scores[table] += 1.0
+		}
+	}
+	return scores
+}
+
+// semanticFusionWeight controls how strongly the semantic signal can move
+// a table's ranking relative to the strongest lexical match in the same
+// query. It is deliberately well under 1.0: exact/near-exact lexical
+// identifier matches (an FTS hit on the literal table name, a 100% fuzzy
+// match) should stay dominant, and semantic similarity exists to recover
+// recall — surface plausible tables lexical search missed entirely — not
+// to outrank a direct name match.
+const semanticFusionWeight = 0.6
+
+// FuseScores combines lexical and semantic per-table scores using weighted
+// normalized fusion: semantic contributes semanticFusionWeight * score,
+// scaled by the strongest lexical score in this result set (or 1.0 if
+// lexical found nothing at all, so a pure paraphrase query like "buyers"
+// can still surface "customers" with a modest, present score rather than
+// zero).
+//
+// This mirrors the additive, per-source-weighted style already used by
+// ComputeLexicalScores (fts*1.0 + fuzzy*0.8 + value*1.2) rather than
+// introducing a different fusion paradigm like reciprocal rank fusion —
+// it's the natural extension of the scoring model dbctx already has.
+// Semantic scores are expected to already be normalized into a 0..1
+// relative-relevance range by the caller's SemanticScorer (see
+// internal/semantic), since raw embedding similarity is not calibrated
+// against the lexical score scale.
+func FuseScores(lexical, semantic map[string]float64) map[string]float64 {
+	merged := make(map[string]float64, len(lexical)+len(semantic))
+	var maxLexical float64
+	for t, s := range lexical {
+		merged[t] = s
+		if s > maxLexical {
+			maxLexical = s
+		}
+	}
+	scale := maxLexical
+	if scale <= 0 {
+		scale = 1.0
+	}
+	for t, s := range semantic {
+		merged[t] += semanticFusionWeight * s * scale
+	}
+	return merged
+}
+
+// expandAndBuild expands a scored table set via foreign keys and builds
+// full [TableContext] results, sorted by score with FK-expanded (score 0)
+// tables trailing. This is the "candidate tables -> foreign-key expansion
+// -> relevant fields" portion of dbctx's retrieval pipeline.
+func expandAndBuild(store *db.Store, merged map[string]float64) ([]TableContext, error) {
 	type scored struct {
 		name  string
 		score float64
@@ -151,6 +314,7 @@ func Query(store *db.Store, query string) (*SearchResult, error) {
 	}
 
 	// Build table contexts
+	var tables []TableContext
 	seen := make(map[string]bool)
 	for _, s := range sorted {
 		if !expanded[s.name] {
@@ -160,8 +324,7 @@ func Query(store *db.Store, query string) (*SearchResult, error) {
 			continue
 		}
 		seen[s.name] = true
-		tc := buildTableContext(store, s.name, s.score)
-		result.Tables = append(result.Tables, tc)
+		tables = append(tables, buildTableContext(store, s.name, s.score))
 	}
 
 	// Add FK-expanded tables that weren't in the original match
@@ -170,11 +333,10 @@ func Query(store *db.Store, query string) (*SearchResult, error) {
 			continue
 		}
 		seen[tbl] = true
-		tc := buildTableContext(store, tbl, 0)
-		result.Tables = append(result.Tables, tc)
+		tables = append(tables, buildTableContext(store, tbl, 0))
 	}
 
-	return result, nil
+	return tables, nil
 }
 
 func ftsSearch(store *db.Store, tokens []string) map[string]float64 {

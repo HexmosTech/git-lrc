@@ -95,9 +95,12 @@ import (
 
 	"github.com/shrsv/dbctx/internal/analyze"
 	"github.com/shrsv/dbctx/internal/db"
+	"github.com/shrsv/dbctx/internal/embed"
 	"github.com/shrsv/dbctx/internal/report"
 	"github.com/shrsv/dbctx/internal/schema"
 	"github.com/shrsv/dbctx/internal/search"
+	"github.com/shrsv/dbctx/internal/semantic"
+	"github.com/shrsv/dbctx/internal/terminology"
 )
 
 // Index is a compiled database context index. It provides methods to query
@@ -112,6 +115,13 @@ type Index struct {
 	mu    sync.RWMutex
 	ready chan struct{}
 	err   error
+
+	// semanticOnce lazily constructs semanticScorer on first Query call
+	// (rather than at Build/Open time) so that opening or building a
+	// lexical-only index never pays any embedding-model cost, and a
+	// semantic-enabled index only loads its model when actually queried.
+	semanticOnce   sync.Once
+	semanticScorer search.SemanticScorer
 }
 
 // Options configures how a database context index is built.
@@ -132,6 +142,20 @@ type Options struct {
 
 	// Logger receives progress messages during build. If nil, os.Stderr is used.
 	Logger io.Writer
+
+	// NoSemantic disables building the optional local embedding-based
+	// semantic index. By default (false), Build downloads (if not already
+	// cached — see internal/embed) and runs a small local embedding model
+	// to add a semantic retrieval signal alongside dbctx's existing
+	// lexical/fuzzy matching, improving recall for paraphrased queries
+	// (e.g. "buyers" finding a "customers" table). This never replaces
+	// lexical matching, only augments it — see [Index.Query].
+	//
+	// If the model or its inference runtime can't be obtained or loaded
+	// (offline, unsupported platform, etc.), Build logs a warning and
+	// continues with a lexical-only index rather than failing — semantic
+	// indexing is always best-effort.
+	NoSemantic bool
 }
 
 // Build connects to PostgreSQL and builds a complete database context index.
@@ -224,6 +248,10 @@ func Build(ctx context.Context, dsn string, opts *Options) (*Index, error) {
 		return nil, fmt.Errorf("populate fts: %w", err)
 	}
 
+	if !opts.NoSemantic {
+		buildSemanticIndex(store, log)
+	}
+
 	fmt.Fprintf(log, "Done — index ready\n")
 
 	idx := &Index{
@@ -233,6 +261,45 @@ func Build(ctx context.Context, dsn string, opts *Options) (*Index, error) {
 	}
 	close(idx.ready)
 	return idx, nil
+}
+
+// buildSemanticIndex runs the optional semantic embedding phase, logging
+// progress in the same style as the other build phases. Any failure here
+// (model download failed, unsupported platform, onnxruntime unavailable)
+// is logged as a warning and swallowed — the resulting index is still a
+// perfectly usable lexical-only index, matching Options.NoSemantic's
+// documented best-effort behavior.
+func buildSemanticIndex(store *db.Store, log io.Writer) {
+	fmt.Fprintf(log, "5/5 Building semantic index...\n")
+	emb, err := semantic.NewDefaultEmbedder(progressLogger(log))
+	if err != nil {
+		fmt.Fprintf(log, "  semantic indexing unavailable (%v); continuing with lexical-only index\n", err)
+		return
+	}
+	stats, err := semantic.BuildIndex(store, emb, log)
+	if err != nil {
+		fmt.Fprintf(log, "  semantic indexing failed (%v); continuing with lexical-only index\n", err)
+		return
+	}
+	fmt.Fprintf(log, "  %d objects (%d embedded, %d reused, %d removed)\n", stats.Total, stats.Embedded, stats.Reused, stats.Removed)
+}
+
+// progressLogger adapts an io.Writer into an embed.ProgressFunc that prints
+// one line per asset the first time it starts downloading, rather than
+// flooding the log with a line per chunk.
+func progressLogger(log io.Writer) embed.ProgressFunc {
+	seen := make(map[string]bool)
+	return func(label string, downloaded, total int64) {
+		if seen[label] {
+			return
+		}
+		seen[label] = true
+		if total > 0 {
+			fmt.Fprintf(log, "  downloading %s (%.1f MB)...\n", label, float64(total)/(1024*1024))
+		} else {
+			fmt.Fprintf(log, "  downloading %s...\n", label)
+		}
+	}
 }
 
 // BuildAsync starts building the index in a background goroutine and returns
@@ -348,6 +415,10 @@ func BuildAsync(ctx context.Context, dsn string, opts *Options) (*Index, <-chan 
 			return
 		}
 
+		if !opts.NoSemantic {
+			buildSemanticIndex(store, log)
+		}
+
 		idx.mu.Lock()
 		idx.store = store
 		idx.mu.Unlock()
@@ -427,11 +498,29 @@ func (idx *Index) Query(query string) (*ResultSet, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	raw, err := search.Query(idx.store, query)
+	raw, err := search.QueryHybrid(idx.store, query, idx.semantic())
 	if err != nil {
 		return nil, err
 	}
 	return newResultSet(raw), nil
+}
+
+// semantic lazily opens the semantic scorer for this index on first use.
+// If the store has no semantic index, or the embedding backend can't be
+// loaded (offline, unsupported platform, etc.), this returns nil once and
+// every subsequent Query call cheaply reuses that nil result rather than
+// retrying — semantic search degrades to "not available" the same way a
+// missing index does, never to a per-query error.
+func (idx *Index) semantic() search.SemanticScorer {
+	idx.semanticOnce.Do(func() {
+		scorer, err := semantic.OpenScorer(idx.store, progressLogger(os.Stderr))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "dbctx: semantic search unavailable (%v); using lexical search only\n", err)
+			return
+		}
+		idx.semanticScorer = scorer
+	})
+	return idx.semanticScorer
 }
 
 // Tables returns a summary of all tables in the index. Each entry includes
@@ -651,6 +740,98 @@ func (idx *Index) Report(w io.Writer) error {
 	return report.ReportAll(w, idx.store)
 }
 
+// TerminologyPrompt generates a self-contained prompt that can be pasted
+// into a large external LLM (Claude, GPT, Gemini, or similar) to
+// interactively derive a terminology dictionary for this database — a
+// mapping from domain vocabulary (abbreviations, acronyms, business
+// jargon) to the exact schema objects it refers to. dbctx never calls an
+// LLM itself; this only produces text for the caller to use however they
+// like (print it, copy it, pipe it into their own LLM integration).
+//
+// The prompt embeds the complete schema this Index already knows —
+// tables, columns, relationships, state/categorical values, and JSONB
+// structure — so it is usable on its own without additional context.
+//
+// See [Index.ImportTerminology] to load the LLM's resulting output back
+// into the index.
+func (idx *Index) TerminologyPrompt() (string, error) {
+	<-idx.ready
+	if idx.err != nil {
+		return "", idx.err
+	}
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return terminology.GeneratePrompt(idx.store)
+}
+
+// ImportTerminology validates and persists a terminology dictionary —
+// typically produced by working through the prompt from
+// [Index.TerminologyPrompt] with an external LLM — into this index.
+//
+// data must be a JSON array of term groups:
+//
+//	[{"term": "loc", "aliases": ["lines of code"], "targets": ["metrics.loc"]}]
+//
+// Every alias/target pair is validated against the actual schema before
+// being persisted; entries that don't resolve to a real table, column, or
+// JSONB path are rejected individually (reported in the result) rather
+// than failing the whole import. Terminology is purely additive to
+// retrieval — see the package documentation — and is never required.
+func (idx *Index) ImportTerminology(data []byte) (*TerminologyImportResult, error) {
+	<-idx.ready
+	if idx.err != nil {
+		return nil, idx.err
+	}
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	result, err := terminology.Import(idx.store, data)
+	if err != nil {
+		return nil, err
+	}
+	return convertImportResult(result), nil
+}
+
+// Terminology returns every currently-imported terminology entry, for
+// inspection — so the user-supplied mappings influencing retrieval are
+// never a black box. Returns an empty slice if none have been imported.
+func (idx *Index) Terminology() ([]TerminologyEntry, error) {
+	<-idx.ready
+	if idx.err != nil {
+		return nil, idx.err
+	}
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	entries, err := terminology.List(idx.store)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TerminologyEntry, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, TerminologyEntry{
+			Term:         e.Term,
+			Alias:        e.Alias,
+			TargetTable:  e.TargetTable,
+			TargetColumn: e.TargetColumn,
+			TargetPath:   e.TargetPath,
+			Source:       e.Source,
+			ImportedAt:   e.ImportedAt,
+		})
+	}
+	return out, nil
+}
+
+func convertImportResult(r *terminology.ImportResult) *TerminologyImportResult {
+	out := &TerminologyImportResult{Accepted: r.Accepted}
+	for _, rej := range r.Rejected {
+		out.Rejected = append(out.Rejected, RejectedTerminology{
+			Term: rej.Term, Alias: rej.Alias, Target: rej.Target, Reason: rej.Reason,
+		})
+	}
+	return out
+}
+
 // --- Types ---
 
 // ResultSet holds the results of a query and provides methods to select
@@ -666,6 +847,25 @@ type ResultSet struct {
 	// Tables contains all tables in the result, including both directly
 	// matched tables (score > 0) and FK-expanded tables (score = 0).
 	Tables []TableContext `json:"tables"`
+	// SemanticHits lists the evidence the optional semantic retrieval
+	// signal contributed to this result, if semantic search was available
+	// and ran. Empty when semantic search is disabled/unavailable, or when
+	// it ran but found nothing above the other tables already found
+	// lexically. This exists so a result's ranking is inspectable — why a
+	// table appeared even without a lexical match — not just a black-box
+	// score. See the design principle: "Engineers should be able to
+	// understand why a particular table or field appeared."
+	SemanticHits []SemanticHit `json:"semantic_hits,omitempty"`
+}
+
+// SemanticHit is one piece of evidence the semantic retrieval signal
+// contributed: the best-matching embedded schema object for a table and
+// its similarity to the query.
+type SemanticHit struct {
+	TableName string  `json:"table_name"`
+	Kind      string  `json:"kind"`
+	Text      string  `json:"text"`
+	Score     float64 `json:"score"`
 }
 
 // Matched returns a [Selection] containing only tables with a match score > 0.
@@ -817,7 +1017,7 @@ type TableContext struct {
 	Schema      string       `json:"schema"`
 	Columns     []ColumnInfo `json:"columns"`
 	PrimaryKey  []string     `json:"primary_key"`
-	ForeignKeys []FKInfo      `json:"foreign_keys"`
+	ForeignKeys []FKInfo     `json:"foreign_keys"`
 	IsMatch     bool         `json:"is_match"`
 	MatchScore  float64      `json:"match_score"`
 }
@@ -894,6 +1094,35 @@ type ColumnDetail struct {
 	JSONBPaths  []JSONBPathInfo `json:"jsonb_paths,omitempty"`
 }
 
+// TerminologyEntry is one user-approved (alias -> schema object) mapping,
+// as returned by [Index.Terminology].
+type TerminologyEntry struct {
+	Term         string `json:"term"`
+	Alias        string `json:"alias"`
+	TargetTable  string `json:"target_table"`
+	TargetColumn string `json:"target_column,omitempty"`
+	TargetPath   string `json:"target_path,omitempty"`
+	Source       string `json:"source"`
+	ImportedAt   string `json:"imported_at,omitempty"`
+}
+
+// TerminologyImportResult summarizes an [Index.ImportTerminology] call.
+type TerminologyImportResult struct {
+	Accepted int                   `json:"accepted"`
+	Rejected []RejectedTerminology `json:"rejected,omitempty"`
+}
+
+// RejectedTerminology records one terminology mapping ImportTerminology
+// refused to persist, and why (e.g. the target doesn't resolve to a real
+// schema object) — so a partially-rejected import is inspectable rather
+// than silently dropping entries.
+type RejectedTerminology struct {
+	Term   string `json:"term"`
+	Alias  string `json:"alias"`
+	Target string `json:"target"`
+	Reason string `json:"reason"`
+}
+
 // Stats contains summary statistics about a database context index.
 type Stats struct {
 	Tables            int `json:"tables"`
@@ -914,6 +1143,14 @@ func newResultSet(raw *search.SearchResult) *ResultSet {
 	r := &ResultSet{Query: raw.Query}
 	for _, t := range raw.Tables {
 		r.Tables = append(r.Tables, convertTableContext(t))
+	}
+	for _, h := range raw.SemanticHits {
+		r.SemanticHits = append(r.SemanticHits, SemanticHit{
+			TableName: h.TableName,
+			Kind:      h.Kind,
+			Text:      h.Text,
+			Score:     h.Score,
+		})
 	}
 	return r
 }

@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/shrsv/dbctx/internal/db"
@@ -214,6 +215,145 @@ func TestQuery_TableContextStructure(t *testing.T) {
 				t.Error("body column should be nullable")
 			}
 		}
+	}
+}
+
+// fakeScorer is a test-only SemanticScorer with canned responses.
+type fakeScorer struct {
+	scores map[string]float64
+	hits   []SemanticHit
+	err    error
+}
+
+func (f *fakeScorer) Score(query string) (map[string]float64, []SemanticHit, error) {
+	return f.scores, f.hits, f.err
+}
+
+func TestFuseScores_LexicalDominatesExactMatch(t *testing.T) {
+	lexical := map[string]float64{"orders": 10.0}
+	semantic := map[string]float64{"orders": 0.9, "purchases": 0.95}
+
+	merged := FuseScores(lexical, semantic)
+
+	if merged["orders"] <= merged["purchases"] {
+		t.Errorf("exact lexical match 'orders' (%.2f) should stay above a purely-semantic hit 'purchases' (%.2f)",
+			merged["orders"], merged["purchases"])
+	}
+	if merged["orders"] <= lexical["orders"] {
+		t.Error("semantic agreement should still boost the lexical score, not just leave it unchanged")
+	}
+}
+
+func TestFuseScores_PureSemanticSurfacesWithNoLexicalSignal(t *testing.T) {
+	lexical := map[string]float64{} // "buyers" matched nothing lexically
+	semantic := map[string]float64{"customers": 0.8}
+
+	merged := FuseScores(lexical, semantic)
+
+	if merged["customers"] <= 0 {
+		t.Errorf("customers score = %.2f, want > 0 even with zero lexical signal", merged["customers"])
+	}
+}
+
+func TestQueryHybrid_NilScorerMatchesQuery(t *testing.T) {
+	store := seedTestStore(t)
+
+	viaHybrid, err := QueryHybrid(store, "reviews", nil)
+	if err != nil {
+		t.Fatalf("QueryHybrid: %v", err)
+	}
+	viaQuery, err := Query(store, "reviews")
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(viaHybrid.Tables) != len(viaQuery.Tables) {
+		t.Errorf("QueryHybrid(nil) returned %d tables, Query returned %d", len(viaHybrid.Tables), len(viaQuery.Tables))
+	}
+}
+
+func TestQueryHybrid_SurfacesTableLexicalMissed(t *testing.T) {
+	store := seedTestStore(t)
+
+	sem := &fakeScorer{
+		scores: map[string]float64{"orgs": 0.9},
+		hits:   []SemanticHit{{TableName: "orgs", Kind: "table", Text: "orgs organizations", Score: 0.9}},
+	}
+
+	// "xyznonexistent" matches nothing lexically in the fixture.
+	result, err := QueryHybrid(store, "xyznonexistent", sem)
+	if err != nil {
+		t.Fatalf("QueryHybrid: %v", err)
+	}
+
+	found := false
+	for _, tbl := range result.Tables {
+		if tbl.TableName == "orgs" && tbl.IsMatch {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected semantic-only signal to surface 'orgs' as a match")
+	}
+	if len(result.SemanticHits) != 1 || result.SemanticHits[0].TableName != "orgs" {
+		t.Errorf("SemanticHits = %v, want one hit for orgs", result.SemanticHits)
+	}
+}
+
+func TestQueryHybrid_ScorerErrorFallsBackToLexical(t *testing.T) {
+	store := seedTestStore(t)
+
+	sem := &fakeScorer{err: fmt.Errorf("embedding backend unavailable")}
+
+	result, err := QueryHybrid(store, "reviews", sem)
+	if err != nil {
+		t.Fatalf("QueryHybrid should not fail when the semantic scorer errors: %v", err)
+	}
+	found := false
+	for _, tbl := range result.Tables {
+		if tbl.TableName == "reviews" && tbl.IsMatch {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("lexical match should still succeed when semantic scorer errors")
+	}
+	if len(result.SemanticHits) != 0 {
+		t.Error("SemanticHits should be empty when the scorer errored")
+	}
+}
+
+func TestTerminologyMatch_NoTableIsANoOp(t *testing.T) {
+	store := seedTestStore(t) // never had InitTerminologySchema called
+
+	scores := ComputeLexicalScores(store, "monthly recurring revenue")
+	if len(scores) != 0 {
+		t.Errorf("expected no matches without a terminology table, got %v", scores)
+	}
+}
+
+func TestTerminologyMatch_MultiWordAlias(t *testing.T) {
+	store := seedTestStore(t)
+	if err := store.InitTerminologySchema(); err != nil {
+		t.Fatalf("InitTerminologySchema: %v", err)
+	}
+	store.DB().Exec(`INSERT INTO terminology (term, alias, target_table, source) VALUES ('pr', 'pull request', 'pull_requests', 'user')`)
+
+	scores := ComputeLexicalScores(store, "how many open pull request items are there")
+	if scores["pull_requests"] <= 0 {
+		t.Errorf("expected terminology to match the multi-word alias 'pull request', scores = %v", scores)
+	}
+}
+
+func TestTerminologyMatch_CaseInsensitive(t *testing.T) {
+	store := seedTestStore(t)
+	if err := store.InitTerminologySchema(); err != nil {
+		t.Fatalf("InitTerminologySchema: %v", err)
+	}
+	store.DB().Exec(`INSERT INTO terminology (term, alias, target_table, source) VALUES ('pr', 'pull request', 'pull_requests', 'user')`)
+
+	scores := ComputeLexicalScores(store, "PULL REQUEST status")
+	if scores["pull_requests"] <= 0 {
+		t.Errorf("expected case-insensitive terminology match, scores = %v", scores)
 	}
 }
 

@@ -4,15 +4,18 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/spf13/cobra"
 	"github.com/shrsv/dbctx/internal/analyze"
 	"github.com/shrsv/dbctx/internal/db"
+	"github.com/shrsv/dbctx/internal/embed"
 	"github.com/shrsv/dbctx/internal/schema"
+	"github.com/shrsv/dbctx/internal/semantic"
+	"github.com/spf13/cobra"
 )
 
 var buildCmd = &cobra.Command{
@@ -24,6 +27,7 @@ var buildCmd = &cobra.Command{
 		output, _ := cmd.Flags().GetString("output")
 		schemas, _ := cmd.Flags().GetString("schemas")
 		overwrite, _ := cmd.Flags().GetBool("overwrite")
+		noSemantic, _ := cmd.Flags().GetBool("no-semantic")
 
 		// Get DSN
 		dsn := ""
@@ -132,6 +136,14 @@ var buildCmd = &cobra.Command{
 		}
 		fmt.Fprintf(os.Stderr, "  done (%s)\n", time.Since(phaseStart).Round(time.Millisecond))
 
+		// Phase 5: Semantic index (optional, on by default)
+		if !noSemantic {
+			phaseStart = time.Now()
+			fmt.Fprintf(os.Stderr, "5/5 Building semantic index...\n")
+			buildSemanticIndex(store, os.Stderr)
+			fmt.Fprintf(os.Stderr, "  done (%s)\n", time.Since(phaseStart).Round(time.Millisecond))
+		}
+
 		fmt.Fprintf(os.Stderr, "\nDone in %s — %s\n", time.Since(totalStart).Round(time.Millisecond), output)
 
 		return nil
@@ -142,7 +154,44 @@ func init() {
 	buildCmd.Flags().StringP("output", "o", "", "Output .dtx file path (default: dbctx.dtx)")
 	buildCmd.Flags().StringP("schemas", "s", "public", "Comma-separated PostgreSQL schemas to extract")
 	buildCmd.Flags().Bool("overwrite", false, "Overwrite existing .dtx file without prompting")
+	buildCmd.Flags().Bool("no-semantic", false, "Skip building the local embedding-based semantic index (lexical/fuzzy search only)")
 	rootCmd.AddCommand(buildCmd)
+}
+
+// buildSemanticIndex runs the optional local embedding phase, downloading
+// the model/runtime to the local cache on first use. Failures are logged
+// as warnings and swallowed — a build must still succeed with a
+// lexical-only index if semantic indexing can't be completed (offline,
+// unsupported platform, etc.).
+func buildSemanticIndex(store *db.Store, log io.Writer) {
+	emb, err := semantic.NewDefaultEmbedder(progressLogger(log))
+	if err != nil {
+		fmt.Fprintf(log, "  semantic indexing unavailable (%v); continuing with lexical-only index\n", err)
+		return
+	}
+	stats, err := semantic.BuildIndex(store, emb, log)
+	if err != nil {
+		fmt.Fprintf(log, "  semantic indexing failed (%v); continuing with lexical-only index\n", err)
+		return
+	}
+	fmt.Fprintf(log, "  %d objects (%d embedded, %d reused, %d removed)\n", stats.Total, stats.Embedded, stats.Reused, stats.Removed)
+}
+
+// progressLogger adapts an io.Writer into an embed.ProgressFunc that logs
+// one line per asset the first time it starts downloading.
+func progressLogger(log io.Writer) embed.ProgressFunc {
+	seen := make(map[string]bool)
+	return func(label string, downloaded, total int64) {
+		if seen[label] {
+			return
+		}
+		seen[label] = true
+		if total > 0 {
+			fmt.Fprintf(log, "  downloading %s (%.1f MB)...\n", label, float64(total)/(1024*1024))
+		} else {
+			fmt.Fprintf(log, "  downloading %s...\n", label)
+		}
+	}
 }
 
 func isTerminal() bool {

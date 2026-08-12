@@ -5,19 +5,21 @@
 
 ### Compile a PostgreSQL database into compact, queryable context.
 
-**dbctx** is a Go library and CLI tool that compiles a PostgreSQL database into a portable, queryable context index (`.dtx` file). It extracts schema, relationships, field semantics, representative values, JSONB structure, and builds a full-text search index — all without requiring an LLM, embeddings, or external services.
+**dbctx** is a Go library and CLI tool that compiles a PostgreSQL database into a portable, queryable context index (`.dtx` file). It extracts schema, relationships, field semantics, representative values, JSONB structure, and builds a full-text search index — all from deterministic introspection, statistics, and heuristics, with no generative LLM and no external services required for the core index. It also supports an optional local semantic embedding signal and an optional, user-controlled terminology dictionary — both additive, both off-by-default-cost, described below.
 
 Use it to give text-to-SQL systems, AI agents, and database-aware applications a compact, relevant slice of your database schema at query time, instead of dumping the entire `information_schema` into every prompt.
 
 **Key features:**
 
 - **Natural-language query** — find relevant tables, columns, and relationships from a text question
+- **Semantic retrieval (optional, on by default)** — a local embedding model (BGE-small-en-v1.5, ~33M params, runs on CPU) recovers paraphrases lexical matching structurally can't, e.g. `"buyers"` → `customers`, `"purchases"` → `orders` — fused with, never replacing, exact/fuzzy lexical matching
+- **Terminology dictionary (optional, user-controlled)** — map domain abbreviations/jargon (`"MRR"`, `"LOC"`) to exact schema objects via a generated LLM prompt + reviewed import; independent of both the lexical and semantic signals
 - **JSONB intelligence** — discover paths, types, and representative values inside JSONB columns
 - **State/categorical detection** — identify implicit enums (status, plan, role) with their values
 - **FK expansion** — automatically include related tables through foreign-key graph traversal
 - **Compact text output** — LLM-ready schema notation with notation legend, optimized for token budget
 - **Portable .dtx format** — SQLite-based, ship/cache/version/inspect it like any file
-- **Zero LLM dependency** — deterministic introspection, statistics, and heuristics only
+- **No generative LLM required** — the core index and all retrieval logic are deterministic; the optional embedding model is a small local encoder, not a chat/completion model, and terminology generation happens outside dbctx entirely (you paste a prompt into whatever LLM you already use)
 - **Go library API** — embed directly in your Go application, no subprocess needed
 - **In-memory mode** — ephemeral indexes for testing or ephemeral workloads
 - **Web UI** — built-in browser-based database explorer
@@ -38,7 +40,9 @@ PostgreSQL
     ├── field intelligence
     ├── representative values
     ├── JSONB structure
-    └── retrieval index
+    ├── retrieval index (lexical)
+    ├── semantic index (optional)
+    └── terminology (optional, user-supplied)
     │
     ▼
 Text query
@@ -63,6 +67,8 @@ Text-to-SQL / visualization / analytics system
 | Browse the database in a web UI | [Web UI](#3-explore-in-the-ui) |
 | Use it as a Go library in my app | [Library Usage](#library-usage) |
 | Query with natural language and get compact schema | [Querying the context](#querying-the-context) |
+| Understand semantic (embedding-based) retrieval | [Semantic retrieval](#semantic-retrieval) |
+| Map domain jargon/abbreviations to schema objects | [Terminology](#terminology) |
 | Understand the `.dtx` file format | [The `.dtx` format](#the-dtx-format) |
 | See what dbctx understands about a database | [What dbctx understands](#what-dbctx-understands) |
 | Understand how it works under the hood | [Architecture](#architecture) / [The retrieval model](#the-retrieval-model) |
@@ -79,6 +85,12 @@ Text-to-SQL / visualization / analytics system
 
 ```bash
 dbctx build postgres://user:pass@localhost/mydb --output mydb.dtx
+```
+
+By default this also builds a local semantic (embedding) index — downloading the model to a local cache on first use (see [Semantic retrieval](#semantic-retrieval)). Skip it with `--no-semantic` if you only want the deterministic lexical index:
+
+```bash
+dbctx build postgres://user:pass@localhost/mydb --output mydb.dtx --no-semantic
 ```
 
 *(screenshot coming soon)*
@@ -170,6 +182,35 @@ BenchmarkTables               ~28 µs/op    1.7 KB/op
 BenchmarkTableDetail         ~147 µs/op     11 KB/op
 BenchmarkStats                ~33 µs/op    3.2 KB/op
 ```
+
+### Semantic retrieval benchmarks
+
+Measured on a synthetic 50-table schema (`internal/testutil.NewLargeStore`) — dbctx's own retrieval design targets 50+ table databases, so the 4-table fixture above isn't representative of semantic/hybrid overhead at realistic scale. Retrieval-side numbers (build, score, query fusion) use a deterministic fake embedder to isolate this package's own cost from model inference; model-inference numbers are measured separately against the real ONNX backend. All numbers are CPU-only, single machine, no GPU.
+
+```text
+Retrieval overhead (internal/semantic, 50 tables, ~90 embedded objects)
+─────────────────────────────────────────────────────────────────────
+BenchmarkQuery_Large_LexicalOnly                    ~7.0 ms/op    321 KB/op
+BenchmarkQuery_Large_Hybrid                         ~7.6 ms/op    425 KB/op   (+9% over lexical-only)
+BenchmarkScorer_Score_Large (semantic score only)   ~0.32 ms/op    96 KB/op
+BenchmarkBuildIndex_Large (full rebuild)            ~16.5 ms/op   728 KB/op
+BenchmarkBuildIndex_Large_Incremental (no changes)  ~11.6 ms/op   585 KB/op   (diff-only, no re-embedding)
+BenchmarkOpenAndQuery_WithSemanticIndex_FileBacked  ~12.1 ms/op   431 KB/op   (file-backed .dtx reopen + query)
+
+Real BGE-small-en-v1.5 model inference (internal/embed, onnxruntime, CPU)
+─────────────────────────────────────────────────────────────────────
+BenchmarkOnnxEmbedder_ColdInit (session load, 133 MB model)   ~240 ms/op
+BenchmarkOnnxEmbedder_EmbedQuery (1 text)                       ~16 ms/op
+BenchmarkOnnxEmbedder_EmbedPassages_Single (1 text)             ~17 ms/op
+BenchmarkOnnxEmbedder_EmbedPassages_Batch16 (16 texts)          ~44 ms/op   (~2.7 ms/text — batching matters)
+```
+
+Takeaways:
+
+* **Hybrid query overhead over lexical-only is small (~9%)** — the brute-force cosine scan over a database's worth of schema objects is cheap; almost all query latency is still the existing lexical signals (FTS, fuzzy match, value match).
+* **Model session load (~240ms) is the real one-time cost**, paid once per process (lazily, on first semantic query — see [Semantic retrieval](#semantic-retrieval)), not per query.
+* **Incremental rebuilds skip re-embedding entirely** when nothing changed — the ~11.6ms "incremental" cost is schema diffing (re-deriving candidate text and hashing it), not model inference.
+* Batch embedding during a build is meaningfully more efficient per-object than one-at-a-time (~2.7ms/text batched vs. ~17ms/text unbatched) — `internal/embed` batches automatically.
 
 Key takeaways:
 
@@ -274,6 +315,17 @@ idx, err := dbctx.Build(ctx, dsn, &dbctx.Options{
 // Later: open the existing file (read-only, no PostgreSQL needed)
 idx, err := dbctx.Open("mydb.dtx")
 ```
+
+By default, `Build` also constructs a local semantic embedding index (downloading the model to a local cache on first use — see [Semantic retrieval](#semantic-retrieval)). Set `Options.NoSemantic` to skip it if you only want the deterministic lexical index, or if you want to avoid the model download/CGO dependency entirely:
+
+```go
+idx, err := dbctx.Build(ctx, dsn, &dbctx.Options{
+    Path:       "mydb.dtx",
+    NoSemantic: true, // lexical/fuzzy retrieval only, no embedding model
+})
+```
+
+If semantic indexing is enabled but the model or its runtime can't be obtained (offline, unsupported platform), `Build` logs a warning and continues with a lexical-only index rather than failing — it's always best-effort. `idx.Query` degrades the same way at query time if a semantic index exists on disk but the model can't be loaded when the index is later opened.
 
 ## In-memory mode
 
@@ -382,6 +434,16 @@ idx.Report(os.Stdout)
 
 // Err — returns build error (for async builds)
 if err := idx.Err(); err != nil { ... }
+
+// TerminologyPrompt — generate a self-contained prompt for an external LLM
+// to derive a terminology dictionary from this schema (see Terminology below)
+prompt, _ := idx.TerminologyPrompt()
+
+// ImportTerminology — validate and load that LLM's JSON output back in
+result, _ := idx.ImportTerminology(jsonBytes)
+
+// Terminology — inspect what's currently imported
+entries, _ := idx.Terminology()
 
 // Close — release resources
 idx.Close()
@@ -573,6 +635,15 @@ This separation is intentional.
 
 The database can be scanned and analyzed once. Query-time systems can then retrieve only the information they need.
 
+### Compatibility
+
+`.dtx` is a SQLite file, and semantic/terminology support was added as new tables (`semantic_objects`, `terminology`), not a format break:
+
+* A `.dtx` file built before semantic/terminology support existed opens and queries fine on a newer dbctx — it simply has no semantic index and no terminology, and retrieval falls back to exactly the lexical behavior it always had.
+* A `.dtx` built with `--no-semantic` behaves the same way.
+* `dbctx terminology import` can add terminology to a `.dtx` file that predates the feature — it creates the table on demand rather than requiring a rebuild.
+* Persisted embeddings record the exact model identity and dimensionality they were built with; an incompatible or mismatched embedder is rejected cleanly (falls back to lexical-only) rather than producing meaningless cosine similarities.
+
 ---
 
 # Example
@@ -708,19 +779,139 @@ That compact context can then be passed to whatever generates SQL.
 
 ---
 
-# dbctx does not use an LLM
+# Semantic retrieval
 
-This is a deliberate design decision.
+Lexical/fuzzy matching is precise but has a hard ceiling: it can only find what shares vocabulary (or near-vocabulary, via typo tolerance) with your schema. It cannot find `customers` from the query `"buyers"` — there's no lexical relationship between those two strings at all.
 
-dbctx uses deterministic database introspection, statistics, heuristics, indexing, and relationship analysis.
+dbctx addresses this with an **optional, local, embedding-based retrieval signal** — never a replacement for lexical/fuzzy matching, an additional signal fused into the same ranking:
 
-It does **not** require:
+```text
+query
+  │
+  ├── lexical/fuzzy retrieval (FTS, fuzzy match, value match, terminology)
+  │
+  └── semantic retrieval (embedding cosine similarity)
+          │
+          ▼
+      weighted fusion
+          │
+          ▼
+   existing ranking / FK expansion / compact context
+```
 
-* an OpenAI API key
-* an embedding model
+It's on by default (`dbctx build`), backed by **BGE-small-en-v1.5** (384-dim, ~33M parameters) running locally via the ONNX Runtime — no API key, no external inference server, no vector database. Skip it with `--no-semantic` (or `Options.NoSemantic` in the library) if you only want the original deterministic index.
+
+### What gets embedded
+
+Not raw table names — dbctx builds a compact, natural-language-ish text blurb per schema object from information it already extracted, and embeds that:
+
+* **Tables**: name, column names, related tables (via FK), a sample of observed state/categorical values
+* **Meaningful columns**: state-like, categorical, or foreign-key columns only (not every column — this keeps the embedded corpus small and low-noise). A column named `total` with no state/categorical/FK signal is still covered by its table's text, just not embedded on its own.
+* **JSONB paths**: only paths with actual observed sample values (e.g. `reviews.metadata.provider` with `{github, gitlab, bitbucket}`), capped per table
+
+At query time, dbctx embeds the query and scores it against every embedded object with **brute-force cosine similarity** — no ANN index. dbctx's expected corpus size (one database's worth of tables/columns/JSONB paths) makes this the right tradeoff: it's simpler to reason about, has no index-quality tuning surface, and is fast enough in practice (see [benchmarks](#semantic-retrieval-benchmarks)) that adding HNSW or similar would be solving a problem dbctx doesn't have.
+
+### How the score is fused
+
+Exact identifiers stay powerful. Querying `"orders"` should strongly favor the `orders` table even if some other table is semantically related — semantic retrieval exists to recover **recall** where lexical search has none, not to outrank a direct name match. dbctx uses weighted, normalized fusion (not reciprocal rank fusion — see `internal/search.FuseScores` for the reasoning) that scales the semantic contribution by the strongest lexical score already found:
+
+```text
+final = lexical
+      + semantic_weight * semantic_score(0..1) * strongest_lexical_score_in_this_query
+```
+
+If lexical search found nothing at all for a query (e.g. `"buyers"` against a schema with only `customers`), the scale falls back to a flat 1.0 — enough for a purely-semantic match to surface, just never enough to bury a real lexical match when one exists.
+
+Query results are inspectable, not a black box: `ResultSet.SemanticHits` (library) / the `SEMANTIC SIGNAL` section (`dbctx query` output) show exactly which embedded object and similarity score contributed to each table that lexical search alone wouldn't have surfaced.
+
+### Model & distribution
+
+* **Model**: [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) via its ONNX export, CLS-token pooling + L2 normalization, BGE's documented query-instruction prefix for retrieval
+* **Runtime**: [onnxruntime](https://onnxruntime.ai/) via CGO (dynamically loaded, not statically linked)
+* **Tokenizer**: a pure-Go WordPiece implementation (`internal/embed`), no CGO, matching bert-base-uncased's vocabulary
+* **Distribution**: nothing is embedded in the dbctx binary. The model (~133MB) and the platform onnxruntime shared library (~10-80MB depending on platform) are downloaded once to a local cache (`$XDG_CACHE_HOME/dbctx`, override with `DBCTX_CACHE_DIR`) on first semantic build or query — never during ordinary lexical-only operation. Both are pinned by exact version and verified by SHA-256 on download.
+
+This is the one place dbctx isn't CGO-free — `onnxruntime_go` requires CGO to compile (though it dlopens the actual runtime library at runtime, so no link-time dependency). It was a deliberate tradeoff for numerical correctness and maintenance burden over a from-scratch pure-Go transformer implementation; see the design note in `internal/embed`.
+
+### Storage & compatibility
+
+Embeddings live in a `.dtx` file exactly like everything else — new SQLite tables (`semantic_objects`, plus terminology's own tables), added additively. Opening an older `.dtx` file that predates semantic support works unchanged; it simply has no semantic index, and dbctx falls back to lexical-only automatically. Vectors are stored as raw little-endian `float32` BLOBs (not JSON) alongside a recorded model identity and dimensionality, so a mismatched or incompatible embedder is rejected cleanly rather than corrupting cosine similarity silently. Rebuilding is incremental: unchanged schema objects are never re-embedded (matched by a content hash of their derived text), and objects for now-dropped tables/columns are pruned.
+
+---
+
+# Terminology
+
+Semantic embeddings are good at general paraphrases. They are not reliable for domain-specific abbreviations and jargon a generic model has never seen used the way *your* organization uses them — `LOC` for "lines of code", `MRR` for "monthly recurring revenue", an internal nickname for a metric. That gap is what dbctx's **terminology** layer is for.
+
+Terminology is a third, fully independent retrieval signal — separate from both lexical and semantic matching, and never populated automatically:
+
+```text
+                     .dtx
+                      │
+                      ▼
+             terminology prompt
+                      │
+                      ▼
+          large external LLM + you
+                      │
+                      ▼
+            terminology.json
+                      │
+                      ▼
+             terminology import
+                      │
+                      ▼
+                     .dtx
+```
+
+dbctx never calls an LLM itself. Instead:
+
+```bash
+# 1. Generate a self-contained prompt (schema + instructions) to stdout
+dbctx terminology prompt mydb.dtx > terminology-prompt.txt
+
+# 2. Paste it into Claude/GPT/Gemini/whatever you use. Work through any
+#    clarifying questions it asks about ambiguous terms, then save its
+#    final JSON output.
+
+# 3. Import it — every mapping is validated against the real schema;
+#    invalid entries are rejected individually, not the whole batch.
+dbctx terminology import mydb.dtx terminology.json
+
+# Inspect what's currently imported
+dbctx terminology list mydb.dtx
+```
+
+The prompt embeds the complete schema (reusing dbctx's existing full-detail report renderer — no second schema format), and instructs the model to: distinguish genuine domain terminology from ordinary synonyms lexical/semantic search already handle; identify abbreviations, acronyms, business terms, and internal jargon; ask you rather than guess when a mapping is ambiguous; and map every accepted term back to an *exact* schema object using dbctx's `table` / `table.column` / `table.column:$.json.path` notation.
+
+The output format:
+
+```json
+[
+  {
+    "term": "loc",
+    "aliases": ["line of code", "lines of code", "source lines of code"],
+    "targets": ["metrics.loc"]
+  }
+]
+```
+
+Terminology is metadata used only by retrieval — importing a large dictionary does not bloat the compact schema output (`Text()`/`TextRaw()`) that gets sent to an LLM downstream; token budget stays exactly what it was without terminology.
+
+---
+
+# dbctx does not require a generative LLM
+
+This is a deliberate design decision, and remains true even with semantic retrieval available.
+
+The core index — schema, relationships, field statistics, JSONB structure, categorical/state detection, lexical retrieval — is built entirely from deterministic database introspection, statistics, and heuristics. It does **not** require:
+
+* an OpenAI (or any) API key
 * an inference server
-* an LLM
-* a vector database
+* a generative/chat LLM
+* a vector database (dbctx's optional embeddings use brute-force cosine similarity over its own small schema-object corpus, not a general-purpose vector database)
+
+The **optional** semantic layer adds a small local encoder model (33M parameters, not a generative model) that runs entirely on your machine via the ONNX Runtime — no network calls at query time, no API key, ever. The **optional** terminology layer explicitly *does* involve an LLM, but that call happens entirely outside dbctx: you paste a generated prompt into whichever model you already use, and only reviewed, human-approved output ever comes back in.
 
 The database context should be something you can build locally, inspect, diff, cache, ship, and reproduce.
 
@@ -730,6 +921,8 @@ For example:
 same database state
         +
 same dbctx version
+        +
+same embedding model version (if semantic indexing is used)
         =
 same context index
 ```
@@ -1102,29 +1295,33 @@ The `.dtx` file is its **compiled context representation**.
 dbctx is deliberately small.
 
 ```text
-┌───────────────────────────────────────────┐
-│                  dbctx                    │
-│                                           │
-│  PostgreSQL introspection                 │
-│          │                                │
-│          ▼                                │
-│  Schema graph                             │
-│          │                                │
-│          ├── Field analysis               │
-│          ├── Value analysis               │
-│          ├── JSONB analysis               │
-│          └── Relationship analysis        │
-│                    │                      │
-│                    ▼                      │
-│              .dtx database context        │
-│                    │                      │
-│          ┌─────────┴─────────┐            │
-│          ▼                   ▼            │
-│      retrieval             export        │
-│          │                   │            │
-│          ▼                   ▼            │
-│   candidate context     compact format   │
-└───────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│                       dbctx                        │
+│                                                     │
+│  PostgreSQL introspection                          │
+│          │                                         │
+│          ▼                                         │
+│  Schema graph                                      │
+│          │                                         │
+│          ├── Field analysis                        │
+│          ├── Value analysis                        │
+│          └── JSONB analysis                        │
+│                    │                                │
+│                    ▼                                │
+│              .dtx database context                  │
+│                    │                                │
+│      ┌─────────────┼─────────────┐                  │
+│      ▼             ▼             ▼                  │
+│   lexical       embeddings   terminology            │
+│   index          (optional)   (optional,             │
+│      │             │           user-supplied)        │
+│      └─────────────┼─────────────┘                  │
+│                    ▼                                │
+│              query ranking                          │
+│                    │                                │
+│                    ▼                                │
+│         FK expansion / compact context               │
+└────────────────────────────────────────────────────┘
 ```
 
 The core implementation is intended to be a **single binary**.
@@ -1133,9 +1330,9 @@ No database server.
 
 No separate indexing service.
 
-No model runtime.
-
 No external vector database.
+
+Semantic retrieval is the one place this loosens slightly: it runs a local ONNX Runtime session in-process (dynamically loaded, not a subprocess or separate service) to produce embeddings. It's optional, it's still local, and its dependency (the model + runtime library) is downloaded to a cache — not embedded in the binary and not required unless you actually use semantic indexing/search. See [Semantic retrieval](#semantic-retrieval).
 
 ---
 
@@ -1215,9 +1412,9 @@ The same context can power:
 
 # Design principles
 
-### 1. No LLM required
+### 1. No generative LLM required
 
-The database context should be derived from observable facts and deterministic heuristics.
+The core database context should be derived from observable facts and deterministic heuristics. Optional local embeddings augment retrieval without replacing this — they're a small encoder, not a generative model, and never required. Terminology explicitly does involve an LLM, but only outside dbctx, on your terms, with output you review before it's ever loaded back in.
 
 ### 2. Compact over exhaustive
 
@@ -1245,7 +1442,11 @@ Finding the relevant database context is a separate problem from generating SQL.
 
 ### 7. Inspectable and reproducible
 
-Engineers should be able to understand why a particular table or field appeared in a context result.
+Engineers should be able to understand why a particular table or field appeared in a context result — including *why a semantic match appeared*: which embedded object and similarity score contributed, not just a fused number.
+
+### 8. Semantic and terminology are additive signals, not replacements
+
+Exact identifiers stay powerful, deterministic retrieval stays the foundation, and both optional layers exist purely to improve recall where the deterministic layer structurally can't reach — never to override it.
 
 ---
 
@@ -1353,9 +1554,10 @@ dbctx is **not**:
 * a SQL execution engine
 * a BI platform
 * an LLM wrapper
-* a vector database
+* a general-purpose vector database (its optional embedding index is brute-force cosine similarity over its own small schema-object corpus — no ANN, no external service, not something meant to hold arbitrary vectors for other applications)
 * a replacement for PostgreSQL's system catalog
 * an attempt to infer arbitrary business logic
+* a system that invents terminology on its own — its optional terminology dictionary only ever contains mappings a human reviewed and approved
 
 It is the layer underneath those systems.
 
@@ -1399,6 +1601,8 @@ The initial focus is:
 * [x] compact context export
 * [ ] stable `.dtx` specification
 * [x] web UI explorer
+* [x] optional local semantic (embedding-based) retrieval
+* [x] optional, user-controlled terminology dictionary
 
 The ambition is to keep the core small enough that the entire system can remain understandable.
 
@@ -1470,6 +1674,18 @@ text → charts
 text → analytics
 AI agents
 database assistants
+```
+
+### Phase 7 — Semantic retrieval & terminology (done)
+
+Add recall for paraphrased/domain-specific queries without giving up dbctx's deterministic, LLM-free core:
+
+```text
+local embedding model (optional, on by default)
+brute-force cosine similarity retrieval signal
+weighted fusion with lexical/fuzzy scoring
+user-controlled terminology dictionary (optional)
+terminology prompt generator + validated import
 ```
 
 ---

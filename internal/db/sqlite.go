@@ -112,6 +112,65 @@ func (s *Store) InitSchema() error {
 	return nil
 }
 
+// InitSemanticSchema creates the tables used to persist embedding vectors
+// for semantic retrieval. It is additive (CREATE TABLE/INDEX IF NOT EXISTS)
+// and safe to call on any store, including one opened from a .dtx file
+// written before semantic indexing existed — such files simply gain the
+// (initially empty) tables rather than needing a migration. Semantic
+// queries against a store that never had this called simply find no
+// semantic_objects table and fall back to lexical-only scoring.
+func (s *Store) InitSemanticSchema() error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS semantic_objects (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			kind TEXT NOT NULL,
+			table_id INTEGER NOT NULL REFERENCES tables(id),
+			column_id INTEGER REFERENCES columns(id),
+			jsonb_path_id INTEGER REFERENCES jsonb_paths(id),
+			text TEXT NOT NULL,
+			text_hash TEXT NOT NULL,
+			embedding BLOB NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_semantic_objects_table ON semantic_objects(table_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_semantic_objects_identity
+			ON semantic_objects(kind, table_id, IFNULL(column_id,-1), IFNULL(jsonb_path_id,-1))`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.db.Exec(stmt); err != nil {
+			return fmt.Errorf("exec semantic schema stmt: %w\n%s", err, stmt)
+		}
+	}
+	return nil
+}
+
+// InitTerminologySchema creates the table used to persist user-approved
+// terminology mappings (see internal/terminology). Additive and idempotent
+// like InitSemanticSchema — safe to call against any store, including to
+// add terminology support to a .dtx file that predates this feature.
+func (s *Store) InitTerminologySchema() error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS terminology (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			term TEXT NOT NULL,
+			alias TEXT NOT NULL,
+			target_table TEXT NOT NULL,
+			target_column TEXT,
+			target_path TEXT,
+			source TEXT NOT NULL DEFAULT 'user',
+			imported_at TEXT
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_terminology_identity
+			ON terminology(alias, target_table, IFNULL(target_column,''), IFNULL(target_path,''))`,
+		`CREATE INDEX IF NOT EXISTS idx_terminology_alias ON terminology(alias)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.db.Exec(stmt); err != nil {
+			return fmt.Errorf("exec terminology schema stmt: %w\n%s", err, stmt)
+		}
+	}
+	return nil
+}
+
 func (s *Store) InitFTS() error {
 	stmts := []string{
 		`DROP TABLE IF EXISTS search_index`,

@@ -323,4 +323,15 @@ func FormatQueryResult(w io.Writer, result *search.SearchResult) {
 		}
 	}
 	fmt.Fprintln(w)
+
+	if len(result.SemanticHits) > 0 {
+		fmt.Fprintln(w, "SEMANTIC SIGNAL (evidence for tables lexical search alone might have missed)")
+		for _, h := range result.SemanticHits {
+			fmt.Fprintf(w, "\n  %s  (%s, similarity: %.2f)\n", h.TableName, h.Kind, h.Score)
+			for _, line := range strings.Split(strings.TrimSpace(h.Text), "\n") {
+				fmt.Fprintf(w, "    %s\n", line)
+			}
+		}
+		fmt.Fprintln(w)
+	}
 }
