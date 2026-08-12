@@ -11,8 +11,9 @@ import (
 )
 
 // CacheDirEnv overrides the local model/runtime cache directory. If unset,
-// the OS-standard user cache directory is used (respects XDG_CACHE_HOME on
-// Linux, ~/Library/Caches on macOS, %LocalAppData% on Windows).
+// dbctx uses a single fixed location on every platform: "<home>/.dbctx"
+// (see CacheDir) rather than each OS's own cache-directory convention, so
+// the path is predictable and identical regardless of where it's run.
 const CacheDirEnv = "DBCTX_CACHE_DIR"
 
 // OnnxRuntimeLibEnv, if set, overrides the onnxruntime shared library path
@@ -24,15 +25,21 @@ const OnnxRuntimeLibEnv = "DBCTX_ONNXRUNTIME_LIB"
 // CacheDir returns the root directory dbctx uses to cache downloaded model
 // weights and the onnxruntime shared library. It does not create the
 // directory.
+//
+// This is deliberately "<home>/.dbctx" on every platform (Linux, macOS,
+// Windows) rather than each OS's own cache-directory convention
+// (XDG_CACHE_HOME, ~/Library/Caches, %LocalAppData%) — a single
+// predictable location that's easy to find, back up, or wipe by hand,
+// consistent everywhere dbctx runs.
 func CacheDir() (string, error) {
 	if v := os.Getenv(CacheDirEnv); v != "" {
 		return v, nil
 	}
-	base, err := os.UserCacheDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("resolve user cache dir (set %s to override): %w", CacheDirEnv, err)
+		return "", fmt.Errorf("resolve home dir (set %s to override): %w", CacheDirEnv, err)
 	}
-	return filepath.Join(base, "dbctx"), nil
+	return filepath.Join(home, ".dbctx"), nil
 }
 
 // ProgressFunc reports download progress: downloaded/total bytes for the

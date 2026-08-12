@@ -21,14 +21,19 @@ func TestCacheDir_EnvOverride(t *testing.T) {
 	}
 }
 
-func TestCacheDir_DefaultsUnderUserCache(t *testing.T) {
+func TestCacheDir_DefaultsUnderHomeDir(t *testing.T) {
 	t.Setenv(CacheDirEnv, "")
 	dir, err := CacheDir()
 	if err != nil {
 		t.Fatalf("CacheDir: %v", err)
 	}
-	if filepath.Base(dir) != "dbctx" {
-		t.Errorf("CacheDir() = %q, want basename 'dbctx'", dir)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	want := filepath.Join(home, ".dbctx")
+	if dir != want {
+		t.Errorf("CacheDir() = %q, want %q", dir, want)
 	}
 }
 

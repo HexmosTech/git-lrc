@@ -831,7 +831,7 @@ Query results are inspectable, not a black box: `ResultSet.SemanticHits` (librar
 * **Model**: [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) via its ONNX export, CLS-token pooling + L2 normalization, BGE's documented query-instruction prefix for retrieval
 * **Runtime**: [onnxruntime](https://onnxruntime.ai/) via CGO (dynamically loaded, not statically linked)
 * **Tokenizer**: a pure-Go WordPiece implementation (`internal/embed`), no CGO, matching bert-base-uncased's vocabulary
-* **Distribution**: nothing is embedded in the dbctx binary. The model (~133MB) and the platform onnxruntime shared library (~10-80MB depending on platform) are downloaded once to a local cache (`$XDG_CACHE_HOME/dbctx`, override with `DBCTX_CACHE_DIR`) on first semantic build or query — never during ordinary lexical-only operation. Both are pinned by exact version and verified by SHA-256 on download.
+* **Distribution**: nothing is embedded in the dbctx binary. The model (~133MB) and the platform onnxruntime shared library (~10-80MB depending on platform) are downloaded once to `~/.dbctx` (same fixed location on Linux, macOS, and Windows — override with `DBCTX_CACHE_DIR`) on first semantic build or query — never during ordinary lexical-only operation. Both are pinned by exact version and verified by SHA-256 on download.
 
 This is the one place dbctx isn't CGO-free — `onnxruntime_go` requires CGO to compile (though it dlopens the actual runtime library at runtime, so no link-time dependency). It was a deliberate tradeoff for numerical correctness and maintenance burden over a from-scratch pure-Go transformer implementation; see the design note in `internal/embed`.
 
