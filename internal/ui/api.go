@@ -3,19 +3,56 @@ package ui
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 
 	"github.com/shrsv/dbctx/internal/db"
 	"github.com/shrsv/dbctx/internal/search"
+	"github.com/shrsv/dbctx/internal/semantic"
 )
 
 type API struct {
 	store *db.Store
+
+	// semanticOnce lazily opens the semantic scorer on the first query
+	// request rather than at server startup, so `dbctx ui` on a
+	// lexical-only .dtx never touches the embedding model — same
+	// lazy-init rationale as dbctx.Index.Query. Cached across requests
+	// (rather than reopened per request) so a running UI server doesn't
+	// reload the ONNX session on every search.
+	semanticOnce   sync.Once
+	semanticScorer search.SemanticScorer
 }
 
 func NewAPI(store *db.Store) *API {
 	return &API{store: store}
+}
+
+func (a *API) semantic() search.SemanticScorer {
+	a.semanticOnce.Do(func() {
+		scorer, err := semantic.OpenScorer(a.store, semanticProgress)
+		if err != nil {
+			// Best-effort, same as the CLI/library: fall back to
+			// lexical-only rather than failing the query.
+			fmt.Fprintf(os.Stderr, "dbctx ui: semantic search unavailable (%v); using lexical search only\n", err)
+			return
+		}
+		a.semanticScorer = scorer
+	})
+	return a.semanticScorer
+}
+
+// semanticProgress logs to the terminal running `dbctx ui` — the model
+// download triggered by the first semantic search would otherwise look
+// like a hang in the browser with no indication anything is happening.
+func semanticProgress(label string, downloaded, total int64) {
+	if downloaded != total || total == 0 {
+		return // only log once, on completion, to avoid flooding the log
+	}
+	fmt.Fprintf(os.Stderr, "dbctx ui: downloaded %s\n", label)
 }
 
 func (a *API) Register(mux *http.ServeMux) {
@@ -259,8 +296,9 @@ func (a *API) handleTableDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 type queryResult struct {
-	Query  string              `json:"query"`
-	Tables []search.TableContext `json:"tables"`
+	Query        string               `json:"query"`
+	Tables       []search.TableContext `json:"tables"`
+	SemanticHits []search.SemanticHit  `json:"semantic_hits,omitempty"`
 }
 
 func (a *API) handleQuery(w http.ResponseWriter, r *http.Request) {
@@ -270,11 +308,11 @@ func (a *API) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := search.Query(a.store, q)
+	result, err := search.QueryHybrid(a.store, q, a.semantic())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 
-	jsonResp(w, queryResult{Query: result.Query, Tables: result.Tables})
+	jsonResp(w, queryResult{Query: result.Query, Tables: result.Tables, SemanticHits: result.SemanticHits})
 }

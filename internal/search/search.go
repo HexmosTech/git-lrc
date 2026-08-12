@@ -216,14 +216,35 @@ func ComputeLexicalScores(store *db.Store, query string) map[string]float64 {
 	return merged
 }
 
-// terminologyMatch checks query (as a whole, case-insensitive substring
-// match — terminology aliases are often multi-word phrases like "line of
-// code", so this can't be tokenized the way the other signals are) against
-// any user-imported terminology aliases, scoring the alias's target table.
-// A store that never had terminology imported simply has no `terminology`
-// table yet; that's treated as "no matches" rather than an error, the same
-// way the other signals silently no-op when their prerequisites are
-// missing.
+// minTerminologyAbbrevLen bounds the "alias contains query" direction of
+// terminologyMatch (see below) — without a floor, a very short query
+// fragment (e.g. "a", "or") would substring-match inside almost any
+// alias and contribute pure noise.
+const minTerminologyAbbrevLen = 3
+
+// terminologyMatch checks query against every user-imported terminology
+// alias in both directions, since neither direction alone is sufficient:
+//
+//   - query contains alias: the user typed a full phrase that mentions a
+//     known alias, e.g. query "how many lines of code do we have" contains
+//     the alias "lines of code".
+//   - alias contains query: the user typed a short form that is itself a
+//     prefix/substring of a longer known alias, e.g. query "org" is a
+//     substring of the alias "organization". Without this direction,
+//     importing "organization"/"organization account" as aliases for
+//     "org" would only ever match the fully-spelled-out forms, silently
+//     failing on the abbreviation a user is more likely to actually type.
+//
+// The second direction is weighted lower (weaker evidence, higher
+// false-positive risk for short fragments) and floored at
+// minTerminologyAbbrevLen characters to avoid matching on noise.
+//
+// Aliases are compared against the whole query string, not per-token —
+// they're often multi-word phrases like "line of code" that tokenizing
+// would break apart. A store that never had terminology imported simply
+// has no `terminology` table yet; that's treated as "no matches" rather
+// than an error, the same way the other signals silently no-op when their
+// prerequisites are missing.
 func terminologyMatch(store *db.Store, query string) map[string]float64 {
 	scores := make(map[string]float64)
 	rows, err := store.DB().Query("SELECT alias, target_table FROM terminology")
@@ -232,7 +253,7 @@ func terminologyMatch(store *db.Store, query string) map[string]float64 {
 	}
 	defer rows.Close()
 
-	lowerQuery := strings.ToLower(query)
+	lowerQuery := strings.ToLower(strings.TrimSpace(query))
 	for rows.Next() {
 		var alias, table string
 		if rows.Scan(&alias, &table) != nil {
@@ -241,8 +262,12 @@ func terminologyMatch(store *db.Store, query string) map[string]float64 {
 		if alias == "" {
 			continue
 		}
-		if strings.Contains(lowerQuery, strings.ToLower(alias)) {
+		lowerAlias := strings.ToLower(alias)
+		switch {
+		case strings.Contains(lowerQuery, lowerAlias):
 			scores[table] += 1.0
+		case len(lowerQuery) >= minTerminologyAbbrevLen && strings.Contains(lowerAlias, lowerQuery):
+			scores[table] += 0.6
 		}
 	}
 	return scores

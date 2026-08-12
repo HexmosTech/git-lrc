@@ -171,6 +171,51 @@ func TestHandleQuery(t *testing.T) {
 	}
 }
 
+// TestHandleQuery_UsesTerminology is a regression test: handleQuery used
+// to call search.Query (lexical-only) directly, silently ignoring any
+// imported terminology (and semantic search) even though the CLI and
+// library API both used the hybrid path. A table findable only via a
+// terminology alias — no lexical or literal-name overlap with the query
+// at all — must show up through `dbctx ui`'s /api/query the same way it
+// does through `dbctx query`.
+func TestHandleQuery_UsesTerminology(t *testing.T) {
+	api, store := newTestAPI(t)
+	if err := store.InitTerminologySchema(); err != nil {
+		t.Fatalf("InitTerminologySchema: %v", err)
+	}
+	// "widget count" shares no lexical overlap with "orgs" at all.
+	if _, err := store.DB().Exec(
+		`INSERT INTO terminology (term, alias, target_table, source) VALUES ('org', 'widget count', 'orgs', 'user')`,
+	); err != nil {
+		t.Fatalf("insert terminology: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	api.Register(mux)
+
+	req := httptest.NewRequest("GET", "/api/query?q=widget+count", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var result queryResult
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	found := false
+	for _, tbl := range result.Tables {
+		if tbl.TableName == "orgs" && tbl.IsMatch {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected terminology-only match 'orgs' to appear via /api/query, got %+v", result.Tables)
+	}
+}
+
 func TestHandleQuery_MissingParam(t *testing.T) {
 	api, _ := newTestAPI(t)
 	mux := http.NewServeMux()

@@ -344,6 +344,73 @@ func TestTerminologyMatch_MultiWordAlias(t *testing.T) {
 	}
 }
 
+func TestTerminologyMatch_QueryContainsAlias(t *testing.T) {
+	store := seedTestStore(t)
+	if err := store.InitTerminologySchema(); err != nil {
+		t.Fatalf("InitTerminologySchema: %v", err)
+	}
+	store.DB().Exec(`INSERT INTO terminology (term, alias, target_table, source) VALUES ('org', 'organization', 'orgs', 'user')`)
+
+	scores := ComputeLexicalScores(store, "show me every organization")
+	if scores["orgs"] <= 0 {
+		t.Errorf("expected terminology match when query contains the full alias, scores = %v", scores)
+	}
+}
+
+func TestTerminologyMatch_AliasContainsShortQuery(t *testing.T) {
+	// Regression: importing a long alias like "organization" for a short
+	// abbreviation like "org" must also match when the user types the
+	// short form, not just the fully-spelled-out alias. Before this was
+	// fixed, only "query contains alias" was checked, so a query shorter
+	// than the stored alias never matched at all.
+	store := seedTestStore(t)
+	if err := store.InitTerminologySchema(); err != nil {
+		t.Fatalf("InitTerminologySchema: %v", err)
+	}
+	store.DB().Exec(`INSERT INTO terminology (term, alias, target_table, source) VALUES ('org', 'organization', 'orgs', 'user')`)
+	store.DB().Exec(`INSERT INTO terminology (term, alias, target_table, source) VALUES ('org', 'organization account', 'orgs', 'user')`)
+
+	scores := ComputeLexicalScores(store, "org")
+	if scores["orgs"] <= 0 {
+		t.Errorf("expected terminology match when a short query is a substring of a longer alias, scores = %v", scores)
+	}
+}
+
+func TestTerminologyMatch_AbbreviationFloorAvoidsNoise(t *testing.T) {
+	// A one/two-character query fragment shouldn't score-match just
+	// because it happens to appear inside some unrelated long alias.
+	// Calls terminologyMatch directly (not ComputeLexicalScores) to
+	// isolate this signal from unrelated fuzzy table-name matching, which
+	// operates independently and would otherwise mask what this test
+	// checks.
+	store := seedTestStore(t)
+	if err := store.InitTerminologySchema(); err != nil {
+		t.Fatalf("InitTerminologySchema: %v", err)
+	}
+	store.DB().Exec(`INSERT INTO terminology (term, alias, target_table, source) VALUES ('org', 'organization', 'orgs', 'user')`)
+
+	scores := terminologyMatch(store, "or")
+	if scores["orgs"] > 0 {
+		t.Errorf("expected no terminology match for a too-short query fragment, scores = %v", scores)
+	}
+}
+
+func TestTerminologyMatch_QueryContainsAliasScoresHigherThanAbbreviation(t *testing.T) {
+	// The full-phrase-match direction is stronger evidence than the
+	// short-abbreviation direction, so it should be weighted higher.
+	store := seedTestStore(t)
+	if err := store.InitTerminologySchema(); err != nil {
+		t.Fatalf("InitTerminologySchema: %v", err)
+	}
+	store.DB().Exec(`INSERT INTO terminology (term, alias, target_table, source) VALUES ('org', 'organization', 'orgs', 'user')`)
+
+	full := terminologyMatch(store, "organization")
+	short := terminologyMatch(store, "org")
+	if full["orgs"] <= short["orgs"] {
+		t.Errorf("full-alias match (%v) should score higher than short-abbreviation match (%v)", full["orgs"], short["orgs"])
+	}
+}
+
 func TestTerminologyMatch_CaseInsensitive(t *testing.T) {
 	store := seedTestStore(t)
 	if err := store.InitTerminologySchema(); err != nil {
