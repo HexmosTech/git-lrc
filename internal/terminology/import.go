@@ -9,28 +9,43 @@ import (
 	"github.com/shrsv/dbctx/internal/db"
 )
 
-// Import validates and persists a JSON array of [TermGroup] into store.
-// Every (alias, target) pair is validated independently: a malformed or
-// unresolvable entry is recorded in the result's Rejected list rather than
-// aborting the whole import, so one bad line doesn't lose an otherwise
-// good batch. Nothing is written for a term/alias/target combination that
-// fails validation.
-//
-// Import is idempotent for identical (alias, target) pairs — re-importing
-// the same mapping updates its term/source/imported_at rather than
-// duplicating it (see the unique index in InitTerminologySchema).
-//
-// Import calls store.InitTerminologySchema itself, so it works against a
-// .dtx file that predates terminology support without any separate
-// migration step.
+// Import parses data as a JSON array of [TermGroup] and delegates to
+// [ImportGroups]. data is typically read from a file produced by working
+// through [GeneratePrompt]'s output with an external LLM, but any JSON
+// bytes in the documented format work — including a JSON string literal
+// converted with []byte(s), which is the normal Go idiom for "either a
+// string or bytes" and needs no separate string-typed variant.
 func Import(store *db.Store, data []byte) (*ImportResult, error) {
-	if err := store.InitTerminologySchema(); err != nil {
-		return nil, fmt.Errorf("init terminology schema: %w", err)
-	}
-
 	var groups []TermGroup
 	if err := json.Unmarshal(data, &groups); err != nil {
 		return nil, fmt.Errorf("parse terminology JSON: %w", err)
+	}
+	return ImportGroups(store, groups)
+}
+
+// ImportGroups validates and persists term groups built directly as Go
+// values — for callers that already have structured data (from their own
+// code, a different serialization, a database, ...) and don't want to
+// round-trip through JSON just to call [Import]. Import itself is a thin
+// JSON-decoding wrapper around this.
+//
+// Every (alias, target) pair is validated independently: a malformed or
+// unresolvable entry is recorded in the result's Rejected list rather than
+// aborting the whole import, so one bad entry doesn't lose an otherwise
+// good batch. Nothing is written for a term/alias/target combination that
+// fails validation.
+//
+// ImportGroups is idempotent for identical (alias, target) pairs —
+// re-importing the same mapping updates its term/source/imported_at
+// rather than duplicating it (see the unique index in
+// InitTerminologySchema).
+//
+// ImportGroups calls store.InitTerminologySchema itself, so it works
+// against a .dtx file that predates terminology support without any
+// separate migration step.
+func ImportGroups(store *db.Store, groups []TermGroup) (*ImportResult, error) {
+	if err := store.InitTerminologySchema(); err != nil {
+		return nil, fmt.Errorf("init terminology schema: %w", err)
 	}
 
 	result := &ImportResult{}

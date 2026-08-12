@@ -64,6 +64,55 @@ func termJSON(t *testing.T, groups []TermGroup) []byte {
 	return b
 }
 
+func TestImportGroups_EquivalentToImport(t *testing.T) {
+	store := testutil.NewSeedStore(t)
+	groups := []TermGroup{
+		{Term: "pr", Aliases: []string{"pull request"}, Targets: []string{"pull_requests"}},
+	}
+
+	result, err := ImportGroups(store, groups)
+	if err != nil {
+		t.Fatalf("ImportGroups: %v", err)
+	}
+	if result.Accepted != 1 {
+		t.Fatalf("Accepted = %d, want 1 (rejected: %v)", result.Accepted, result.Rejected)
+	}
+
+	entries, err := List(store)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Term != "pr" {
+		t.Fatalf("entries = %v, want one 'pr' entry", entries)
+	}
+}
+
+func TestImportGroups_InitializesSchemaOnItsOwn(t *testing.T) {
+	// ImportGroups (like Import) must work against a store that never had
+	// InitTerminologySchema called explicitly — the same "works on a .dtx
+	// file that predates terminology support" guarantee Import documents.
+	store := testutil.NewSeedStore(t)
+	groups := []TermGroup{
+		{Term: "pr", Aliases: []string{"pull request"}, Targets: []string{"pull_requests"}},
+	}
+	if _, err := ImportGroups(store, groups); err != nil {
+		t.Fatalf("ImportGroups: %v", err)
+	}
+}
+
+func TestImport_ParsesJSONThenDelegatesToImportGroups(t *testing.T) {
+	store := testutil.NewSeedStore(t)
+	data := []byte(`[{"term":"pr","aliases":["pull request"],"targets":["pull_requests"]}]`)
+
+	result, err := Import(store, data)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if result.Accepted != 1 {
+		t.Fatalf("Accepted = %d, want 1", result.Accepted)
+	}
+}
+
 func TestImport_TableLevelTarget(t *testing.T) {
 	store := testutil.NewSeedStore(t)
 	data := termJSON(t, []TermGroup{

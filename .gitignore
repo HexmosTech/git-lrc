@@ -9,3 +9,8 @@
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# dbctx terminology-prompt output can contain real representative values
+# sampled from the database (including secrets in free-text/JSONB columns)
+# — never commit it.
+terminology-prompt*.txt

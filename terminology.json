@@ -1,0 +1,90 @@
+[
+  {
+    "aliases": [
+      "LOC",
+      "line of code",
+      "lines of code",
+      "source lines of code",
+      "code lines",
+      "lines-of-code"
+    ],
+    "targets": [
+      "loc_usage_ledger.billable_loc",
+      "org_billing_state.loc_used_month",
+      "quota_batch_settlements.raw_loc_batch",
+      "quota_batch_settlements.effective_loc_batch",
+      "quota_batch_settlements.extra_effective_loc_batch",
+      "quota_operation_aggregates.raw_loc_total",
+      "quota_operation_aggregates.effective_loc_total",
+      "quota_operation_aggregates.extra_effective_loc_total"
+    ],
+    "term": "loc"
+  },
+  {
+    "aliases": [
+      "LRC",
+      "git-lrc",
+      "git lrc",
+      "LiveReview CLI",
+      "LiveReview command-line interface",
+      "LRC CLI"
+    ],
+    "targets": [
+      "api_keys.label"
+    ],
+    "term": "lrc"
+  },
+  {
+    "aliases": [
+      "organization",
+      "organization account"
+    ],
+    "targets": [
+      "orgs"
+    ],
+    "term": "org"
+  },
+  {
+    "aliases": [
+      "repository"
+    ],
+    "targets": [
+      "repositories"
+    ],
+    "term": "repo"
+  },
+  {
+    "aliases": [
+      "PR",
+      "pull request",
+      "pull requests"
+    ],
+    "targets": [
+      "pull_requests"
+    ],
+    "term": "pr"
+  },
+  {
+    "aliases": [
+      "MR",
+      "merge request",
+      "merge requests"
+    ],
+    "targets": [
+      "pull_requests"
+    ],
+    "term": "mr"
+  },
+  {
+    "aliases": [
+      "MR / PR",
+      "MR/PR",
+      "merge request / pull request",
+      "merge requests / pull requests"
+    ],
+    "targets": [
+      "pull_requests"
+    ],
+    "term": "mr/pr"
+  }
+]

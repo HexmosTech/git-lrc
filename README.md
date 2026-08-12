@@ -203,22 +203,28 @@ BenchmarkOnnxEmbedder_ColdInit (session load, 133 MB model)   ~240 ms/op
 BenchmarkOnnxEmbedder_EmbedQuery (1 text)                       ~16 ms/op
 BenchmarkOnnxEmbedder_EmbedPassages_Single (1 text)             ~17 ms/op
 BenchmarkOnnxEmbedder_EmbedPassages_Batch16 (16 texts)          ~44 ms/op   (~2.7 ms/text — batching matters)
+
+End-to-end with the real model, 50 tables / ~90 embedded objects
+─────────────────────────────────────────────────────────────────────
+BenchmarkBuildIndex_Large_RealModel      ~1.36 s/op    (full semantic build; embedder already warm)
+BenchmarkQuery_Large_RealModel_Hybrid    ~36-43 ms/op  (embedder already warm)
 ```
 
 Takeaways:
 
-* **Hybrid query overhead over lexical-only is small (~9%)** — the brute-force cosine scan over a database's worth of schema objects is cheap; almost all query latency is still the existing lexical signals (FTS, fuzzy match, value match).
-* **Model session load (~240ms) is the real one-time cost**, paid once per process (lazily, on first semantic query — see [Semantic retrieval](#semantic-retrieval)), not per query.
-* **Incremental rebuilds skip re-embedding entirely** when nothing changed — the ~11.6ms "incremental" cost is schema diffing (re-deriving candidate text and hashing it), not model inference.
+* **Hybrid query overhead over lexical-only is small when the embedder is already warm** (~9% in the fake-embedder isolation benchmark) — the brute-force cosine scan itself is cheap. With the **real** model warm, a hybrid query costs ~36-43ms at 50-table scale vs. ~7ms lexical-only — the difference is almost entirely the ~16ms `EmbedQuery` call plus request/allocation overhead, not the cosine scan.
+* **Model session load (~240ms) is the real one-time cost**, paid once per **process**, lazily on first semantic query. A long-running library process (or the `dbctx ui` server) pays this once and every later query is fast. **A `dbctx query` CLI invocation is a fresh process each time**, so it pays the ~240ms load on every single call — wall-clock for one CLI query against a small `.dtx` measured ~400ms total, dominated by that cold load, not by search itself. If you're issuing many CLI queries in a loop, prefer the library API (or a long-lived process) over shelling out repeatedly.
+* **Build-time embedding cost is the real number to budget for**: ~1.36s for a 50-table schema (~90 embedded objects) with the model already warm — scales roughly linearly with how many table/column/JSONB-path objects end up embedded, not total table count. `dbctx build` logs the embedded/reused/removed counts so you can see this per-database.
+* **Incremental rebuilds skip re-embedding entirely** when nothing changed — the ~11.6ms "incremental" cost (fake-embedder benchmark) is schema diffing (re-deriving candidate text and hashing it), not model inference. Re-running a build against an unchanged schema costs essentially nothing extra for the semantic phase.
 * Batch embedding during a build is meaningfully more efficient per-object than one-at-a-time (~2.7ms/text batched vs. ~17ms/text unbatched) — `internal/embed` batches automatically.
 
 Key takeaways:
 
-* **Full build** completes in **~12 seconds** for a real 60-table database
-* **Query + text rendering** completes in **~100ms** — fast enough for interactive use
+* **Full build** completes in **~12 seconds** for a real 60-table database *(lexical index only — see below for the added cost of `--semantic`, on by default)*
+* **Query + text rendering** completes in **~100ms** — fast enough for interactive use *(lexical-only; add the embedder's one-time load if semantic search is enabled — see below)*
 * **Text rendering** itself is sub-millisecond — the FTS query dominates latency
 * **Fuzzy search** adds negligible overhead over exact match
-* The resulting `.dtx` is **448 KB** — small enough to ship, cache, or embed
+* The resulting `.dtx` is **448 KB** — small enough to ship, cache, or embed *(a semantic-enabled `.dtx` is larger — each embedded object stores a 384×4-byte vector, so ~1.5KB per table/column/JSONB-path object embedded, on top of the base file)*
 
 ---
 
@@ -439,8 +445,13 @@ if err := idx.Err(); err != nil { ... }
 // to derive a terminology dictionary from this schema (see Terminology below)
 prompt, _ := idx.TerminologyPrompt()
 
-// ImportTerminology — validate and load that LLM's JSON output back in
-result, _ := idx.ImportTerminology(jsonBytes)
+// ImportTerminology — three ways to supply the same JSON-shaped data,
+// pick whichever fits how the data actually arrives in your program:
+result, _ := idx.ImportTerminology(jsonBytes)              // []byte (a JSON string works too: []byte(s))
+result, _ := idx.ImportTerminologyFile("terminology.json") // read from disk
+result, _ := idx.ImportTerminologyGroups([]dbctx.TerminologyGroup{ // Go values, no JSON round-trip
+    {Term: "loc", Aliases: []string{"lines of code"}, Targets: []string{"metrics.loc"}},
+})
 
 // Terminology — inspect what's currently imported
 entries, _ := idx.Terminology()

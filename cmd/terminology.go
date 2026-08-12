@@ -3,11 +3,12 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/shrsv/dbctx/internal/db"
 	"github.com/shrsv/dbctx/internal/terminology"
+	"github.com/spf13/cobra"
 )
 
 var terminologyCmd = &cobra.Command{
@@ -47,20 +48,30 @@ var terminologyPromptCmd = &cobra.Command{
 }
 
 var terminologyImportCmd = &cobra.Command{
-	Use:   "import [dtx] [terminology.json]",
+	Use:   "import [dtx] [terminology.json|-]",
 	Short: "Validate and load a terminology dictionary into a .dtx file",
 	Long: "Loads a JSON terminology dictionary (typically produced by working through " +
 		"'dbctx terminology prompt' with an LLM) into a .dtx file. Every alias/target mapping is validated " +
 		"against the actual schema — entries that don't resolve to a real table, column, or JSONB path are " +
-		"rejected individually rather than failing the whole import.",
+		"rejected individually rather than failing the whole import. Pass '-' to read the JSON from stdin " +
+		"instead of a file.",
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dtxPath := args[0]
 		jsonPath := args[1]
 
-		data, err := os.ReadFile(jsonPath)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", jsonPath, err)
+		var data []byte
+		var err error
+		if jsonPath == "-" {
+			data, err = io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("read stdin: %w", err)
+			}
+		} else {
+			data, err = os.ReadFile(jsonPath)
+			if err != nil {
+				return fmt.Errorf("read %s: %w", jsonPath, err)
+			}
 		}
 
 		store, err := db.OpenStore(dtxPath)

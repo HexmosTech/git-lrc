@@ -4,10 +4,24 @@
 //
 // dbctx connects to PostgreSQL, extracts schema metadata, analyzes field
 // statistics from pg_stats, discovers JSONB structure via sampling, and
-// builds a full-text search index — all without requiring an LLM or
-// external services. The result is a [Index] that answers natural-language
-// queries about which tables, columns, values, and relationships are
-// relevant to a given question.
+// builds a full-text search index — all deterministic, no generative LLM
+// or external service required. The result is a [Index] that answers
+// natural-language queries about which tables, columns, values, and
+// relationships are relevant to a given question.
+//
+// Two optional layers can augment that retrieval, both off by default in
+// terms of resource cost but the first on by default in terms of
+// behavior:
+//
+//   - Semantic retrieval: a small local embedding model (on by default —
+//     see [Options.NoSemantic]) recovers paraphrases lexical matching
+//     structurally can't (e.g. "buyers" finding a customers table),
+//     fused with, never replacing, the deterministic signals. See
+//     [Index.Query] and the package README's "Semantic retrieval" section.
+//   - Terminology: a user-controlled dictionary mapping domain
+//     abbreviations/jargon to exact schema objects, populated only via
+//     explicit review — see [Index.TerminologyPrompt] and
+//     [Index.ImportTerminology].
 //
 // The index can be stored on disk as a portable .dtx file (SQLite) or
 // kept entirely in memory for ephemeral use. It is safe for concurrent
@@ -76,6 +90,33 @@
 //	result.All().Text()                              // all tables including FK-expanded
 //	result.Include("reviews", "orgs").Text()         // specific tables
 //	result.Matched().Exclude("migrations").Text()    // matched minus exclusions
+//
+// # Semantic retrieval
+//
+// By default, [Build] also builds a local embedding-based semantic index
+// (downloading the model to a local cache on first use) and [Index.Query]
+// fuses it with lexical/fuzzy matching automatically. Set
+// [Options.NoSemantic] to skip it:
+//
+//	idx, err := dbctx.Build(ctx, dsn, &dbctx.Options{NoSemantic: true})
+//
+// [Index.Query]'s result exposes why a semantic-only match appeared via
+// [ResultSet.SemanticHits] — the evidence is never a black box.
+//
+// # Terminology
+//
+// Terminology maps domain vocabulary (abbreviations, acronyms, jargon) to
+// exact schema objects, as a third retrieval signal fully independent of
+// both lexical and semantic matching. dbctx never populates it
+// automatically — [Index.TerminologyPrompt] generates a self-contained
+// prompt for you to run through an LLM of your choice, and
+// [Index.ImportTerminology] (or [Index.ImportTerminologyFile],
+// [Index.ImportTerminologyGroups]) validates and loads the reviewed
+// result back in:
+//
+//	prompt, _ := idx.TerminologyPrompt()
+//	// ...paste prompt into an LLM, review its output...
+//	result, _ := idx.ImportTerminology(llmOutputJSON)
 //
 // # Use cases
 //
@@ -772,6 +813,15 @@ func (idx *Index) TerminologyPrompt() (string, error) {
 //
 //	[{"term": "loc", "aliases": ["lines of code"], "targets": ["metrics.loc"]}]
 //
+// data is just bytes: a JSON string literal works fine as
+// []byte(jsonString), a value read from a file, an HTTP request body, or
+// anything else that ends up as a []byte — there's no separate
+// string-typed variant of this method because none is needed. If you
+// already have a file on disk, [Index.ImportTerminologyFile] saves the
+// os.ReadFile boilerplate; if you already have Go values instead of JSON
+// text (e.g. built programmatically), use [Index.ImportTerminologyGroups]
+// to skip the JSON round-trip entirely.
+//
 // Every alias/target pair is validated against the actual schema before
 // being persisted; entries that don't resolve to a real table, column, or
 // JSONB path are rejected individually (reported in the result) rather
@@ -786,6 +836,43 @@ func (idx *Index) ImportTerminology(data []byte) (*TerminologyImportResult, erro
 	defer idx.mu.RUnlock()
 
 	result, err := terminology.Import(idx.store, data)
+	if err != nil {
+		return nil, err
+	}
+	return convertImportResult(result), nil
+}
+
+// ImportTerminologyFile reads path and passes its contents to
+// [Index.ImportTerminology] — the same JSON format, just read from disk
+// for convenience instead of requiring the caller to os.ReadFile it
+// first. This is what `dbctx terminology import` uses internally.
+func (idx *Index) ImportTerminologyFile(path string) (*TerminologyImportResult, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return idx.ImportTerminology(data)
+}
+
+// ImportTerminologyGroups validates and persists terminology supplied as
+// Go values rather than JSON text — for callers building a dictionary
+// programmatically (from their own data source, a different format, code
+// generation, ...) who would otherwise have to marshal it to JSON just to
+// call [Index.ImportTerminology]. Validation and persistence behavior are
+// identical either way; this only changes how the input arrives.
+func (idx *Index) ImportTerminologyGroups(groups []TerminologyGroup) (*TerminologyImportResult, error) {
+	<-idx.ready
+	if idx.err != nil {
+		return nil, idx.err
+	}
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	internal := make([]terminology.TermGroup, len(groups))
+	for i, g := range groups {
+		internal[i] = terminology.TermGroup{Term: g.Term, Aliases: g.Aliases, Targets: g.Targets}
+	}
+	result, err := terminology.ImportGroups(idx.store, internal)
 	if err != nil {
 		return nil, err
 	}
@@ -1092,6 +1179,27 @@ type ColumnDetail struct {
 	IsCategoric bool            `json:"is_categoric"`
 	Values      []ValueInfo     `json:"values,omitempty"`
 	JSONBPaths  []JSONBPathInfo `json:"jsonb_paths,omitempty"`
+}
+
+// TerminologyGroup is one term with all of its human-language aliases and
+// the exact schema objects it refers to — the unit of input
+// [Index.ImportTerminologyGroups] accepts, and the Go-value equivalent of
+// one entry in the JSON array [Index.ImportTerminology] parses:
+//
+//	dbctx.TerminologyGroup{
+//	    Term:    "loc",
+//	    Aliases: []string{"lines of code", "source lines of code"},
+//	    Targets: []string{"metrics.loc"},
+//	}
+//
+// Targets use dbctx's "table" / "table.column" / "table.column:$.json.path"
+// notation (see [Index.TerminologyPrompt]'s generated instructions) and
+// are validated against the actual schema on import — see
+// [Index.ImportTerminologyGroups].
+type TerminologyGroup struct {
+	Term    string   `json:"term"`
+	Aliases []string `json:"aliases"`
+	Targets []string `json:"targets"`
 }
 
 // TerminologyEntry is one user-approved (alias -> schema object) mapping,
