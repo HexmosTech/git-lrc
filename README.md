@@ -589,6 +589,8 @@ field matching
 value matching
 foreign-key expansion
 relevant-context extraction
+semantic (embedding) matching   [optional]
+terminology matching            [optional, user-supplied]
 ```
 
 The result is not SQL.
@@ -1185,10 +1187,10 @@ A query follows roughly this path:
 text query
     │
     ▼
-table / field / value matching
+lexical/fuzzy matching + optional semantic + optional terminology
     │
     ▼
-candidate tables
+candidate tables (fused score)
     │
     ▼
 foreign-key expansion
@@ -1205,6 +1207,8 @@ JSONB structure
     ▼
 compressed database context
 ```
+
+Semantic and terminology, when present, are additional signals fused into the same per-table score before this expansion step — see [Semantic retrieval](#semantic-retrieval) and [Terminology](#terminology). The rest of the pipeline is unchanged.
 
 This is intentionally separate from SQL generation.
 
