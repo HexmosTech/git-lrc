@@ -62,14 +62,14 @@ func BenchmarkMatchedTextRaw(b *testing.B) {
 	}
 }
 
-func BenchmarkAllText(b *testing.B) {
+func BenchmarkScoredOnlyText(b *testing.B) {
 	s := testutil.NewTestStore(b, search.PopulateFTS)
 	idx := &Index{store: s, ready: make(chan struct{})}
 	close(idx.ready)
 	result, _ := idx.Query("reviews")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result.All().Text()
+		result.ScoredOnly().Text()
 	}
 }
 

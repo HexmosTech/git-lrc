@@ -26,7 +26,8 @@ func Example() {
 		log.Fatal(err)
 	}
 
-	// Matched() returns only tables with score > 0.
+	// Matched() returns tables that scored a direct hit plus FK-expanded
+	// join context — everything needed to answer the query.
 	// Text() prepends a notation legend explaining every symbol.
 	fmt.Println(result.Matched().Text())
 }
@@ -98,14 +99,14 @@ func Example_selection() {
 		log.Fatal(err)
 	}
 
-	// Only matched tables, with notation legend.
+	// Matched + FK-expanded tables, with notation legend.
 	fmt.Println(result.Matched().Text())
 
 	// Without legend (tighter token budget).
 	fmt.Println(result.Matched().TextRaw())
 
-	// All tables including FK-expanded.
-	fmt.Println(result.All().TextRaw())
+	// Only tables that scored directly, excluding FK-expanded join context.
+	fmt.Println(result.ScoredOnly().TextRaw())
 
 	// Specific tables by name.
 	fmt.Println(result.Include("reviews", "orgs").TextRaw())

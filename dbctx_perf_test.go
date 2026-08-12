@@ -191,14 +191,14 @@ func TestIntegration_PerfQueryTypes(t *testing.T) {
 		}
 
 		matched := result.Matched().Len()
-		all := result.All().Len()
+		scoredOnly := result.ScoredOnly().Len()
 
 		// Time text rendering
 		textStart := time.Now()
 		text := result.Matched().Text()
 		textDur := time.Since(textStart)
 
-		fmt.Printf("  %-25q  query=%8v  matched=%d  all=%d  text=%8v  chars=%d\n",
-			q, dur, matched, all, textDur, len(text))
+		fmt.Printf("  %-25q  query=%8v  matched=%d  scored=%d  text=%8v  chars=%d\n",
+			q, dur, matched, scoredOnly, textDur, len(text))
 	}
 }

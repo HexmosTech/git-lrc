@@ -43,7 +43,10 @@
 //	}
 //	fmt.Println(result.Matched().Text())
 //
-// The [Selection.Text] output is a compact, notation-annotated schema
+// [ResultSet.Matched] returns every table relevant to answering the
+// query — direct hits plus FK-expanded join context, not just tables that
+// scored on their own. The [Selection.Text] output is a compact,
+// notation-annotated schema
 // ready to pass to an LLM or text-to-SQL system:
 //
 //	--- notation ---
@@ -85,9 +88,9 @@
 // Query results can be filtered and rendered in several ways:
 //
 //	result, _ := idx.Query("failed reviews")
-//	result.Matched().Text()                          // matched tables with legend
-//	result.Matched().TextRaw()                       // matched tables, no legend
-//	result.All().Text()                              // all tables including FK-expanded
+//	result.Matched().Text()                          // matched + FK-expanded, with legend
+//	result.Matched().TextRaw()                       // same, no legend
+//	result.ScoredOnly().Text()                       // only tables that scored directly
 //	result.Include("reviews", "orgs").Text()         // specific tables
 //	result.Matched().Exclude("migrations").Text()    // matched minus exclusions
 //
@@ -528,8 +531,8 @@ func (idx *Index) Err() error {
 // Returns a [ResultSet] that can be filtered and converted to compact text:
 //
 //	result, _ := idx.Query("failed reviews last month")
-//	text := result.Matched().Text()         // only matched tables
-//	text := result.All().Text()             // all tables including FK-expanded
+//	text := result.Matched().Text()          // matched + FK-expanded tables
+//	text := result.ScoredOnly().Text()       // only tables that scored directly
 //	text := result.Include("reviews").Text() // specific tables
 func (idx *Index) Query(query string) (*ResultSet, error) {
 	<-idx.ready
@@ -927,7 +930,7 @@ func convertImportResult(r *terminology.ImportResult) *TerminologyImportResult {
 // The typical flow is:
 //
 //	result, _ := idx.Query("failed reviews")
-//	text := result.Matched().Text()  // compact schema of matched tables only
+//	text := result.Matched().Text()  // compact schema: matched + FK-expanded
 type ResultSet struct {
 	// Query is the original query string.
 	Query string `json:"query"`
@@ -970,24 +973,32 @@ type SemanticHit struct {
 	Score     float64 `json:"score"`
 }
 
-// Matched returns a [Selection] containing only tables with a match score > 0.
-// These are the tables most relevant to the query.
+// Matched returns a [Selection] containing every table relevant to
+// competently answering the query: tables that scored a direct hit from
+// the retrieval signals (fuzzy, FTS, value, terminology, semantic), plus
+// tables pulled in via foreign-key expansion so join context isn't
+// silently dropped. This is the recommended default for feeding an LLM
+// or text-to-SQL system — see [ResultSet.ScoredOnly] for just the
+// directly-scored subset, with FK context excluded.
 func (rs *ResultSet) Matched() *Selection {
+	names := make([]string, 0, len(rs.Tables))
+	for _, t := range rs.Tables {
+		names = append(names, t.TableName)
+	}
+	return &Selection{rs: rs, names: names}
+}
+
+// ScoredOnly returns a [Selection] containing only tables that scored a
+// direct match (MatchScore > 0) from the retrieval signals, excluding
+// tables pulled in purely via foreign-key expansion. Use this for the
+// narrow "what literally matched" view — e.g. inspecting retrieval
+// quality — rather than [ResultSet.Matched]'s full join-ready context.
+func (rs *ResultSet) ScoredOnly() *Selection {
 	names := make([]string, 0)
 	for _, t := range rs.Tables {
 		if t.MatchScore > 0 {
 			names = append(names, t.TableName)
 		}
-	}
-	return &Selection{rs: rs, names: names}
-}
-
-// All returns a [Selection] containing all tables in the result set,
-// including FK-expanded tables that were not directly matched.
-func (rs *ResultSet) All() *Selection {
-	names := make([]string, 0, len(rs.Tables))
-	for _, t := range rs.Tables {
-		names = append(names, t.TableName)
 	}
 	return &Selection{rs: rs, names: names}
 }

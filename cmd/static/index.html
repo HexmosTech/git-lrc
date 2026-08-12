@@ -733,12 +733,11 @@ function Query({onNavigate}) {
     try {
       const data = await api.query(input.trim());
       setResults(data);
-      // Default: select all matched (score > 0)
-      const s = new Set();
-      for(const t of (data.tables||[])) {
-        if(t.match_score > 0) s.add(t.table_name);
-      }
-      setSelected(s);
+      // Default: select everything the query returned — direct hits plus
+      // FK-expanded join context — since that's what an LLM needs to
+      // competently answer the query, not just tables that scored on
+      // their own.
+      setSelected(new Set((data.tables||[]).map(t=>t.table_name)));
     } finally {
       setLoading(false);
     }
@@ -759,7 +758,7 @@ function Query({onNavigate}) {
 
   const selectNone = useCallback(()=>setSelected(new Set()),[]);
 
-  const selectMatched = useCallback(()=>{
+  const selectScoredOnly = useCallback(()=>{
     if(!results) return;
     const s = new Set();
     for(const t of results.tables) if(t.match_score > 0) s.add(t.table_name);
@@ -791,7 +790,7 @@ $.path  type  {samples}  JSONB path with inferred type
 
   useEffect(()=>{ inputRef.current?.focus() },[]);
 
-  const matchCount = results?.tables?.filter(t=>t.match_score>0).length || 0;
+  const scoredCount = results?.tables?.filter(t=>t.match_score>0).length || 0;
 
   return html`
     <div>
@@ -809,10 +808,10 @@ $.path  type  {samples}  JSONB path with inferred type
       ${results && html`
         <div class="result-toolbar">
           <span class="count">
-            <span>${results.tables?.length || 0} tables (${matchCount} matched) \u00B7 ${selected.size} selected</span>
+            <span>${results.tables?.length || 0} tables (${scoredCount} scored) \u00B7 ${selected.size} selected</span>
             <${TimingBadge} timing=${results.timing} />
           </span>
-          <button onClick=${selectMatched}>Matched</button>
+          <button onClick=${selectScoredOnly}>Scored Only</button>
           <button onClick=${selectAll}>All</button>
           <button onClick=${selectNone}>None</button>
           <button class="accent" onClick=${copySelected}>${copied ? 'Copied!' : 'Copy Selected'}</button>

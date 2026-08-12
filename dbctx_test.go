@@ -367,10 +367,16 @@ func TestSelectionExclude(t *testing.T) {
 		t.Fatalf("Query: %v", err)
 	}
 
-	text := result.Matched().Exclude("reviews").TextRaw()
-
-	if strings.Contains(text, "reviews") {
-		t.Error("reviews should be excluded")
+	// Check the structured selection rather than substring-matching the
+	// rendered text: Matched() now includes FK-expanded neighbor tables by
+	// default, and a neighbor's own FK annotation (e.g. "review_id →
+	// reviews") can legitimately still mention "reviews" in its text even
+	// though the reviews table itself was excluded.
+	tables := result.Matched().Exclude("reviews").Tables()
+	for _, tbl := range tables {
+		if tbl.TableName == "reviews" {
+			t.Error("reviews should be excluded")
+		}
 	}
 }
 
@@ -388,9 +394,9 @@ func TestSelectionLen(t *testing.T) {
 		t.Error("Matched().Len() = 0")
 	}
 
-	all := result.All()
-	if all.Len() < matched.Len() {
-		t.Error("All().Len() should be >= Matched().Len()")
+	scoredOnly := result.ScoredOnly()
+	if matched.Len() < scoredOnly.Len() {
+		t.Error("Matched().Len() should be >= ScoredOnly().Len()")
 	}
 }
 

@@ -103,7 +103,7 @@ dbctx build postgres://user:pass@localhost/mydb --output mydb.dtx --no-semantic
 dbctx query mydb.dtx "How many failed GitHub reviews last month?"
 ```
 
-The query finds relevant tables, surfaces JSONB structure, and highlights state-like fields — all in compact text output.
+The query finds relevant tables, surfaces JSONB structure, and highlights state-like fields — all in compact text output. By default this includes tables pulled in via foreign-key expansion alongside direct hits, since that's the join context an LLM needs to actually answer the query; pass `--matched-only` to restrict output to tables that scored a direct match.
 
 ![dbctx CLI query output](media/dbctx-3-query.png)
 
@@ -267,11 +267,12 @@ func main() {
         log.Fatal(err)
     }
 
-    // Get compact schema for matched tables only — ready for an LLM prompt
+    // Get compact schema for everything the query needs — matched tables
+    // plus FK-expanded join context — ready for an LLM prompt
     fmt.Println(result.Matched().Text())         // includes notation legend
 
     // Or refine the selection
-    fmt.Println(result.All().Text())                             // all tables
+    fmt.Println(result.ScoredOnly().Text())                      // only tables that scored directly
     fmt.Println(result.Include("reviews", "orgs").Text())        // specific tables
     fmt.Println(result.Matched().Exclude("migrations").Text())   // matched minus one
 
@@ -413,8 +414,8 @@ If the background build fails, `idx.Err()` returns the error and all query metho
 result, _ := idx.Query("failed reviews last month")
 
 // ResultSet — select tables and render (includes notation legend)
-result.Matched().Text()                          // matched tables only (score > 0)
-result.All().Text()                              // all tables including FK-expanded
+result.Matched().Text()                          // matched + FK-expanded tables (default: everything needed)
+result.ScoredOnly().Text()                       // only tables that scored a direct match
 result.Include("reviews", "orgs").Text()         // specific tables by name
 result.Matched().Exclude("migrations").Text()    // matched minus exclusions
 result.Matched().Include("extra").Text()         // matched plus extras
