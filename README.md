@@ -9,6 +9,8 @@
 
 Use it to give text-to-SQL systems, AI agents, and database-aware applications a compact, relevant slice of your database schema at query time, instead of dumping the entire `information_schema` into every prompt.
 
+Longer writeup with real numbers and diagrams: **[Introducing dbctx](https://journal.hexmos.com/introducing-dbctx/)**.
+
 **Key features:**
 
 - **Natural-language query** — find relevant tables, columns, and relationships from a text question
@@ -24,35 +26,11 @@ Use it to give text-to-SQL systems, AI agents, and database-aware applications a
 - **In-memory mode** — ephemeral indexes for testing or ephemeral workloads
 - **Web UI** — built-in browser-based database explorer
 
-It is designed to be the missing layer between a real database and systems that need to understand it:
+It is designed to be the missing layer between a real database and systems that need to understand it — PostgreSQL in, a compiled `database.dtx` file out, retrieval fusing lexical + optional semantic + optional terminology signals, FK expansion pulling in join context, and a compact schema notation going to the LLM:
 
-```text
-PostgreSQL
-    │
-    ▼
-  dbctx
-    │
-    ▼
- database.dtx
-    │
-    ├── schema
-    ├── relationships
-    ├── field intelligence
-    ├── representative values
-    ├── JSONB structure
-    ├── retrieval index (lexical)
-    ├── semantic index (optional)
-    └── terminology (optional, user-supplied)
-    │
-    ▼
-Text query
-    │
-    ▼
-Relevant tables + compact schema + field context
-    │
-    ▼
-Text-to-SQL / visualization / analytics system
-```
+<p align="center"><img src="media/architecture.png" width="620" alt="Architecture diagram: PostgreSQL to dbctx build (schema extraction, field analysis, JSONB analysis) to database.dtx, then hybrid retrieval (lexical, semantic, terminology) to score fusion, FK expansion, compact context, and finally the LLM / SQL generator"></p>
+
+It captures, in that one file: schema, relationships, field intelligence, representative values, JSONB structure, a lexical retrieval index, an optional semantic index, and an optional user-supplied terminology dictionary.
 
 ---
 
@@ -76,6 +54,7 @@ Text-to-SQL / visualization / analytics system
 | Understand the design decisions | [Design principles](#design-principles) |
 | See the project roadmap | [Project status](#project-status) / [Roadmap](#roadmap) |
 | Contribute or extend it | [Contributing](#contributing) |
+| Read the full writeup, with worked examples and diagrams | [journal.hexmos.com/introducing-dbctx](https://journal.hexmos.com/introducing-dbctx/) |
 
 ---
 
@@ -791,6 +770,10 @@ repositories.provider
 
 That compact context can then be passed to whatever generates SQL.
 
+Scoring itself is just evidence accumulation — table name, column name, and value matches all add weight to a table's score, and a strong match then pulls in its FK neighbors automatically. Here's the same mechanism against a real production database, for the query `"billing subscription plan"`:
+
+<p align="center"><img src="media/diagram-scoring.png" width="640" alt="Diagram: table name, column name, and value matches accumulate into a score for the subscriptions table, which then triggers FK expansion into users and orgs"></p>
+
 ---
 
 # Semantic retrieval
@@ -836,6 +819,10 @@ final = lexical
 
 If lexical search found nothing at all for a query (e.g. `"buyers"` against a schema with only `customers`), the scale falls back to a flat 1.0 — enough for a purely-semantic match to surface, just never enough to bury a real lexical match when one exists.
 
+Worked example: a query lexically scores `orders` at 40 (the strongest lexical hit in the result set), and semantically scores `orders` at 0.9 and `purchases` at 0.4. `orders` ends up at `40 + 0.6 × 0.9 × 40 = 61.6`; `purchases`, with no lexical hit at all, ends up at `0 + 0.6 × 0.4 × 40 = 9.6` — surfaced, but nowhere near outranking the exact match.
+
+<p align="center"><img src="media/diagram-semantic.png" width="640" alt="Diagram: lexical and semantic scores for orders and purchases fuse into final scores of 61.6 and 9.6"></p>
+
 Query results are inspectable, not a black box: `ResultSet.SemanticHits` (library) / the `SEMANTIC SIGNAL` section (`dbctx query` output) show exactly which embedded object and similarity score contributed to each table that lexical search alone wouldn't have surfaced.
 
 ### Model & distribution
@@ -859,24 +846,7 @@ Semantic embeddings are good at general paraphrases. They are not reliable for d
 
 Terminology is a third, fully independent retrieval signal — separate from both lexical and semantic matching, and never populated automatically:
 
-```text
-                     .dtx
-                      │
-                      ▼
-             terminology prompt
-                      │
-                      ▼
-          large external LLM + you
-                      │
-                      ▼
-            terminology.json
-                      │
-                      ▼
-             terminology import
-                      │
-                      ▼
-                     .dtx
-```
+<p align="center"><img src="media/diagram-terminology.png" width="320" alt="Diagram: database.dtx to terminology prompt to you and your LLM to terminology.json to validated import back into database.dtx"></p>
 
 dbctx never calls an LLM itself. Instead:
 
@@ -1107,6 +1077,14 @@ representative_values:
 
 This gives downstream systems useful knowledge without requiring raw JSON documents to be inserted into every prompt.
 
+### How it samples
+
+Scanning every row of a large JSONB column would be wasteful, so dbctx samples instead of scanning: small tables (under 5,000 rows) get a plain `LIMIT 50`; larger tables use `TABLESAMPLE BERNOULLI` at a percentage that shrinks as the table grows (roughly 0.05% for a table with a million rows, about 500 rows actually inspected). Every sample query also filters out documents over 10KB so one outlier blob can't stall a build, the work runs across four goroutines in parallel, and results land in a single SQLite transaction so a build never leaves the index half-written.
+
+Per path, dbctx counts how often each type appears across the sample and keeps the most frequent one — if `$.discount` is a number in 98% of rows and a stray string in the rest, it's reported as a number, not as a type union.
+
+<p align="center"><img src="media/diagram-jsonb.png" width="480" alt="Diagram: JSONB sampling flow from table-size branching through document filtering, parallel workers, type inference, and storage"></p>
+
 ---
 
 # Representative values
@@ -1310,35 +1288,7 @@ The `.dtx` file is its **compiled context representation**.
 
 dbctx is deliberately small.
 
-```text
-┌────────────────────────────────────────────────────┐
-│                       dbctx                        │
-│                                                     │
-│  PostgreSQL introspection                          │
-│          │                                         │
-│          ▼                                         │
-│  Schema graph                                      │
-│          │                                         │
-│          ├── Field analysis                        │
-│          ├── Value analysis                        │
-│          └── JSONB analysis                        │
-│                    │                                │
-│                    ▼                                │
-│              .dtx database context                  │
-│                    │                                │
-│      ┌─────────────┼─────────────┐                  │
-│      ▼             ▼             ▼                  │
-│   lexical       embeddings   terminology            │
-│   index          (optional)   (optional,             │
-│      │             │           user-supplied)        │
-│      └─────────────┼─────────────┘                  │
-│                    ▼                                │
-│              query ranking                          │
-│                    │                                │
-│                    ▼                                │
-│         FK expansion / compact context               │
-└────────────────────────────────────────────────────┘
-```
+<p align="center"><img src="media/architecture.png" width="560" alt="Architecture diagram: PostgreSQL to dbctx build (schema extraction, field analysis, JSONB analysis) to database.dtx, then hybrid retrieval (lexical, semantic, terminology) to score fusion, FK expansion, compact context, and finally the LLM / SQL generator"></p>
 
 The core implementation is intended to be a **single binary**.
 
@@ -1748,6 +1698,8 @@ dbctx is an attempt to make that database understanding:
 ```
 
 **Build the context once. Use it everywhere.**
+
+For the full story behind why dbctx exists, real numbers from a production database, and a walk through the scoring math, see **[Introducing dbctx](https://journal.hexmos.com/introducing-dbctx/)**.
 
 ---
 
