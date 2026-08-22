@@ -169,3 +169,54 @@ func TestFormatQueryResult_ContainsStructure(t *testing.T) {
 		t.Error("output missing COLUMNS header")
 	}
 }
+
+func TestFormatQueryResult_ContainsLegend(t *testing.T) {
+	store := newTestStore(t)
+
+	result, err := search.Query(store, "reviews")
+	if err != nil {
+		t.Fatalf("search.Query: %v", err)
+	}
+
+	var buf bytes.Buffer
+	FormatQueryResult(&buf, result)
+	output := buf.String()
+
+	legendSections := []string{
+		"--- notation ---",
+		"PK: primary key",
+		"is primary key",
+		"[state]",
+		"[cat]",
+		"$.path",
+		"(score:",
+	}
+
+	for _, section := range legendSections {
+		if !strings.Contains(output, section) {
+			t.Errorf("output missing legend section %q", section)
+		}
+	}
+}
+
+func TestFormatQueryResult_ShortenedTypes(t *testing.T) {
+	store := newTestStore(t)
+
+	result, err := search.Query(store, "reviews")
+	if err != nil {
+		t.Fatalf("search.Query: %v", err)
+	}
+
+	var buf bytes.Buffer
+	FormatQueryResult(&buf, result)
+	output := buf.String()
+
+	// The fixture has "character varying(50)" for status column
+	// It should be shortened to "varchar(50)"
+	if !strings.Contains(output, "varchar(50)") {
+		t.Error("output missing shortened type 'varchar(50)'")
+	}
+	if strings.Contains(output, "character varying(50)") {
+		t.Error("output still contains unshortened type 'character varying(50)'")
+	}
+}

@@ -640,3 +640,66 @@ func TestQuery_ScoreOrdering(t *testing.T) {
 		}
 	}
 }
+
+func TestShortenType(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"character varying", "varchar"},
+		{"character varying(255)", "character varying(255)"}, // ShortenType doesn't handle params
+		{"character", "char"},
+		{"timestamp with time zone", "tstz"},
+		{"timestamp without time zone", "ts"},
+		{"time with time zone", "ttz"},
+		{"time without time zone", "tt"},
+		{"double precision", "float8"},
+		{"real", "float4"},
+		{"boolean", "bool"},
+		{"integer", "int"},
+		{"bigint", "int8"},
+		{"smallint", "int2"},
+		{"numeric", "num"},
+		{"decimal", "num"},
+		{"text", "text"},
+		{"jsonb", "jsonb"},
+		{"json", "json"},
+		{"uuid", "uuid"},
+		{"bytea", "bytea"},
+		{"unknown_type", "unknown_type"}, // unknown types pass through
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := ShortenType(tt.input)
+			if got != tt.expected {
+				t.Errorf("ShortenType(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestShortenTypeParam(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"character varying(255)", "varchar(255)"},
+		{"character varying(50)", "varchar(50)"},
+		{"character(10)", "char(10)"},
+		{"numeric(10,2)", "num(10,2)"},
+		{"integer", "int"},
+		{"text", "text"},
+		{"timestamp with time zone", "tstz"},
+		{"unknown(100)", "unknown(100)"}, // unknown base type with params passes through
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := ShortenTypeParam(tt.input)
+			if got != tt.expected {
+				t.Errorf("ShortenTypeParam(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}

@@ -261,6 +261,9 @@ func reportStats(w io.Writer, store *db.Store) {
 }
 
 func FormatQueryResult(w io.Writer, result *search.SearchResult) {
+	fmt.Fprint(w, search.Legend())
+	fmt.Fprintln(w)
+
 	fmt.Fprintf(w, "Query: %s\n", result.Query)
 
 	t := result.Timing
@@ -310,7 +313,7 @@ func FormatQueryResult(w io.Writer, result *search.SearchResult) {
 			if c.IsCategoric {
 				flags += " [cat]"
 			}
-			fmt.Fprintf(w, "      %s %s%s\n", c.Name, c.Type, flags)
+			fmt.Fprintf(w, "      %s %s%s\n", c.Name, search.ShortenTypeParam(c.Type), flags)
 
 			if len(c.Values) > 0 {
 				var vals []string

@@ -806,3 +806,90 @@ func buildTableContext(store *db.Store, tableName string, score float64) TableCo
 
 	return tc
 }
+
+// ShortenType converts a PostgreSQL type name returned by format_type()
+// into a compact, human-friendly abbreviation. Types not in the map are
+// returned unchanged.
+func ShortenType(t string) string {
+	if short, ok := typeAbbreviations[t]; ok {
+		return short
+	}
+	return t
+}
+
+// typeAbbreviations maps PostgreSQL's verbose format_type() output to
+// compact forms. Not all follow PostgreSQL's own abbreviations — some
+// are shortened further (e.g. tstz instead of timestamptz) for token
+// efficiency. LLMs understand them either way.
+var typeAbbreviations = map[string]string{
+	"character varying":              "varchar",
+	"character":                      "char",
+	"timestamp with time zone":       "tstz",
+	"timestamp without time zone":    "ts",
+	"time with time zone":            "ttz",
+	"time without time zone":         "tt",
+	"double precision":               "float8",
+	"real":                           "float4",
+	"boolean":                        "bool",
+	"integer":                        "int",
+	"bigint":                         "int8",
+	"smallint":                       "int2",
+	"numeric":                        "num",
+	"decimal":                        "num",
+	"text":                           "text",
+	"jsonb":                          "jsonb",
+	"json":                           "json",
+	"uuid":                           "uuid",
+	"bytea":                          "bytea",
+	"name":                           "name",
+	"oid":                            "oid",
+	"xid":                            "xid",
+	"cid":                            "cid",
+	"pg_node_tree":                   "pg_node_tree",
+	"pg_ndistinct":                   "pg_ndistinct",
+	"pg_dependencies":                "pg_dependencies",
+	"anyelement":                     "anyelement",
+	"anyarray":                       "anyarray",
+	"anyenum":                        "anyenum",
+	"anyrange":                       "anyrange",
+	"anynonarray":                    "anynonarray",
+	"cstring":                        "cstring",
+	"event_trigger":                  "event_trigger",
+	"fdw_handler":                    "fdw_handler",
+	"index_am_handler":               "index_am_handler",
+	"internal":                       "internal",
+	"language_handler":               "language_handler",
+	"opaque":                         "opaque",
+	"trigger":                        "trigger",
+	"void":                           "void",
+}
+
+// ShortenTypeParam abbreviates a PostgreSQL type that may include a
+// parameter suffix, e.g. "character varying(255)" → "varchar(255)".
+// It splits on the first '(' and shortens just the base type name.
+func ShortenTypeParam(t string) string {
+	if idx := strings.Index(t, "("); idx > 0 {
+		base := t[:idx]
+		param := t[idx:]
+		if short, ok := typeAbbreviations[base]; ok {
+			return short + param
+		}
+		return t
+	}
+	return ShortenType(t)
+}
+
+// Legend returns the notation guide used in compact text output. It
+// explains every symbol and annotation so that an LLM (or human reader)
+// can interpret the schema without external documentation.
+func Legend() string {
+	return `--- notation ---
+PK: primary key           col → table  foreign key
+^  is primary key         ?  nullable   >target  FK target
+[state] state-like categorical (< 100 distinct values)
+[cat]   categorical field
+{a, b, c}  representative values (from pg_stats)
+$.path  type  {samples}  JSONB path with inferred type
+(score: X.XX)  relevance score from query matching
+`
+}

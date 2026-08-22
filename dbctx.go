@@ -1417,15 +1417,7 @@ func convertColumnInfo(c search.ColumnInfo) ColumnInfo {
 // every symbol and annotation so that an LLM (or human reader) can interpret
 // the compact schema without external documentation.
 func legend() string {
-	return `--- notation ---
-PK: primary key           col → table  foreign key
-^  is primary key         ?  nullable   >target  FK target
-[state] state-like categorical (< 100 distinct values)
-[cat]   categorical field
-{a, b, c}  representative values (from pg_stats)
-$.path  type  {samples}  JSONB path with inferred type
-(score: X.XX)  relevance score from query matching
-`
+	return search.Legend()
 }
 
 // writeTableText writes a single table's compact text representation to buf.
@@ -1470,7 +1462,7 @@ func writeTableText(buf *strings.Builder, t TableContext) {
 			flags = append(flags, "[cat]")
 		}
 
-		fmt.Fprintf(buf, "  %s %s", c.Name, c.Type)
+		fmt.Fprintf(buf, "  %s %s", c.Name, search.ShortenTypeParam(c.Type))
 		if len(flags) > 0 {
 			buf.WriteString(" " + strings.Join(flags, " "))
 		}
