@@ -60,12 +60,16 @@ func inferType(val interface{}) string {
 	}
 }
 
+const maxJSONBSampleBytes = 1 << 20 // 1 MiB
+
 // sampleQuery returns a SQL expression that samples rows efficiently.
 // For small tables (< threshold), it just does LIMIT.
 // For large tables, it uses TABLESAMPLE BERNOULLI to avoid full scans.
 // Always caps at limit rows and filters out oversized JSONB values.
+// ORDER BY random() ensures the LIMIT is an actual random sample instead
+// of whichever rows the scan reaches first.
 func sampleQuery(colExpr, tblName, whereClause string, rowEstimate float64, limit int) string {
-	sizeFilter := fmt.Sprintf("octet_length(%s::text) < 10240", colExpr)
+	sizeFilter := fmt.Sprintf("octet_length(%s::text) < %d", colExpr, maxJSONBSampleBytes)
 	if whereClause == "" {
 		whereClause = "WHERE " + sizeFilter
 	} else {
@@ -73,7 +77,7 @@ func sampleQuery(colExpr, tblName, whereClause string, rowEstimate float64, limi
 	}
 
 	if rowEstimate < 5000 || rowEstimate == 0 {
-		return fmt.Sprintf("SELECT %s FROM %s %s LIMIT %d", colExpr, tblName, whereClause, limit)
+		return fmt.Sprintf("SELECT %s FROM %s %s ORDER BY random() LIMIT %d", colExpr, tblName, whereClause, limit)
 	}
 	pct := 1.0
 	if rowEstimate > 100000 {
@@ -84,7 +88,7 @@ func sampleQuery(colExpr, tblName, whereClause string, rowEstimate float64, limi
 		pct = 0.5
 	}
 	return fmt.Sprintf(
-		"SELECT %s FROM %s TABLESAMPLE BERNOULLI(%.2f) %s LIMIT %d",
+		"SELECT %s FROM %s TABLESAMPLE BERNOULLI(%.2f) %s ORDER BY random() LIMIT %d",
 		colExpr, tblName, pct, whereClause, limit,
 	)
 }
