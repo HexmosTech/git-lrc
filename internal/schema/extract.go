@@ -138,7 +138,7 @@ SELECT
     t.oid::text,
     t.schema_name,
     t.table_name,
-    '',
+    COALESCE(t.row_estimate::text, ''),
     '',
     '',
     '',

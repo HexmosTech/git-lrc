@@ -187,6 +187,39 @@ func TestSampleQuery_AppendsToWhere(t *testing.T) {
 	}
 }
 
+// Guards against regressing to the old 10KB cutoff that excluded normal rows.
+func TestSampleQuery_SizeFilterIsOneMebibyte(t *testing.T) {
+	q := sampleQuery("col", "tbl", "", 100, 50)
+	if !contains(q, "octet_length(col::text) < 1048576") {
+		t.Errorf("expected 1 MiB (1048576) size filter, got: %s", q)
+	}
+	if contains(q, "10240") {
+		t.Errorf("old 10KB size filter still present: %s", q)
+	}
+}
+
+// Guards against losing ORDER BY random(), which is what makes LIMIT unbiased.
+func TestSampleQuery_OrderByRandom_SmallTable(t *testing.T) {
+	q := sampleQuery("col", "tbl", "WHERE col IS NOT NULL", 100, 50)
+	if !contains(q, "ORDER BY random()") {
+		t.Errorf("expected ORDER BY random() in small-table query: %s", q)
+	}
+	if !contains(q, "ORDER BY random() LIMIT 50") {
+		t.Errorf("expected ORDER BY random() to precede LIMIT: %s", q)
+	}
+}
+
+// Guards the same thing on the TABLESAMPLE branch - thinning alone isn't unbiased.
+func TestSampleQuery_OrderByRandom_LargeTable(t *testing.T) {
+	q := sampleQuery("col", "tbl", "WHERE col IS NOT NULL", 100000, 50)
+	if !contains(q, "TABLESAMPLE BERNOULLI") {
+		t.Errorf("expected TABLESAMPLE for large table: %s", q)
+	}
+	if !contains(q, "ORDER BY random() LIMIT 50") {
+		t.Errorf("expected ORDER BY random() to precede LIMIT: %s", q)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && searchString(s, substr)
 }
