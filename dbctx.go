@@ -121,6 +121,23 @@
 //	// ...paste prompt into an LLM, review its output...
 //	result, _ := idx.ImportTerminology(llmOutputJSON)
 //
+// # Schema fingerprint
+//
+// A .dtx file is a snapshot: nothing re-checks it against the live
+// database on its own, so an application holding onto a stale one after a
+// schema change answers questions against a schema that no longer exists.
+// [Index.SchemaFingerprint] returns the fingerprint [Build]/[BuildAsync]
+// computed and stored automatically (table/column shape only — schema,
+// table, column, data type, nullable; constraints/indexes/row-estimate
+// churn deliberately excluded), and [LiveFingerprint] recomputes one fresh
+// against a live DSN for comparison, without opening or writing a .dtx:
+//
+//	stored, _ := idx.SchemaFingerprint()
+//	live, _ := dbctx.LiveFingerprint(ctx, dsn, nil)
+//	if stored != live {
+//	    // stale relative to the real schema — rebuild before trusting it
+//	}
+//
 // # Use cases
 //
 // dbctx is designed for any system that needs to understand a PostgreSQL
@@ -264,6 +281,10 @@ func Build(ctx context.Context, dsn string, opts *Options) (*Index, error) {
 	if err := storeSchema(store, ext); err != nil {
 		store.Close()
 		return nil, fmt.Errorf("store schema: %w", err)
+	}
+	if err := StoreFingerprint(store, ComputeFingerprint(ext)); err != nil {
+		store.Close()
+		return nil, err
 	}
 	fmt.Fprintf(log, "  %d tables, %d constraints\n", len(ext.Tables), len(ext.Constraints))
 
@@ -429,6 +450,11 @@ func BuildAsync(ctx context.Context, dsn string, opts *Options) (*Index, <-chan 
 		if err := storeSchema(store, ext); err != nil {
 			store.Close()
 			idx.err = fmt.Errorf("store schema: %w", err)
+			return
+		}
+		if err := StoreFingerprint(store, ComputeFingerprint(ext)); err != nil {
+			store.Close()
+			idx.err = err
 			return
 		}
 		fmt.Fprintf(log, "  %d tables, %d constraints\n", len(ext.Tables), len(ext.Constraints))

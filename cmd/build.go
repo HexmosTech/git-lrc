@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/shrsv/dbctx"
 	"github.com/shrsv/dbctx/internal/analyze"
 	"github.com/shrsv/dbctx/internal/db"
 	"github.com/shrsv/dbctx/internal/embed"
@@ -104,6 +105,9 @@ var buildCmd = &cobra.Command{
 		}
 		if err := storeSchema(store, ext); err != nil {
 			return fmt.Errorf("store schema: %w", err)
+		}
+		if err := dbctx.StoreFingerprint(store, dbctx.ComputeFingerprint(ext)); err != nil {
+			return err
 		}
 		fmt.Fprintf(os.Stderr, "  %d tables, %d constraints (%s)\n",
 			len(ext.Tables), len(ext.Constraints), time.Since(phaseStart).Round(time.Millisecond))

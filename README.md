@@ -47,6 +47,7 @@ It captures, in that one file: schema, relationships, field intelligence, repres
 | Query with natural language and get compact schema | [Querying the context](#querying-the-context) |
 | Understand semantic (embedding-based) retrieval | [Semantic retrieval](#semantic-retrieval) |
 | Map domain jargon/abbreviations to schema objects | [Terminology](#terminology) |
+| Detect when a `.dtx` has gone stale relative to the live schema | [Schema fingerprint](#schema-fingerprint) |
 | Understand the `.dtx` file format | [The `.dtx` format](#the-dtx-format) |
 | See what dbctx understands about a database | [What dbctx understands](#what-dbctx-understands) |
 | Understand how it works under the hood | [Architecture](#architecture) / [The retrieval model](#the-retrieval-model) |
@@ -881,6 +882,36 @@ The output format:
 ```
 
 Terminology is metadata used only by retrieval — importing a large dictionary does not bloat the compact schema output (`Text()`/`TextRaw()`) that gets sent to an LLM downstream; token budget stays exactly what it was without terminology.
+
+---
+
+# Schema fingerprint
+
+A `.dtx` file is a snapshot — nothing re-checks it against the live database on its own. If the schema changes after a `.dtx` was built (a column added, dropped, or retyped), an application that keeps using the old file is answering questions against a schema that no longer exists, silently.
+
+`SchemaFingerprint()`/`LiveFingerprint()` give you a cheap way to detect that drift without paying for a full rebuild:
+
+```go
+// SchemaFingerprint reads the fingerprint dbctx computed and stored the
+// last time this .dtx was built.
+stored, err := idx.SchemaFingerprint()
+
+// LiveFingerprint recomputes one fresh against the live database - just
+// the same lightweight schema-extraction query Build's own first phase
+// runs, not field statistics, JSONB sampling, or semantic embedding.
+live, err := dbctx.LiveFingerprint(ctx, dsn, nil)
+
+if stored != live {
+    // The .dtx is stale relative to the real schema - rebuild before
+    // trusting it for anything. Treat this as a hard failure, not a
+    // warning to log and continue past: a stale index doesn't fail loudly,
+    // it answers subtly wrong.
+}
+```
+
+The fingerprint only covers **table/column shape** — `(schema, table, column, data type, nullable)` — deliberately excluding constraints, indexes, and row-count estimates. Those can churn on their own (a new index, a growing table) without making anything dbctx already extracted incorrect, so counting them as drift would force rebuilds that accomplish nothing. Only a change that would actually make an already-built `.dtx` describe the database wrong — an added, dropped, or retyped column or table — changes the fingerprint.
+
+`Build`/`BuildAsync` compute and store the fingerprint automatically as part of the existing schema-extraction phase — there's no separate step to remember. An index built with a version of dbctx that predates this feature returns `""` from `SchemaFingerprint()` rather than an error; treat an empty stored fingerprint the same way you'd treat a mismatch (unverifiable, so don't trust it) unless you have a reason not to.
 
 ---
 
