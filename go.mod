@@ -1,6 +1,6 @@
 module github.com/HexmosTech/git-lrc
 
-go 1.25.12
+go 1.25.13
 
 require (
 	charm.land/bubbletea/v2 v2.0.2
