@@ -133,7 +133,7 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		diffSource = "commit"
 		opts.Precommit = false
 		opts.Skip = false
-		if !c.IsSet("serve") && !c.IsSet("save-html") {
+		if !c.IsSet("serve") && !c.IsSet("save-html") && !opts.NoServe {
 			opts.Serve = true
 		}
 	} else if opts.RangeVal != "" {
@@ -143,7 +143,7 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		diffSource = "range"
 		opts.Precommit = false
 		opts.Skip = false
-		if !c.IsSet("serve") && !c.IsSet("save-html") {
+		if !c.IsSet("serve") && !c.IsSet("save-html") && !opts.NoServe {
 			opts.Serve = true
 		}
 	} else if staged {

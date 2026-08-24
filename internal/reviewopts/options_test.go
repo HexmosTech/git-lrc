@@ -107,6 +107,119 @@ func TestBuildFromContextBlastRadius(t *testing.T) {
 	})
 }
 
+func TestBuildFromContextNoServe(t *testing.T) {
+	t.Run("range without no-serve auto-enables serve", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--range", "main...feature"})
+
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if !opts.Serve {
+			t.Fatalf("Serve = false, want true (range auto-enables serve)")
+		}
+		if opts.DiffSource != "range" {
+			t.Fatalf("DiffSource = %q, want %q", opts.DiffSource, "range")
+		}
+	})
+
+	t.Run("range with no-serve suppresses serve", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--range", "main...feature", "--no-serve"})
+
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if opts.Serve {
+			t.Fatalf("Serve = true, want false (--no-serve should suppress)")
+		}
+		if opts.DiffSource != "range" {
+			t.Fatalf("DiffSource = %q, want %q", opts.DiffSource, "range")
+		}
+	})
+
+	t.Run("commit without no-serve auto-enables serve", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--commit", "HEAD"})
+
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if !opts.Serve {
+			t.Fatalf("Serve = false, want true (commit auto-enables serve)")
+		}
+		if opts.DiffSource != "commit" {
+			t.Fatalf("DiffSource = %q, want %q", opts.DiffSource, "commit")
+		}
+	})
+
+	t.Run("commit with no-serve suppresses serve", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--commit", "HEAD", "--no-serve"})
+
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if opts.Serve {
+			t.Fatalf("Serve = true, want false (--no-serve should suppress)")
+		}
+		if opts.DiffSource != "commit" {
+			t.Fatalf("DiffSource = %q, want %q", opts.DiffSource, "commit")
+		}
+	})
+
+	t.Run("staged with no-serve suppresses serve", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--staged", "--no-serve"})
+
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if opts.Serve {
+			t.Fatalf("Serve = true, want false (--no-serve should suppress)")
+		}
+		if opts.DiffSource != "staged" {
+			t.Fatalf("DiffSource = %q, want %q", opts.DiffSource, "staged")
+		}
+	})
+
+	t.Run("rejects no-serve with serve", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--no-serve", "--serve"})
+
+		_, err := BuildFromContext(ctx, false)
+		if err == nil || err.Error() != "cannot use --no-serve and --serve together" {
+			t.Fatalf("BuildFromContext() error = %v, want no-serve/serve conflict", err)
+		}
+	})
+
+	t.Run("rejects no-serve with blocking-review", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--no-serve", "--blocking-review"})
+
+		_, err := BuildFromContext(ctx, false)
+		if err == nil || err.Error() != "cannot use --no-serve and --blocking-review together" {
+			t.Fatalf("BuildFromContext() error = %v, want no-serve/blocking-review conflict", err)
+		}
+	})
+
+	t.Run("range with no-serve and output json", func(t *testing.T) {
+		ctx := newOptionsTestContext(t, []string{"--range", "main...feature", "--no-serve", "--output", "json"})
+
+		opts, err := BuildFromContext(ctx, false)
+		if err != nil {
+			t.Fatalf("BuildFromContext() error = %v", err)
+		}
+		if opts.Serve {
+			t.Fatalf("Serve = true, want false")
+		}
+		if opts.Output != "json" {
+			t.Fatalf("Output = %q, want %q", opts.Output, "json")
+		}
+		if opts.NoServe != true {
+			t.Fatalf("NoServe = false, want true")
+		}
+	})
+}
+
 func newOptionsTestContext(t *testing.T, args []string) *cli.Context {
 	t.Helper()
 
