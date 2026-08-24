@@ -33,7 +33,18 @@ Reviewing a branch before merging (PR-style review):
 
 --range and --commit (with a "..." or ".." range) are read-only: they
 review a diff between existing refs, open a browsable HTML report, and
-do not write a commit attestation or offer to commit/push.`
+do not write a commit attestation or offer to commit/push.
+
+Non-interactive mode (CI, agents, scripts):
+
+   lrc review --no-serve --output json                         # staged changes -> JSON
+   lrc review --no-serve --output json --range main..feature   # branch diff -> JSON
+   lrc review --no-serve --output json --commit HEAD           # last commit -> JSON
+
+   --no-serve suppresses the auto-serve behavior (HTTP server, browser,
+   and interactive TUI). Combined with --output json, the review result
+   is printed to stdout and the process exits cleanly. Use --save-json
+   to also write the result to a file.`
 
 // Handlers contains injected command actions so CLI wiring can live outside main.
 type Handlers struct {

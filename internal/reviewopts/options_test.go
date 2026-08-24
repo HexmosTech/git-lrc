@@ -111,7 +111,7 @@ func newOptionsTestContext(t *testing.T, args []string) *cli.Context {
 	t.Helper()
 
 	set := flag.NewFlagSet("reviewopts-test", flag.ContinueOnError)
-	for _, boolName := range []string{"staged", "serve", "verbose", "precommit", "blocking-review", "skip", "force", "vouch", "blast-radius", "sort-by-blast-radius"} {
+	for _, boolName := range []string{"staged", "serve", "no-serve", "verbose", "precommit", "blocking-review", "skip", "force", "vouch", "blast-radius", "sort-by-blast-radius"} {
 		set.Bool(boolName, false, "")
 	}
 	for _, stringName := range []string{"repo-name", "range", "commit", "diff-file", "api-url", "api-key", "output", "save-html", "save-json", "save-text", "diff-source", "blast-radius-project"} {

@@ -421,7 +421,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			return liveReviewAuthFailureError(config.APIURL, formatLiveReviewTechnicalDetails(apiErr.Body))
 		}
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusRequestEntityTooLarge {
-			isInteractive := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+			isInteractive := !opts.NoServe && term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 			if isInteractive {
 				fmt.Printf("\n⚠️  Review submission failed: The diff is too large for the API (Status 413).\n")
 				fmt.Print("Do you want to skip the review and proceed with the commit? [y/N]: ")
@@ -539,7 +539,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 
 	// Generate and serve skeleton HTML immediately if --serve is enabled
 	// Auto-enable serve when no HTML path specified and not in post-commit mode
-	autoServeEnabled := !opts.Serve && opts.SaveHTML == "" && !isPostCommitReview
+	autoServeEnabled := !opts.Serve && opts.SaveHTML == "" && !isPostCommitReview && !opts.NoServe
 	if autoServeEnabled {
 		opts.Serve = true
 	}

@@ -34,6 +34,7 @@ type Options struct {
 	SaveText              string
 	SaveHTML              string
 	Serve                 bool
+	NoServe               bool
 	Port                  int
 	Verbose               bool
 	Precommit             bool
@@ -68,6 +69,7 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		Output:                c.String("output"),
 		SaveHTML:              c.String("save-html"),
 		Serve:                 c.Bool("serve"),
+		NoServe:               c.Bool("no-serve"),
 		Port:                  c.Int("port"),
 		Verbose:               c.Bool("verbose"),
 		Precommit:             c.Bool("precommit"),
@@ -111,6 +113,12 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		if opts.Vouch {
 			return Options{}, fmt.Errorf("cannot use --blocking-review and --vouch together")
 		}
+	}
+	if opts.NoServe && opts.Serve {
+		return Options{}, fmt.Errorf("cannot use --no-serve and --serve together")
+	}
+	if opts.NoServe && opts.BlockingReview {
+		return Options{}, fmt.Errorf("cannot use --no-serve and --blocking-review together")
 	}
 
 	staged := c.Bool("staged")

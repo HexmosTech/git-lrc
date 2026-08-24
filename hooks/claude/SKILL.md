@@ -24,6 +24,8 @@ Translate plain natural-language requests to the nearest command before running.
 | Skip review (write attestation, no AI) | `lrc review --staged --skip` |
 | Vouch for changes manually | `lrc review --staged --vouch` |
 | Review a specific prior commit | `lrc review --commit HEAD` |
+| Non-interactive review (agent/CI) | `lrc review --no-serve --output json --staged` |
+| Non-interactive range review | `lrc review --no-serve --output json --range main...feature` |
 
 ## Hooks commands
 
