@@ -273,6 +273,30 @@ for hook in pre-commit prepare-commit-msg commit-msg post-commit; do
 done
 
 bold ""
+bold "══ Local Hook Management In Subdirectories ════════════════════"
+
+mkdir -p "$LOCAL_REPO_DIR/subdir"
+cd "$LOCAL_REPO_DIR/subdir"
+
+lrc hooks install --local >/dev/null
+STATUS_OUTPUT_SUBDIR="$(lrc hooks status 2>&1)"
+
+for hook in pre-commit prepare-commit-msg commit-msg post-commit; do
+	assert_file_contains "subdirectory install adds managed section: $hook" "# BEGIN lrc managed section - DO NOT EDIT" "$WT_LOCAL_HOOKS_DIR/$hook"
+done
+
+assert_contains "subdirectory status reports common-dir hooks path" "hooksPath: $WT_LOCAL_HOOKS_DIR" "$STATUS_OUTPUT_SUBDIR"
+assert_contains "subdirectory status reports worktree root" "repo: $LOCAL_REPO_DIR" "$STATUS_OUTPUT_SUBDIR"
+
+lrc hooks uninstall --local >/dev/null
+
+for hook in pre-commit prepare-commit-msg commit-msg post-commit; do
+	assert_file_not_contains_or_missing "subdirectory uninstall removes managed section: $hook" "# BEGIN lrc managed section - DO NOT EDIT" "$WT_LOCAL_HOOKS_DIR/$hook"
+done
+
+cd "$LOCAL_REPO_DIR"
+
+bold ""
 bold "══ Results ═══════════════════════════════════════════════════"
 TOTAL=$((PASS + FAIL))
 if [[ $FAIL -eq 0 ]]; then
