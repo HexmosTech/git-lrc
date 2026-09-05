@@ -15,7 +15,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const appVersion = "v0.6.10"
+const appVersion = "v0.6.11"
 
 var (
 	version    = appVersion
