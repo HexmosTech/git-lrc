@@ -22,9 +22,11 @@ jobs:
           fetch-depth: 0
       - name: Resolve latest gitleaks version
         id: gitleaks-version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          RELEASE_JSON="$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest)"
+          RELEASE_JSON="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" https://api.github.com/repos/gitleaks/gitleaks/releases/latest)"
           VERSION="$(printf '%s' "$RELEASE_JSON" | grep -m1 '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')"
           if [ -z "$VERSION" ]; then
             echo "Failed to resolve latest gitleaks version"
