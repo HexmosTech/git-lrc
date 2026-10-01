@@ -151,7 +151,18 @@ setup_installer_test_env() {
 }
 
 cleanup_installer_test_env() {
-	rm -rf "${TMP_ROOT:-}"
+	local root="${TMP_ROOT:-}"
+	[[ -z "$root" ]] && return 0
+	# claude's background update-checker can still be writing into TEST_HOME
+	# (e.g. .claude.json) right after the test's foreground commands return,
+	# racing this rm -rf with "Directory not empty". Retry briefly instead
+	# of letting that transient race fail the whole test run.
+	local attempt
+	for attempt in 1 2 3 4 5; do
+		rm -rf "$root" 2>/dev/null && return 0
+		sleep 0.5
+	done
+	rm -rf "$root"
 }
 
 skip_test() {
