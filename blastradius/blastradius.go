@@ -938,16 +938,32 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 			Content:  p.hunk.Content,
 		}
 		var hunkPackages []string
+		var symbolBlastRadiusSum, symbolReviewPrioritySum float64
 		for _, s := range p.touched {
 			contrib := contribByQN[s.QualifiedName]
 			contrib.QualifiedName = s.QualifiedName
 			contrib.Name = s.Name
 			contrib.Label = s.Label
 			hr.Symbols = append(hr.Symbols, contrib)
-			hr.BlastRadiusRaw += contrib.BlastRadiusRaw
-			hr.ReviewPriorityRaw += contrib.ReviewPriorityRaw
+			symbolBlastRadiusSum += contrib.BlastRadiusRaw
+			symbolReviewPrioritySum += contrib.ReviewPriorityRaw
 			hunkPackages = append(hunkPackages, contrib.ImpactedPackages...)
 		}
+		// Saturating combine, same style as the type text-reference/method
+		// blend above (math.Sqrt(methodSum) etc.): a hunk that happens to
+		// touch many low-risk symbols (e.g. several small, mutually-calling
+		// helper functions newly added in one file) must not outscore a hunk
+		// touching a single symbol with real external callers just because
+		// more individual contributions were added up. A flat sum rewards
+		// "how many symbols changed" over "how much any one of them matters
+		// to the rest of the repo," which inverted rankings in practice (a
+		// brand-new dead-code file with several generically-scored helpers
+		// scoring above a one-function file with a genuine, if indirect,
+		// caller chain). sqrt-of-sum keeps a single high-scoring symbol's
+		// contribution intact while damping the effect of piling on more
+		// symbols.
+		hr.BlastRadiusRaw += math.Sqrt(symbolBlastRadiusSum)
+		hr.ReviewPriorityRaw += math.Sqrt(symbolReviewPrioritySum)
 		hr.FileCouplingBonus = fileCouplingWeight * couplingByFile[p.hunk.FilePath]
 		if hr.FileCouplingBonus > 0 {
 			hr.Signals = append(hr.Signals, Signal{
