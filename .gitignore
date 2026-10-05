@@ -33,6 +33,7 @@ go.work.sum
 
 # Build artifacts
 /lrc
+/git-lrc
 /dist/
 security_issues/
 
