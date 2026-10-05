@@ -2931,6 +2931,28 @@ body {
   border: 1px dashed var(--border-subtle);
   opacity: 0.55;
 }
+/* Finding-severity chip — mirrors the critical/warning/info badge palette. */
+.blast-score-chip.severity-critical {
+  background: rgba(241, 76, 76, 0.22);
+  color: #fecaca;
+  border-color: rgba(241, 76, 76, 0.4);
+}
+.blast-score-chip.severity-warning {
+  background: rgba(204, 167, 0, 0.18);
+  color: #fef08a;
+  border-color: rgba(204, 167, 0, 0.32);
+}
+.blast-score-chip.severity-info {
+  background: rgba(55, 148, 255, 0.16);
+  color: #93c5fd;
+  border-color: rgba(55, 148, 255, 0.3);
+}
+.blast-score-chip.severity-dormant {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px dashed var(--border-subtle);
+  opacity: 0.55;
+}
 .blast-signal-list {
   list-style: none;
   margin: 0;

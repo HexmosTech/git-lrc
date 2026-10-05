@@ -10,7 +10,7 @@
 //        └─ selected symbol: signals, metrics, caller groups, packages
 import { waitForPreact } from './utils.js';
 import { renderIcon } from './icons.js';
-import { blastRadiusTier, allSignals } from './blast_radius_sort_state.mjs';
+import { blastRadiusTier, allSignals, SEVERITY_WEIGHT, blendRiskScore } from './blast_radius_sort_state.mjs';
 import { callerGroupLabel, groupCallers } from './callgraph_model.mjs';
 import { getSunburstChart } from './SunburstChart.js';
 import { getFlameGraph } from './FlameGraph.js';
@@ -51,6 +51,10 @@ const SCORE_HINTS = {
         title: 'File co-change coupling bonus',
         body: 'Files that changed together in git history get a small bonus. Captures hidden coupling when no code reference connects them.',
     },
+    severity: {
+        title: 'Finding severity: the most serious issue this hunk introduces',
+        body: 'Critical, warning, and info findings add points on top of the structural score (default 10% weight) so a critical security bug outranks a trivial one.',
+    },
 };
 
 const METHODOLOGY_PARAGRAPHS = [
@@ -58,7 +62,10 @@ const METHODOLOGY_PARAGRAPHS = [
     'Blast radius measures how far the change can reach. Inputs: callers up to 3 hops, HTTP routes, repository hotspots, architectural layers, interface implementations, cross-package callers, and file paths near auth, persistence, config, build, or schema.',
     'Review priority measures how much attention this hunk needs. Main inputs: a near-duplicate function in another file, and missing direct tests. Secondary inputs: cyclomatic complexity, loop depth, and fan-out. Code complexity alone does not predict customer impact.',
     'File co-change coupling adds a small bonus to Blast Radius when git history shows files that change together. Hygiene signals (formatting, comments, generated code, logging, test-only files, dead code) multiply the Combined score down. A small change to a key function must still rank low.',
+    'Finding severity adds a third dimension: the most serious issue the hunk introduces. Critical findings add the most, warnings less, info least — blended in at 10 percent weight so a critical security bug in a small change still outranks a trivial one in a big change.',
 ];
+
+const SEVERITY_LABELS = { critical: 'Critical', warning: 'Warning', info: 'Info' };
 
 function shortName(qualifiedName) {
     const parts = (qualifiedName || '').split('.');
@@ -72,7 +79,7 @@ function sortedSignals(signals) {
 // Convention: a Signal object carries `_symbolName` (the symbol it came
 // from) only when it was sourced from a SymbolContribution's own Signals -
 // hunk-level signals (file coupling, arch role) never get one. This field
-// is added client-side by allSignals() in blast_radius_sort_state.mjs (the
+// is added client-side by allSignals() in blast_radius_sort_state.js (the
 // one place that flattens hunk + symbol signals together) and is not part
 // of the server's Signal JSON shape - every consumer here relies on that
 // same convention rather than re-deriving it.
@@ -628,9 +635,24 @@ export async function createBlastRadiusPanel() {
         const blastShare = weights.BlastRadius * blastNorm;
         const priorityShare = weights.ReviewPriority * priorityNorm;
         const blended = blastShare + priorityShare;
-        const final = blended * hygiene;
+        const structural = blended * hygiene; // == detail.Combined (the pre-severity score)
+        const severityScore = typeof detail.FindingSeverity === 'number' ? detail.FindingSeverity : 0;
+        const severityLabel = detail.FindingSeverityLabel || null;
+        const severityCounts = detail.FindingSeverityCounts || { critical: 0, warning: 0, info: 0 };
+        const severityShare = SEVERITY_WEIGHT * severityScore;
+        const final = blendRiskScore(structural, severityScore);
         const stepBlend = afterPriority;
         const stepHygiene = afterPriority + 1;
+        const stepSeverity = afterPriority + 2;
+        const stepFinalBlend = afterPriority + 3;
+
+        const sevParts = [];
+        if (severityCounts.critical > 0) sevParts.push(`${severityCounts.critical} critical`);
+        if (severityCounts.warning > 0) sevParts.push(`${severityCounts.warning} warning`);
+        if (severityCounts.info > 0) sevParts.push(`${severityCounts.info} info`);
+        const sevDetail = severityLabel
+            ? `${sevParts.join(', ')} — most severe maps to ${severityScore.toFixed(0)}/100`
+            : 'no findings on this hunk';
 
         return html`
             <div class="math-mode">
@@ -648,12 +670,25 @@ export async function createBlastRadiusPanel() {
                     <div class="math-step">
                         <div class="math-step-label">Step ${stepHygiene} — apply the hygiene multiplier</div>
                         <div class="math-step-line">
-                            ${blended.toFixed(1)} × ${hygiene} = <strong>${final.toFixed(1)}</strong>
+                            ${blended.toFixed(1)} × ${hygiene} = <strong>${structural.toFixed(1)}</strong>
+                        </div>
+                    </div>
+                    <div class="math-step">
+                        <div class="math-step-label">Step ${stepSeverity} — score the finding severity</div>
+                        <div class="math-step-line">
+                            ${sevDetail} = <strong>${severityScore.toFixed(1)}</strong>
+                        </div>
+                    </div>
+                    <div class="math-step">
+                        <div class="math-step-label">Step ${stepFinalBlend} — blend in finding severity (${Math.round((1 - SEVERITY_WEIGHT) * 100)}% structure, ${Math.round(SEVERITY_WEIGHT * 100)}% severity)</div>
+                        <div class="math-step-line">
+                            (${(1 - SEVERITY_WEIGHT).toFixed(2)} × ${structural.toFixed(1)}) + (${SEVERITY_WEIGHT.toFixed(2)} × ${severityScore.toFixed(1)})
+                            = ${((1 - SEVERITY_WEIGHT) * structural).toFixed(1)} + ${severityShare.toFixed(1)} = <strong>${final.toFixed(1)}</strong>
                         </div>
                     </div>
                     <div class="math-step final">
                         <div class="math-step-label">Final Score</div>
-                        <div class="math-step-line">Rounded to the nearest whole number: <strong>${Math.round(detail.Combined || 0)}</strong> out of 100</div>
+                        <div class="math-step-line">Rounded to the nearest whole number: <strong>${Math.round(final)}</strong> out of 100</div>
                     </div>
                 </div>
             </div>
@@ -679,11 +714,48 @@ export async function createBlastRadiusPanel() {
         `;
     }
 
+    // SeverityCard is the third "dimension" next to Blast Radius and Review
+    // Priority, but simpler: severity is already a direct 0-100 value
+    // (critical=100, warning=25, info=5), so there's no raw -> norm scaling
+    // to spell out - just the finding counts and the points they add.
+    function SeverityCard({ severityScore, severityLabel, severityCounts }) {
+        const points = SEVERITY_WEIGHT * severityScore;
+        const parts = [];
+        if (severityCounts.critical > 0) parts.push(`${severityCounts.critical} critical`);
+        if (severityCounts.warning > 0) parts.push(`${severityCounts.warning} warning`);
+        if (severityCounts.info > 0) parts.push(`${severityCounts.info} info`);
+        const detailText = severityLabel
+            ? `${parts.join(', ')} — severity adds ${Math.round(SEVERITY_WEIGHT * 100)}% of its 0-100 score to the final rank`
+            : 'No findings on this hunk — severity adds nothing';
+        return html`
+            <div class="blast-dimension-card blast-severity-card">
+                <div class="blast-dimension-header">
+                    <span class="blast-dimension-title">Finding Severity</span>
+                    <span class="blast-dimension-math">${severityLabel
+                        ? `most severe: ${SEVERITY_LABELS[severityLabel]} → ${severityScore}/100`
+                        : 'no findings → 0/100'}</span>
+                </div>
+                <ul class="blast-signal-list">
+                    <li class="blast-signal ${severityLabel ? 'positive' : 'dormant'}">
+                        <span class="blast-signal-points">${severityLabel ? `+${points.toFixed(1)}` : '+0.0'}</span>
+                        <span class="blast-signal-name">Finding severity</span>
+                        <span class="blast-signal-detail">${detailText}</span>
+                    </li>
+                </ul>
+            </div>
+        `;
+    }
+
     return function BlastRadiusPanel({ detail }) {
         if (!detail) return null;
 
         const hygieneMult = typeof detail.HygieneMultiplier === 'number' ? detail.HygieneMultiplier : 1.0;
         const couplingVal = typeof detail.FileCouplingBonus === 'number' ? detail.FileCouplingBonus : 0;
+        const severityScore = typeof detail.FindingSeverity === 'number' ? detail.FindingSeverity : 0;
+        const severityLabel = detail.FindingSeverityLabel || null;
+        const severityCounts = detail.FindingSeverityCounts || { critical: 0, warning: 0, info: 0 };
+        const severityPoints = SEVERITY_WEIGHT * severityScore;
+        const sortScore = blendRiskScore(detail.Combined || 0, severityScore);
         // Memoized so its identity only changes when the underlying data
         // does - chartSymbol's own useMemo below depends on this array, and
         // an unstable identity here (e.g. a fresh sort on every render)
@@ -715,9 +787,9 @@ export async function createBlastRadiusPanel() {
                 <div class="blast-panel-scores">
                     <${ScoreChipWithHelp}
                         hintKey="combined"
-                        chipClass="blast-score-chip primary ${blastRadiusTier(detail.Combined || 0)}"
+                        chipClass="blast-score-chip primary ${blastRadiusTier(sortScore)}"
                     >
-                        Score ${Math.round(detail.Combined || 0)}
+                        Score ${Math.round(sortScore)}
                     </${ScoreChipWithHelp}>
                     <${ScoreChipWithHelp}
                         hintKey="blast"
@@ -738,6 +810,10 @@ export async function createBlastRadiusPanel() {
                     ${couplingVal > 0
                         ? html`<${ScoreChipWithHelp} hintKey="coupling" chipClass="blast-score-chip">Coupling +${couplingVal.toFixed(1)}</${ScoreChipWithHelp}>`
                         : html`<${ScoreChipWithHelp} hintKey="coupling" chipClass="blast-score-chip coupling-dormant">Coupling +0</${ScoreChipWithHelp}>`
+                    }
+                    ${severityLabel
+                        ? html`<${ScoreChipWithHelp} hintKey="severity" chipClass="blast-score-chip severity severity-${severityLabel}">${SEVERITY_LABELS[severityLabel]} +${severityPoints.toFixed(1)}</${ScoreChipWithHelp}>`
+                        : html`<${ScoreChipWithHelp} hintKey="severity" chipClass="blast-score-chip severity-dormant">Severity +0</${ScoreChipWithHelp}>`
                     }
                     <${MethodologyButton} />
                 </div>
@@ -777,6 +853,11 @@ export async function createBlastRadiusPanel() {
                                 raw=${detail.ReviewPriorityRaw}
                                 max=${detail.MaxReviewPriorityRaw}
                                 signals=${prioritySignals}
+                            />
+                            <${SeverityCard}
+                                severityScore=${severityScore}
+                                severityLabel=${severityLabel}
+                                severityCounts=${severityCounts}
                             />
                         </div>
                     `

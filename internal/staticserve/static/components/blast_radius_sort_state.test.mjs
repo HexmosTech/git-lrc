@@ -4,10 +4,13 @@ import assert from 'node:assert/strict';
 import {
     attachBlastData,
     blastRadiusTierLabel,
+    blendRiskScore,
     buildBlastLookup,
     flattenFilesByRisk,
     hasBlastRadiusData,
     hunkBlastKey,
+    hunkSeverityInfo,
+    hunkSeverityScore,
     sortFilesByBlastRadius,
     summarizeRiskDetail,
     sortHunksByBlastRadius,
@@ -88,7 +91,9 @@ test('attachBlastData joins scores and detail onto matching hunks only', () => {
         Files: [{ Path: 'a.go', Hunks: [{ NewStart: 5, NewLines: 3, Combined: 77.5, Signals: [{ Name: 'x' }] }] }],
     });
     const joined = attachBlastData(files, lookup);
-    assert.equal(joined[0].Hunks[0].BlastRadius, 77.5);
+    // No findings on this hunk → severity 0, so BlastRadius is the blended
+    // sort score (90% of Combined), not the raw Combined.
+    assert.equal(joined[0].Hunks[0].BlastRadius, blendRiskScore(77.5, 0));
     assert.equal(joined[0].Hunks[0].BlastDetail.Signals.length, 1);
     assert.equal(joined[0].Hunks[1].BlastRadius, 33);
     assert.equal(joined[0].Hunks[1].BlastDetail, undefined);
@@ -99,6 +104,62 @@ test('attachBlastData joins scores and detail onto matching hunks only', () => {
 test('attachBlastData with empty lookup returns files unchanged', () => {
     const files = [{ FilePath: 'a.go', Hunks: [{ NewStartLine: 1, NewLineCount: 1 }] }];
     assert.equal(attachBlastData(files, new Map()), files);
+});
+
+test('hunkSeverityInfo maps severity levels, counts, and max wins', () => {
+    const hunk = {
+        Lines: [
+            { IsComment: true, Comments: [{ Severity: 'CRITICAL' }] },
+            { IsComment: true, Comments: [{ Severity: 'WARNING' }, { Severity: 'INFO' }] },
+            { IsComment: false, Comments: [] },
+        ],
+    };
+    assert.deepEqual(hunkSeverityInfo(hunk), {
+        score: 100,
+        label: 'critical',
+        counts: { critical: 1, warning: 1, info: 1 },
+    });
+    assert.equal(hunkSeverityScore(hunk), 100);
+    // No findings.
+    assert.deepEqual(hunkSeverityInfo({ Lines: [] }), { score: 0, label: null, counts: { critical: 0, warning: 0, info: 0 } });
+    assert.equal(hunkSeverityScore(null), 0);
+    assert.equal(hunkSeverityScore({}), 0);
+});
+
+test('blendRiskScore blends severity at the configured weight', () => {
+    const approx = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
+    approx(blendRiskScore(100, 0), 90);    // 0.9 * 100 + 0
+    approx(blendRiskScore(0, 100), 10);    // 0 + 0.1 * 100
+    approx(blendRiskScore(80, 100), 82);   // 72 + 10
+    approx(blendRiskScore(30, 25), 29.5);  // 27 + 2.5
+    approx(blendRiskScore(null, 100), 10); // missing combined treated as 0
+    approx(blendRiskScore(50, undefined), 45); // missing severity treated as 0
+});
+
+test('attachBlastData blends finding severity into BlastRadius and carries it on BlastDetail', () => {
+    const files = [
+        {
+            FilePath: 'a.go',
+            Hunks: [
+                {
+                    NewStartLine: 5,
+                    NewLineCount: 3,
+                    Lines: [{ IsComment: true, Comments: [{ Severity: 'CRITICAL' }, { Severity: 'WARNING' }] }],
+                },
+            ],
+        },
+    ];
+    const lookup = buildBlastLookup({
+        Files: [{ Path: 'a.go', Hunks: [{ NewStart: 5, NewLines: 3, Combined: 24.57, Signals: [{ Name: 'x' }] }] }],
+    });
+    const joined = attachBlastData(files, lookup);
+    const hunk = joined[0].Hunks[0];
+    assert.equal(hunk.BlastRadius, blendRiskScore(24.57, 100)); // critical wins → severity 100
+    assert.equal(hunk.BlastDetail.FindingSeverity, 100);
+    assert.equal(hunk.BlastDetail.FindingSeverityLabel, 'critical');
+    assert.deepEqual(hunk.BlastDetail.FindingSeverityCounts, { critical: 1, warning: 1, info: 0 });
+    // The structural report fields must remain intact for the detail panel.
+    assert.equal(hunk.BlastDetail.Combined, 24.57);
 });
 
 test('flattenFilesByRisk ranks hunks globally across files', () => {
