@@ -96,6 +96,7 @@ export function HeaderNav({ activePath, session, reauthInProgress, orgSwitching,
         <span class="nav-label">Menu</span>
         <a href="#/home" class=${`nav-link ${homeActive ? 'active' : ''}`}>Home</a>
         <a href="#/connectors" class=${`nav-link ${connectorsActive ? 'active' : ''}`}>AI Connectors</a>
+        <a href="/dw" class="nav-link">DeepWiki</a>
       </nav>
     </div>
   `;

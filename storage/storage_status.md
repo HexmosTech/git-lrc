@@ -10,8 +10,8 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 
 - Storage boundary: local file system and local SQLite only (no outbound API calls in this package).
 - Modes represented: file, db.
-- Operation count tracked: 43 operations.
-- Severity distribution: High 10, Medium 13, Low 20.
+- Operation count tracked: 48 operations.
+- Severity distribution: High 10, Medium 16, Low 22.
 - Primary sensitive data in scope: API keys and connector state in config, review metadata in SQLite, hook scripts and metadata, update lock/state metadata.
 - Highest-risk operation classes: credential file read/write, recursive deletion, permission changes, direct SQL execution wrappers.
 - Primary compensating controls already present: atomic writes for critical files, SQLite WAL mode and busy timeout, explicit chmod utility usage, typed wrapper functions and contextual error wrapping.
@@ -107,6 +107,16 @@ This document tracks storage-side operations in git-lrc as an auditable inventor
 | ReadPendingUpdateStateBytes | file | Update state JSON (version, binary path, timestamp, integrity hash) | Read staged update metadata for upgrade flow | Medium | Medium integrity risk if state is tampered locally | Compensated by integrity hash verification when present plus legacy-state compatibility when absent; residual risk acceptable for local tamper-evidence model | [storage/file_read_io.go](file_read_io.go#L9) |
 | ReadUpdateLockMetadataBytes | file | Lock metadata JSON (pid, uid, command, version) | Read lock metadata for update concurrency awareness | Medium | Medium risk if lock semantics are informational only | Partially compensated by visibility into lock owner; Suggestion: document/enforce lock semantics in caller | [storage/file_read_io.go](file_read_io.go#L18) |
 | OpenFileForRead | file | File handle in read mode | Controlled read access helper | Low | Low risk helper abstraction | Compensated by narrow read-only intent; acceptable risk | [storage/file_read_io.go](file_read_io.go#L27) |
+
+## Inventory: DeepWiki Cache
+
+| Operation | Mode | Data Handled | Purpose | Severity | Risk Acknowledgement | Compensation Status | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DeepwikiSave | file | Wiki JSON (structure and generated page markdown) | Persist a generated DeepWiki artifact for a repo at a ref | Medium | Integrity risk from partial/truncated writes | Compensated by atomic temp-and-rename via WriteFileAtomically; residual risk acceptable | [storage/deepwiki_io.go](deepwiki_io.go#L59) |
+| DeepwikiLoad | file | Cached wiki JSON bytes | Read a cached DeepWiki artifact for a ref | Medium | Confidentiality risk if the cache holds proprietary docs | Compensated by local-only read path and bounded file mode; residual risk acceptable | [storage/deepwiki_io.go](deepwiki_io.go#L72) |
+| DeepwikiExists | file | Cache file path | Check whether a wiki is cached for a repo at a ref | Low | Low risk from stat-only access | Compensated by non-mutating existence check; acceptable risk | [storage/deepwiki_io.go](deepwiki_io.go#L88) |
+| DeepwikiDelete | file | Cache file path | Remove a cached wiki for a repo at a ref | Medium | Data loss risk if the wrong ref is targeted | Compensated by scoped per-ref path and non-fatal absence handling; acceptable risk | [storage/deepwiki_io.go](deepwiki_io.go#L104) |
+| DeepwikiList | file | Cache directory entries | Enumerate cached refs for a repository | Low | Low risk from directory listing | Compensated by read-only listing; acceptable risk | [storage/deepwiki_io.go](deepwiki_io.go#L116) |
 
 ## Control Signals For Security Review
 

@@ -9,9 +9,9 @@ Scope: Outbound and proxied network operations in the network boundary
 This document tracks network-side operations in git-lrc as an auditable inventory for enterprise due diligence.
 
 - Network boundary: outbound HTTP API operations and response handling in network package.
-- Modes represented: api.
-- Operation count tracked: 25 operations.
-- Severity distribution: High 11, Medium 7, Low 2.
+- Modes represented: api, cli.
+- Operation count tracked: 29 operations.
+- Severity distribution: High 13, Medium 9, Low 2.
 - Current diff note: added GitHubDownloadTo for downloading the codebase-memory-mcp graph-engine release archive from GitHub (host-allowlisted on every redirect hop, sha256-verified against the release checksums.txt in internal/graphengine before install).
 - Current diff note: self-hosted setup now uses LiveReview email/password auth endpoints (`/api/v1/auth/login`, `/api/v1/auth/setup-status`, `/api/v1/auth/setup`) in addition to existing cloud ensure-cloud-user setup path.
 - Current diff note: internal reviewapi helper evidence links were revalidated after git path helper additions; network inventory scope is unchanged.
@@ -86,6 +86,15 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | SetupAuthSetupURL | api | Base URL plus endpoint normalization inputs | Build self-hosted initial-admin setup endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L33) |
 | PollReview | api | Review IDs, status payloads, timeout state | Timeout-bounded polling orchestration in review runtime | High | High availability/latency risk if review service is degraded | Compensated by bounded timeout and interval controls; residual risk acceptable | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L226) |
 | formatJSONParseError | api | Response body text for parse diagnostics | Improve operator diagnostics when endpoint/port mismatches occur | Low | Low risk diagnostic utility behavior | Compensated by safer error interpretation path; acceptable risk | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L144) |
+
+## Inventory: DeepWiki LLM Generation
+
+| Operation | Mode | Data Handled | Purpose | Severity | Risk Acknowledgement | Compensation Status | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DeepwikiLLM.Complete | api | Repository source content (file tree and inlined file contents) | Generate DeepWiki structure and page markdown via the configured LLM backend | High | Confidentiality risk from sending proprietary source to an LLM | Compensated by explicit provider selection (no silent fallback) and a local-first default (opencode CLI); HTTP providers require an explicit key | [network/deepwiki_llm.go](deepwiki_llm.go#L37) |
+| completeHTTP | api | Prompt containing repository source content | Route wiki generation through an agentrouter HTTP provider (gemini/anthropic/openai) | High | Confidentiality risk from sending source to a third-party vendor API | Compensated by caller-supplied key and explicit provider choice | [network/deepwiki_llm.go](deepwiki_llm.go#L75) |
+| runOpencode | cli | Prompt containing repository source content on stdin | Spawn the opencode CLI for wiki generation | Medium | Source content passes through a local subprocess | Compensated by local process boundary and no credential handling | [network/deepwiki_llm.go](deepwiki_llm.go#L94) |
+| runClaude | cli | Prompt containing repository source content on stdin | Spawn the claude CLI for wiki generation | Medium | Source content passes through a local subprocess | Compensated by local process boundary and no credential handling | [network/deepwiki_llm.go](deepwiki_llm.go#L117) |
 
 ## Control Signals For Security Review
 

@@ -64,6 +64,14 @@ export function HomePage() {
               Open hexmos.com/livereview/git-lrc/
             </a>
           </div>
+
+          <div class="home-card">
+            <h3>DeepWiki</h3>
+            <p>Browse AI-generated documentation for this repository, at any branch, tag, or commit.</p>
+            <a class="home-link" href="/dw">
+              Open DeepWiki
+            </a>
+          </div>
         </div>
       </section>
 

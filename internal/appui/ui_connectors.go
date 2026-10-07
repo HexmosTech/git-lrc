@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/HexmosTech/git-lrc/internal/appdw"
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"
 	"github.com/HexmosTech/git-lrc/internal/staticserve"
 	"github.com/HexmosTech/git-lrc/network"
@@ -67,6 +68,13 @@ func RunUI(c *cli.Context) error {
 	mux.HandleFunc("/api/ui/usage-chip", srv.handleUsageChip)
 	mux.HandleFunc("/api/ui/connectors/", srv.handleConnectorByID)
 	mux.HandleFunc("/api/ui/connectors", srv.handleConnectors)
+
+	// Mount the DeepWiki routes when the manager is launched inside a git
+	// repository, so "open the deepwiki view" works from the index page too.
+	if dw, err := appdw.DefaultServer(); err == nil {
+		mux.Handle("/api/dw/", dw.APIRoutes())
+		mux.HandleFunc("/dw", appdw.ServeDWHTML)
+	}
 
 	httpServer := &http.Server{Handler: mux}
 	go func() {

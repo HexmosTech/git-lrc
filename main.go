@@ -7,6 +7,7 @@ import (
 
 	cmdapp "github.com/HexmosTech/git-lrc/cmd"
 	"github.com/HexmosTech/git-lrc/internal/appcore"
+	"github.com/HexmosTech/git-lrc/internal/appdw"
 	"github.com/HexmosTech/git-lrc/internal/appui"
 	"github.com/HexmosTech/git-lrc/internal/reviewdb"
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"
@@ -136,6 +137,7 @@ func main() {
 		RunSyncStatus:                   appcore.RunSyncStatus,
 		RunSyncList:                     appcore.RunSyncList,
 		RunSyncForget:                   appcore.RunSyncForget,
+		RunDW:                           appdw.RunDW,
 	})
 
 	if err := app.Run(os.Args); err != nil {

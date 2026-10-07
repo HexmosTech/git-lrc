@@ -46,6 +46,31 @@ Non-interactive mode (CI, agents, scripts):
    is printed to stdout and the process exits cleanly. Use --save-json
    to also write the result to a file.`
 
+// dwCommandDescription documents the DeepWiki (`lrc dw`) command.
+const dwCommandDescription = `Generates a DeepWiki-style documentation site for the repository in the
+current directory, using a local LLM (opencode by default, via AgentRouter).
+
+By default it serves a browsable Preact UI with a branch/tag/commit browser —
+you can read the generated docs at any ref that has them, or regenerate them
+at a ref that doesn't.
+
+   lrc dw                          # serve the DeepWiki UI and open it
+   lrc dw --ref main               # start the UI on the "main" branch
+   lrc dw --regenerate             # force-regenerate the current ref
+
+Programmatic / pure-CLI output (no browser, no server):
+
+   lrc dw --no-serve --output markdown   # print the wiki as Markdown
+   lrc dw --no-serve --output json       # print the wiki as JSON
+
+   lrc dw --output json > wiki.json      # same, redirected to a file
+
+Docs are cached per ref under ~/.lrc/deepwiki, so repeat runs are instant;
+--regenerate (or the UI's regenerate button) rebuilds a ref. The LLM backend
+is selectable with --dw-provider (opencode, claude, gemini, anthropic,
+openai); opencode and claude use the machine's own authenticated CLI, while
+the HTTP providers need --dw-api-key (and --dw-base-url for openai).`
+
 // Handlers contains injected command actions so CLI wiring can live outside main.
 type Handlers struct {
 	RunReviewSimple                 cli.ActionFunc
@@ -89,6 +114,7 @@ type Handlers struct {
 	RunSyncStatus                   cli.ActionFunc
 	RunSyncList                     cli.ActionFunc
 	RunSyncForget                   cli.ActionFunc
+	RunDW                           cli.ActionFunc
 }
 
 // BuildApp constructs the full CLI app with all command wiring.
@@ -169,6 +195,24 @@ func BuildApp(version, buildTime, gitCommit, reviewMode string, baseFlags, debug
 				Description: reviewCommandDescription,
 				Flags:       append(baseFlags, debugFlags...),
 				Action:      h.RunReviewDebug,
+			},
+			{
+				Name:        "dw",
+				Usage:       "Generate and browse a DeepWiki-style documentation site for this repository",
+				Description: dwCommandDescription,
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "ref", Usage: "branch, tag, or commit to document (defaults to the current branch/HEAD)", EnvVars: []string{"LRC_DW_REF"}},
+					&cli.BoolFlag{Name: "concise", Usage: "generate a concise wiki (4-6 pages) instead of comprehensive (8-12)", EnvVars: []string{"LRC_DW_CONCISE"}},
+					&cli.BoolFlag{Name: "regenerate", Usage: "force regeneration even if a cached wiki exists for this ref"},
+					&cli.BoolFlag{Name: "no-serve", Usage: "print the wiki and exit without serving the UI (for scripts/agents)"},
+					&cli.StringFlag{Name: "output", Value: "ui", Usage: "output mode: ui (serve), json, or markdown"},
+					&cli.IntFlag{Name: "port", Value: 8091, Usage: "port for the DeepWiki UI server"},
+					&cli.StringFlag{Name: "dw-provider", Value: "opencode", Usage: "LLM provider: opencode, claude, gemini, anthropic, or openai", EnvVars: []string{"LRC_DW_PROVIDER"}},
+					&cli.StringFlag{Name: "dw-model", Value: "opencode-go/deepseek-v4-flash", Usage: "model id (provider-dependent; the default is a fast opencode model)", EnvVars: []string{"LRC_DW_MODEL"}},
+					&cli.StringFlag{Name: "dw-base-url", Usage: "base URL for the openai provider (e.g. http://localhost:11434/v1)", EnvVars: []string{"LRC_DW_BASE_URL"}},
+					&cli.StringFlag{Name: "dw-api-key", Usage: "API key for gemini/anthropic/openai providers", EnvVars: []string{"LRC_DW_API_KEY"}},
+				},
+				Action: h.RunDW,
 			},
 			{
 				Name:  "hooks",
