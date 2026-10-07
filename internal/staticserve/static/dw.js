@@ -1,5 +1,5 @@
 const { h, render } = window.preact;
-const { useState, useEffect, useMemo, useRef, useCallback } = window.preactHooks;
+const { useState, useEffect, useRef, useCallback } = window.preactHooks;
 const html = window.htm.bind(h);
 
 async function api(path, opts) {
@@ -10,6 +10,22 @@ async function api(path, opts) {
         throw data;
     }
     return data;
+}
+
+// The LLM often emits mermaid with quote-escaping mistakes that the mermaid
+// parser cannot understand. Normalize them to HTML entities so the diagram
+// renders instead of failing back to raw text:
+//   1. backslash-escaped quotes: C["Call Greet(\"world\")"]
+//   2. raw quotes in unquoted labels: A[Input: name = "world"]
+function sanitizeMermaid(src) {
+    if (!src) return src;
+    let s = src.replace(/\\"/g, '&quot;');
+    s = s.replace(/\[([^\]\n]*"[^\]\n]*)\]/g, (m, inner) => {
+        const t = inner.trim();
+        if (t.startsWith('"') && t.endsWith('"')) return m;
+        return '["' + inner.replace(/"/g, '&quot;') + '"]';
+    });
+    return s;
 }
 
 function refDropdownOptions(refs) {
@@ -29,6 +45,15 @@ function App() {
     const [error, setError] = useState('');
     const [loadingWiki, setLoadingWiki] = useState(false);
     const pollRef = useRef(null);
+    const contentRef = useRef(null);
+    const [theme, setTheme] = useState(() => {
+        try { return localStorage.getItem('lrc-dw-theme') || 'dark'; } catch { return 'dark'; }
+    });
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        try { localStorage.setItem('lrc-dw-theme', theme); } catch { /* ignore */ }
+    }, [theme]);
 
     const loadRefs = useCallback(async () => {
         try {
@@ -113,10 +138,40 @@ function App() {
         ? structure.pages.find((p) => p.id === selectedPageId)
         : null;
 
-    const renderedContent = useMemo(() => {
-        if (!page || !page.content) return '';
-        return marked.parse(page.content, { mangle: false, headerIds: false });
-    }, [page]);
+    // Render markdown + mermaid into the content pane on page/theme change.
+    useEffect(() => {
+        const el = contentRef.current;
+        if (!el) return;
+        if (!page || !page.content) {
+            el.innerHTML = '';
+            return;
+        }
+        el.innerHTML = marked.parse(page.content, { mangle: false, headerIds: false });
+
+        const blocks = el.querySelectorAll('pre code.language-mermaid');
+        if (blocks.length && window.mermaid) {
+            blocks.forEach((block) => {
+                const pre = block.parentElement;
+                const div = document.createElement('div');
+                div.className = 'mermaid';
+                div.textContent = sanitizeMermaid(block.textContent);
+                if (pre) pre.replaceWith(div);
+            });
+            mermaid.initialize({
+                startOnLoad: false,
+                securityLevel: 'loose',
+                theme: theme === 'light' ? 'neutral' : 'dark',
+            });
+            const nodes = [...el.querySelectorAll('.mermaid')];
+            mermaid.run({ nodes, suppressErrors: true }).then(() => {
+                nodes.forEach((div) => {
+                    if (!div.querySelector('svg')) div.classList.add('mermaid-error');
+                });
+            }).catch(() => {
+                nodes.forEach((div) => div.classList.add('mermaid-error'));
+            });
+        }
+    }, [page, theme]);
 
     const cachedSet = new Set(refs.cached);
     const refOptions = refDropdownOptions(refs);
@@ -166,8 +221,11 @@ function App() {
                         ${values.map((v) => html`<option value=${v}>${v}</option>`)}
                     </optgroup>`)}
             </select>
-            <span class="dw-badge">${cachedSet.has(selectedRef) ? 'generated' : 'not generated'}</span>
+            <span class=${'dw-badge' + (cachedSet.has(selectedRef) ? ' generated' : '')}>${cachedSet.has(selectedRef) ? 'generated' : 'not generated'}</span>
             <div class="dw-actions">
+                <button class="dw-btn" title="Toggle light/dark theme" onClick=${() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                    ${theme === 'dark' ? 'Light' : 'Dark'}
+                </button>
                 <button class="dw-btn primary" onClick=${generate} disabled=${generating}>
                     ${generating ? 'Generating…' : (cachedSet.has(selectedRef) ? 'Regenerate' : 'Generate')}
                 </button>
@@ -215,7 +273,7 @@ function App() {
                         <button class="dw-btn primary" onClick=${generate} disabled=${generating}>Generate</button>
                     </div>` : ''}
                 ${!loadingWiki && wiki && page ? html`
-                    <div class="dw-markdown" dangerouslySetInnerHTML=${{ __html: renderedContent }}></div>
+                    <div class="dw-markdown" ref=${contentRef}></div>
                 ` : ''}
             </div>
         </div>

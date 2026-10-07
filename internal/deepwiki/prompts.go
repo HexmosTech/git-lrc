@@ -67,6 +67,7 @@ Based ONLY on the content of the "[RELEVANT_SOURCE_FILES]" provided in "[FILE_CO
     * CRITICAL: All diagrams MUST follow strict vertical orientation:
        - Use "graph TD" (top-down) directive for flow diagrams
        - NEVER use "graph LR" (left-right)
+     * NEVER escape double quotes with a backslash inside labels or edge text (do NOT write C["Call Greet(\"world\")"]). Use HTML entities instead (e.g. C["Call Greet(&quot;world&quot;)"]) or rephrase to avoid quotes.
 
 4. **Tables:**
     * Use Markdown tables to summarize information such as key features or components and their descriptions, API endpoint parameters, configuration options, and data model fields.

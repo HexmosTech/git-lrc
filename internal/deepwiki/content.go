@@ -12,6 +12,47 @@ import (
 
 var detailsRe = regexp.MustCompile(`(?is)<details>\s*<summary>\s*Relevant source files\s*</summary>.*?</details>`)
 
+// mermaidFenceRe matches a ```mermaid fenced code block (case-insensitive).
+var mermaidFenceRe = regexp.MustCompile("(?is)(```mermaid\\s*\\n)(.*?)(```)")
+
+// unquotedQuoteLabelRe matches a node label `[...]` that contains a raw double
+// quote but is not already wrapped in quotes (e.g. A[Input: name = "world"]).
+var unquotedQuoteLabelRe = regexp.MustCompile(`\[([^]\n]*"[^]\n]*)\]`)
+
+// sanitizeMermaidSource normalizes the two quote-escaping mistakes the model
+// routinely makes inside mermaid blocks:
+//  1. backslash-escaped quotes inside labels (C["Call Greet(\"world\")"]),
+//  2. raw double quotes inside unquoted labels (A[Input: name = "world"]).
+//
+// Both forms are invalid for the mermaid parser; converting them to the HTML
+// entity `&quot;` lets the diagram render instead of failing back to raw text.
+func sanitizeMermaidSource(src string) string {
+	s := strings.ReplaceAll(src, `\"`, `&quot;`)
+	s = unquotedQuoteLabelRe.ReplaceAllStringFunc(s, func(m string) string {
+		sm := unquotedQuoteLabelRe.FindStringSubmatch(m)
+		if len(sm) < 2 {
+			return m
+		}
+		inner := strings.TrimSpace(sm[1])
+		if strings.HasPrefix(inner, `"`) && strings.HasSuffix(inner, `"`) {
+			return m
+		}
+		return `["` + strings.ReplaceAll(sm[1], `"`, `&quot;`) + `"]`
+	})
+	return s
+}
+
+// sanitizeMermaidBlocks applies sanitizeMermaidSource to each mermaid block.
+func sanitizeMermaidBlocks(content string) string {
+	return mermaidFenceRe.ReplaceAllStringFunc(content, func(m string) string {
+		sm := mermaidFenceRe.FindStringSubmatch(m)
+		if len(sm) < 4 {
+			return m
+		}
+		return sm[1] + sanitizeMermaidSource(sm[2]) + sm[3]
+	})
+}
+
 // stripMarkdownFences removes a leading ```markdown fence and a trailing ```.
 func stripMarkdownFences(content string) string {
 	content = regexp.MustCompile(`(?i)^` + "```markdown" + `\s*`).ReplaceAllString(content, "")
@@ -141,6 +182,10 @@ func postProcessWikiContent(content string, filePaths []string) string {
 
 	// Strip a redundant empty `()` after a completed link.
 	processed = strayParensRe.ReplaceAllString(processed, "$1")
+
+	// Normalize backslash-escaped quotes inside mermaid blocks so the
+	// client-side renderer can parse them.
+	processed = sanitizeMermaidBlocks(processed)
 
 	return processed
 }

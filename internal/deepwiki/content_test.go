@@ -48,3 +48,56 @@ func TestStripMarkdownFences(t *testing.T) {
 		t.Errorf("stripMarkdownFences = %q", got)
 	}
 }
+
+func TestSanitizeMermaidSource(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "backslash-escaped quote in quoted label",
+			in:   `C["Call Greet(\"world\")"]`,
+			want: `C["Call Greet(&quot;world&quot;)"]`,
+		},
+		{
+			name: "raw quote in unquoted label",
+			in:   `A[Input: name = "world"]`,
+			want: `A["Input: name = &quot;world&quot;"]`,
+		},
+		{
+			name: "already-quoted label is untouched",
+			in:   `B["main()"]`,
+			want: `B["main()"]`,
+		},
+		{
+			name: "edge label with escaped quote",
+			in:   `A -->|"calls Greet(\"world\")"| B`,
+			want: `A -->|"calls Greet(&quot;world&quot;)"| B`,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := sanitizeMermaidSource(c.in); got != c.want {
+				t.Errorf("sanitizeMermaidSource(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeMermaidBlocksOnlyTouchesMermaidFences(t *testing.T) {
+	in := "Note: keep \\\"this\\\" backslash-quote.\n\n```mermaid\ngraph TD\n    A[Input: name = \"world\"]\n```\n\nAfter `\"x\"` stays."
+	got := sanitizeMermaidBlocks(in)
+
+	if !strings.Contains(got, `A["Input: name = &quot;world&quot;"]`) {
+		t.Errorf("mermaid block not sanitized:\n%s", got)
+	}
+	// Non-mermaid content must remain untouched.
+	if !strings.Contains(got, `keep \"this\" backslash-quote`) {
+		t.Errorf("non-mermaid backslash-quote was altered:\n%s", got)
+	}
+	if !strings.Contains(got, "After `\"x\"` stays") {
+		t.Errorf("non-mermaid inline quote was altered:\n%s", got)
+	}
+}
