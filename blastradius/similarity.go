@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // similarityThreshold is the minimum jaccard similarity (0-1) for a

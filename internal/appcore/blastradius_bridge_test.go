@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HexmosTech/blastradius"
+	"github.com/HexmosTech/git-lrc/blastradius"
 	"github.com/HexmosTech/git-lrc/internal/reviewmodel"
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"
 )

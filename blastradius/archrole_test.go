@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 func signalNames(signals []Signal) map[string]bool {

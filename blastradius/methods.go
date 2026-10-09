@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // methodsByParentClass batches a single query across every touched

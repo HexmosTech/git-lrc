@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/HexmosTech/blastradius/client"
-	"github.com/HexmosTech/blastradius/score"
-	"github.com/HexmosTech/blastradius/symbols"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/score"
+	"github.com/HexmosTech/git-lrc/blastradius/symbols"
 )
 
 // DeclRename describes a single-identifier rename detected on a symbol's own

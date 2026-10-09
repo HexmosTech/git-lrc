@@ -40,10 +40,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HexmosTech/blastradius/client"
-	"github.com/HexmosTech/blastradius/diffparse"
-	"github.com/HexmosTech/blastradius/score"
-	"github.com/HexmosTech/blastradius/symbols"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/diffparse"
+	"github.com/HexmosTech/git-lrc/blastradius/score"
+	"github.com/HexmosTech/git-lrc/blastradius/symbols"
 )
 
 // Hunk is the minimal per-hunk input needed for scoring. It deliberately

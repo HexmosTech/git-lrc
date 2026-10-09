@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // implementsInfo is one interface a struct/class implements.

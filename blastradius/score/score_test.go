@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // fakeQuerier simulates depth-exact CALLS queries: depth 1 finds "direct",

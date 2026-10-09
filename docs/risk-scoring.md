@@ -442,7 +442,7 @@ Come up with that plan
      │ Approach                                                                │
      │                                                                         │
      │ New module blastradius/ (own go.mod, e.g. module                        │
-     │ github.com/HexmosTech/blastradius as a                                  │
+     │ github.com/HexmosTech/git-lrc/blastradius as a                          │
      │ placeholder path — matches this org's existing                          │
      │ github.com/HexmosTech/git-lrc convention, rename                        │
      │ if desired) living as a nested module inside this repo during           │
@@ -713,7 +713,7 @@ Come up with that plan
      Approach
 
      New module blastradius/ (own go.mod, e.g. module 
-     github.com/HexmosTech/blastradius as a
+     github.com/HexmosTech/git-lrc/blastradius as a
      placeholder path — matches this org's existing
      github.com/HexmosTech/git-lrc convention, rename
      if desired) living as a nested module inside this repo during development.
@@ -987,8 +987,8 @@ Come up with that plan
        9    "strconv"
       10 +  "strings"                                                    
       11  
-      12    "github.com/HexmosTech/blastradius/client"
-      13    "github.com/HexmosTech/blastradius/diffparse"
+      12    "github.com/HexmosTech/git-lrc/blastradius/client"
+      13    "github.com/HexmosTech/git-lrc/blastradius/diffparse"
 
 ● Update(blastradius/symbols/symbols.go)
   ⎿  Added 3 lines, removed 5 lines
@@ -1027,8 +1027,8 @@ Come up with that plan
       4   "context"
       5   "testing"
       6 
-      7   "github.com/HexmosTech/blastradius/client"
-      8   "github.com/HexmosTech/blastradius/diffparse"
+      7   "github.com/HexmosTech/git-lrc/blastradius/client"
+      8   "github.com/HexmosTech/git-lrc/blastradius/diffparse"
       9 )
      … +67 lines (ctrl+o to expand)
 
@@ -1048,7 +1048,7 @@ Come up with that plan
        6   "context"
        7   "testing"
        8 
-       9   "github.com/HexmosTech/blastradius/client"
+       9   "github.com/HexmosTech/git-lrc/blastradius/client"
       10 )
      … +34 lines (ctrl+o to expand)
 
@@ -1080,7 +1080,7 @@ Come up with that plan
        8    "fmt"
        9 -  "strconv"                                                    
        9  
-      10    "github.com/HexmosTech/blastradius/client"
+      10    "github.com/HexmosTech/git-lrc/blastradius/client"
       11  )
 
 ● Update(blastradius/score/score.go)
@@ -1112,7 +1112,7 @@ Come up with that plan
        6   "strings"
        7   "testing"
        8 
-       9   "github.com/HexmosTech/blastradius/client"
+       9   "github.com/HexmosTech/git-lrc/blastradius/client"
       10 )
      … +83 lines (ctrl+o to expand)
 
@@ -1130,7 +1130,7 @@ Come up with that plan
        6   "context"
        7   "testing"
        8 
-       9   "github.com/HexmosTech/blastradius/client"
+       9   "github.com/HexmosTech/git-lrc/blastradius/client"
       10 )
      … +38 lines (ctrl+o to expand)
 
@@ -1164,7 +1164,7 @@ Come up with that plan
        7   "os"
        8   "testing"
        9 
-      10   "github.com/HexmosTech/blastradius/client"
+      10   "github.com/HexmosTech/git-lrc/blastradius/client"
      … +33 lines (ctrl+o to expand)
 
   Ran 1 shell command (ctrl+o to expand)
@@ -1386,7 +1386,7 @@ Come up with that plan
        7   "os"
        8   "sort"
        9 
-      10   "github.com/HexmosTech/blastradius"
+      10   "github.com/HexmosTech/git-lrc/blastradius"
      … +114 lines (ctrl+o to expand)
 
 ● Now let's wire it into saveTextOutput and renderHunkWithComments.
@@ -1671,7 +1671,7 @@ Come up with that plan
        3 import (
        4   "testing"
        5 
-       6   "github.com/HexmosTech/blastradius"
+       6   "github.com/HexmosTech/git-lrc/blastradius"
        7   "github.com/HexmosTech/git-lrc/internal/reviewmodel"
        8 )
        9 
@@ -1683,7 +1683,7 @@ Come up with that plan
        3  import (
        4    "testing"
        5  
-       6 -  "github.com/HexmosTech/blastradius"                          
+       6 -  "github.com/HexmosTech/git-lrc/blastradius"                          
        6    "github.com/HexmosTech/git-lrc/internal/reviewmodel"
        7 +  "github.com/HexmosTech/git-lrc/internal/reviewopts"          
        8  )
@@ -3218,7 +3218,7 @@ Come up with that plan
       27 +  "strings"                                                    
       28    "time"
       29  
-      30    "github.com/HexmosTech/blastradius/client"
+      30    "github.com/HexmosTech/git-lrc/blastradius/client"
      ...
       49    Content string
       50  }
@@ -4681,7 +4681,7 @@ existing capabilities rather than proposing a new indexing system.
        8    "fmt"
        9 +  "math"                                                       
       10  
-      11    "github.com/HexmosTech/blastradius/client"
+      11    "github.com/HexmosTech/git-lrc/blastradius/client"
       12  )
      ...
       24    // MaxRows caps each individual query_graph call. 0 uses the 
@@ -5750,7 +5750,7 @@ existing capabilities rather than proposing a new indexing system.
        3 import (
        4   "context"
        5   "fmt"
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 // testCoverageCounts batches a single TESTS-edge query across e
@@ -5764,7 +5764,7 @@ existing capabilities rather than proposing a new indexing system.
       5    "fmt"
       6 +  "strconv"                                                     
       7  
-      8    "github.com/HexmosTech/blastradius/client"
+      8    "github.com/HexmosTech/git-lrc/blastradius/client"
       9  )
 
 ● Update(blastradius/coverage.go)
@@ -5906,7 +5906,7 @@ existing capabilities rather than proposing a new indexing system.
        4   "context"
        5   "testing"
        6 
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 func TestTestCoverageCountsEmptyInput(t *testing.T) {
@@ -5917,8 +5917,8 @@ existing capabilities rather than proposing a new indexing system.
        4    "context"
        5    "testing"
        6  
-       7 -  "github.com/HexmosTech/blastradius/client"                   
-       7 +  "github.com/HexmosTech/blastradius/symbols"                  
+       7 -  "github.com/HexmosTech/git-lrc/blastradius/client"                   
+       7 +  "github.com/HexmosTech/git-lrc/blastradius/symbols"                  
        8  )
        9  
       10  func TestTestCoverageCountsEmptyInput(t *testing.T) {
@@ -5965,7 +5965,7 @@ existing capabilities rather than proposing a new indexing system.
        3 import (
        4   "context"
        5   "fmt"
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 // methodsByParentClass batches a single query across every touc
@@ -6109,7 +6109,7 @@ existing capabilities rather than proposing a new indexing system.
        4   "context"
        5   "testing"
        6 
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 type fakeMethodsQuerier struct {
@@ -6217,8 +6217,8 @@ existing capabilities rather than proposing a new indexing system.
        4    "context"
        5    "testing"
        6  
-       7 +  "github.com/HexmosTech/blastradius/client"                   
-       8    "github.com/HexmosTech/blastradius/symbols"
+       7 +  "github.com/HexmosTech/git-lrc/blastradius/client"                   
+       8    "github.com/HexmosTech/git-lrc/blastradius/symbols"
        9  )
       10  
      ...
@@ -6264,7 +6264,7 @@ existing capabilities rather than proposing a new indexing system.
        6   "math"
        7   "strconv"
        8 
-       9   "github.com/HexmosTech/blastradius/client"
+       9   "github.com/HexmosTech/git-lrc/blastradius/client"
       10 )
      … +67 lines (ctrl+o to expand)
 
@@ -8336,7 +8336,7 @@ existing capabilities rather than proposing a new indexing system.
        4   "context"
        5   "fmt"
        6 
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 // RouteInfo is one HTTP route a symbol directly handles.
@@ -8445,8 +8445,8 @@ existing capabilities rather than proposing a new indexing system.
        6 +  "sort"                                                       
        7 +  "strings"                                                    
        8  
-       9    "github.com/HexmosTech/blastradius/client"
-      10 +  "github.com/HexmosTech/blastradius/score"                    
+       9    "github.com/HexmosTech/git-lrc/blastradius/client"
+      10 +  "github.com/HexmosTech/git-lrc/blastradius/score"                    
       11  )
       12  
       13  // RouteInfo is one HTTP route a symbol directly handles.
@@ -8546,8 +8546,8 @@ existing capabilities rather than proposing a new indexing system.
       4   "context"
       5   "testing"
       6 
-      7   "github.com/HexmosTech/blastradius/client"
-      8   "github.com/HexmosTech/blastradius/score"
+      7   "github.com/HexmosTech/git-lrc/blastradius/client"
+      8   "github.com/HexmosTech/git-lrc/blastradius/score"
       9 )
      … +86 lines (ctrl+o to expand)
 
@@ -8740,7 +8740,7 @@ existing capabilities rather than proposing a new indexing system.
        6   "math"
        7   "strings"
        8 
-       9   "github.com/HexmosTech/blastradius/client"
+       9   "github.com/HexmosTech/git-lrc/blastradius/client"
       10 )
      … +109 lines (ctrl+o to expand)
 
@@ -8854,7 +8854,7 @@ existing capabilities rather than proposing a new indexing system.
        4   "context"
        5   "fmt"
        6 
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 // implementsInfo is one interface a struct/class implements.
@@ -8867,7 +8867,7 @@ existing capabilities rather than proposing a new indexing system.
       5    "fmt"
       6 +  "strconv"                                                     
       7  
-      8    "github.com/HexmosTech/blastradius/client"
+      8    "github.com/HexmosTech/git-lrc/blastradius/client"
       9  )
 
 ● Update(blastradius/interfaces.go)
@@ -8981,7 +8981,7 @@ existing capabilities rather than proposing a new indexing system.
        4   "context"
        5   "testing"
        6 
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 func TestImplementedInterfacesEmptyInput(t *testing.T) {
@@ -9011,7 +9011,7 @@ existing capabilities rather than proposing a new indexing system.
        7   "strconv"
        8   "strings"
        9 
-      10   "github.com/HexmosTech/blastradius/client"
+      10   "github.com/HexmosTech/git-lrc/blastradius/client"
      … +130 lines (ctrl+o to expand)
 
 ● Now let's wire it into the "fill in review priority" loop in blastradius.go.
@@ -9056,7 +9056,7 @@ existing capabilities rather than proposing a new indexing system.
        4   "context"
        5   "testing"
        6 
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 func TestSimilarSymbolsEmptyInput(t *testing.T) {
@@ -9069,7 +9069,7 @@ existing capabilities rather than proposing a new indexing system.
       5 +  "strings"                                                     
       6    "testing"
       7  
-      8    "github.com/HexmosTech/blastradius/client"
+      8    "github.com/HexmosTech/git-lrc/blastradius/client"
 
 ● Update(blastradius/similarity_test.go)
   ⎿  Added 1 line, removed 12 lines
@@ -9116,7 +9116,7 @@ existing capabilities rather than proposing a new indexing system.
       5   "fmt"
       6   "regexp"
       7 
-      8   "github.com/HexmosTech/blastradius/client"
+      8   "github.com/HexmosTech/git-lrc/blastradius/client"
       9 )
      … +102 lines (ctrl+o to expand)
 
@@ -9192,7 +9192,7 @@ existing capabilities rather than proposing a new indexing system.
        4   "context"
        5   "testing"
        6 
-       7   "github.com/HexmosTech/blastradius/client"
+       7   "github.com/HexmosTech/git-lrc/blastradius/client"
        8 )
        9 
       10 func signalNames(signals []Signal) map[string]bool {
@@ -9215,7 +9215,7 @@ existing capabilities rather than proposing a new indexing system.
        4   "regexp"
        5   "strings"
        6 
-       7   "github.com/HexmosTech/blastradius/symbols"
+       7   "github.com/HexmosTech/git-lrc/blastradius/symbols"
        8 )
        9 
       10 // Hygiene ("diff-shape") signals dampen a hunk's Combined score
@@ -10523,7 +10523,7 @@ existing capabilities rather than proposing a new indexing system.
        6   "fmt"
        7   "time"
        8 
-       9   "github.com/HexmosTech/blastradius/client"
+       9   "github.com/HexmosTech/git-lrc/blastradius/client"
       10   "github.com/HexmosTech/git-lrc/internal/graphengine"
      … +100 lines (ctrl+o to expand)
 
@@ -11138,8 +11138,8 @@ existing capabilities rather than proposing a new indexing system.
        10 +  "sync"                                                      
        11 +  "time"                                                      
        12  
-       13    "github.com/HexmosTech/blastradius"
-       14 +  "github.com/HexmosTech/blastradius/client"                  
+       13    "github.com/HexmosTech/git-lrc/blastradius"
+       14 +  "github.com/HexmosTech/git-lrc/blastradius/client"                  
        15 +  "github.com/HexmosTech/git-lrc/internal/graphengine"        
        16    "github.com/HexmosTech/git-lrc/internal/reviewmodel"
        17    "github.com/HexmosTech/git-lrc/internal/reviewopts"

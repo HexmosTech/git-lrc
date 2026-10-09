@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/HexmosTech/blastradius/symbols"
+	"github.com/HexmosTech/git-lrc/blastradius/symbols"
 )
 
 // Hygiene ("diff-shape") signals dampen a hunk's Combined score

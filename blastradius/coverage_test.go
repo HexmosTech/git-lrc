@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
-	"github.com/HexmosTech/blastradius/symbols"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/symbols"
 )
 
 func TestTestCoverageCountsEmptyInput(t *testing.T) {

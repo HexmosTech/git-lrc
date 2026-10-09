@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
-	"github.com/HexmosTech/blastradius/score"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/score"
 )
 
 func TestPreRenameCallersFromFiltersAndDedups(t *testing.T) {
