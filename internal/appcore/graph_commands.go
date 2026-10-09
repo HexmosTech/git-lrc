@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 	"github.com/HexmosTech/git-lrc/internal/graphengine"
 	"github.com/urfave/cli/v2"
 )

@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/HexmosTech/blastradius"
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 	"github.com/HexmosTech/git-lrc/internal/graphengine"
 	"github.com/HexmosTech/git-lrc/internal/reviewmodel"
 	"github.com/HexmosTech/git-lrc/internal/reviewopts"

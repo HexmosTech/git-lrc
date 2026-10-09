@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // Run with: go test -tags=integration ./score/... -run Integration -v

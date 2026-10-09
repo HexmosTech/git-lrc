@@ -6,7 +6,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // fileCouplingBonus batches a single FILE_CHANGES_WITH query across every

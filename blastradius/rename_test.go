@@ -3,7 +3,7 @@ package blastradius
 import (
 	"testing"
 
-	"github.com/HexmosTech/blastradius/symbols"
+	"github.com/HexmosTech/git-lrc/blastradius/symbols"
 )
 
 func TestDetectDeclRenameCleanMatch(t *testing.T) {

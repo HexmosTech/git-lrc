@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // Run with: go test -tags=integration . -run Integration -v

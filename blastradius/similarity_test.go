@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 func TestSimilarSymbolsEmptyInput(t *testing.T) {

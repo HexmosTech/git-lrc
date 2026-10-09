@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HexmosTech/blastradius"
+	"github.com/HexmosTech/git-lrc/blastradius"
 )
 
 func main() {

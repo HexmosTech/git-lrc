@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/HexmosTech/blastradius/client"
-	"github.com/HexmosTech/blastradius/diffparse"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/diffparse"
 )
 
 // Symbol is one function/method/struct/class/interface node from the

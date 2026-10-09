@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
-	"github.com/HexmosTech/blastradius/diffparse"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/diffparse"
 )
 
 type fakeQuerier struct {

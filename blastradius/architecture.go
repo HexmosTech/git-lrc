@@ -6,7 +6,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // architectureContext is a lookup structure built once per Report from a

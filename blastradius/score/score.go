@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 // Config tunes the fan-in computation. Zero values fall back to Defaults().

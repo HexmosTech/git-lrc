@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
-	"github.com/HexmosTech/blastradius/score"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/score"
 )
 
 func TestRouteHandlersEmptyInput(t *testing.T) {

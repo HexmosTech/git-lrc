@@ -15,8 +15,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/HexmosTech/blastradius"
-	"github.com/HexmosTech/blastradius/score"
+	"github.com/HexmosTech/git-lrc/blastradius"
+	"github.com/HexmosTech/git-lrc/blastradius/score"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package blastradius
 import (
 	"testing"
 
-	"github.com/HexmosTech/blastradius/client"
+	"github.com/HexmosTech/git-lrc/blastradius/client"
 )
 
 func TestHotspotSignal(t *testing.T) {
