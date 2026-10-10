@@ -716,7 +716,7 @@ func runHooksStatus(c *cli.Context) error {
 
 // isGitRepository checks if current directory is in a git repository
 func isGitRepository() bool {
-	return gitops.IsGitRepositoryCurrentDir()
+	return gitops.IsGitRepository()
 }
 
 // installHook installs or updates a hook with lrc managed section
