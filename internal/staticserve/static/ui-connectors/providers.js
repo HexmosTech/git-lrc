@@ -2,6 +2,16 @@ import { generateFriendlyConnectorName } from '/static/ui-connectors/name-utils.
 
 export const providers = [
   {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    apiKeyPlaceholder: 'sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    baseURLPlaceholder: 'https://openrouter.ai/api/v1',
+    defaultModel: 'deepseek/deepseek-pro-v4',
+    modelPresets: [
+      'deepseek/deepseek-pro-v4',
+    ],
+  },
+  {
     id: 'gemini',
     name: 'Google Gemini',
     apiKeyPlaceholder: 'gemini-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
@@ -11,12 +21,6 @@ export const providers = [
     name: 'DeepSeek',
     apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     baseURLPlaceholder: 'https://api.deepseek.com/v1',
-  },
-  {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    apiKeyPlaceholder: 'sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    baseURLPlaceholder: 'https://openrouter.ai/api/v1',
   },
   {
     id: 'ollama',
@@ -84,7 +88,7 @@ export function defaultForm() {
     connector_name: generateFriendlyConnectorName(first.id, providers),
     api_key: '',
     base_url: '',
-    selected_model: '',
+    selected_model: first.defaultModel || (first.modelPresets?.length ? first.modelPresets[0] : ''),
     gcp_project_id: '',
     gcp_location: '',
     aws_access_key_id: '',

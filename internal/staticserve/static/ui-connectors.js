@@ -440,7 +440,7 @@ function App() {
         setFetchingModels(false);
         setForm({
           id: String(connector.id),
-          provider_name: connector.provider_name || 'gemini',
+          provider_name: connector.provider_name || 'openrouter',
           connector_name: connector.connector_name || 'Connector',
           api_key: connector.api_key || '',
           base_url: connector.base_url || '',
@@ -511,7 +511,7 @@ function App() {
   function editConnector(connector) {
     setForm({
       id: String(connector.id),
-      provider_name: connector.provider_name || 'gemini',
+      provider_name: connector.provider_name || 'openrouter',
       connector_name: connector.connector_name || 'Connector',
       api_key: connector.api_key || '',
       base_url: connector.base_url || '',
