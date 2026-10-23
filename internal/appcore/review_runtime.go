@@ -2926,13 +2926,21 @@ func writeDraftSnapshot(w http.ResponseWriter, snap draftSnapshot) {
 
 // requireSession rejects requests whose "r" query param does not match the active reviewID.
 // This prevents a stale browser tab (reused port) from reading or acting on a different review.
-// Fails closed: if sessionID is empty, all requests are rejected.
+// It also rejects cross-origin state-changing requests so a malicious page cannot drive
+// commit/skip/abort through the user's browser. Fails closed: if sessionID is empty,
+// all requests are rejected.
 func requireSession(sessionID string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if sessionID == "" || req.URL.Query().Get("r") != sessionID {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`{"error":"session_mismatch"}`))
+			return
+		}
+		if !requireCSRFProtection(req) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":"csrf_rejected"}`))
 			return
 		}
 		next(w, req)
