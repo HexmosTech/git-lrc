@@ -9,8 +9,44 @@ import (
 	"strings"
 )
 
-// BuildSigninURL builds the Hexmos signin URL for setup callback flow.
-func BuildSigninURL(callbackURL string) (string, error) {
+// SigninURLEnv allows self-hosted deployments to point the signin flow at an
+// explicit URL, overriding both the cloud default and the api_url-derived value.
+const SigninURLEnv = "LRC_SIGNIN_URL"
+
+// ResolveSigninBase returns the signin base URL to use for the given LiveReview
+// api_url. Resolution order:
+//  1. the LRC_SIGNIN_URL override, if set;
+//  2. the cloud default (HexmosSigninBase) when api_url is empty or the cloud URL;
+//  3. otherwise "<api_url>/signin", so a self-hosted instance signs in against
+//     itself instead of hexmos.com.
+func ResolveSigninBase(apiURL string) (string, error) {
+	if override := strings.TrimSpace(os.Getenv(SigninURLEnv)); override != "" {
+		return override, nil
+	}
+
+	apiURL = strings.TrimSpace(apiURL)
+	if apiURL == "" || apiURL == CloudAPIURL {
+		return HexmosSigninBase, nil
+	}
+
+	base, err := url.Parse(apiURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid api url for signin derivation: %w", err)
+	}
+	if base.Scheme != "http" && base.Scheme != "https" {
+		return "", fmt.Errorf("api url scheme must be http or https for signin derivation, got %q", base.Scheme)
+	}
+	if base.Host == "" {
+		return "", fmt.Errorf("api url must include a host for signin derivation")
+	}
+
+	return strings.TrimSuffix(apiURL, "/") + "/signin", nil
+}
+
+// BuildSigninURL builds the signin URL for the setup callback flow. The signin
+// base is derived from apiURL so self-hosted LiveReview instances sign in
+// against their own server rather than the cloud hexmos.com domain.
+func BuildSigninURL(callbackURL, apiURL string) (string, error) {
 	cbURL, err := url.Parse(callbackURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid callback url: %w", err)
@@ -22,12 +58,19 @@ func BuildSigninURL(callbackURL string) (string, error) {
 		return "", fmt.Errorf("callback url must use localhost/127.0.0.1 or the current GitHub Codespaces forwarded host")
 	}
 
-	signinBase, err := url.Parse(HexmosSigninBase)
+	signinBaseStr, err := ResolveSigninBase(apiURL)
+	if err != nil {
+		return "", err
+	}
+	signinBase, err := url.Parse(signinBaseStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid signin base url: %w", err)
 	}
-	if signinBase.Scheme != "https" || signinBase.Host == "" {
-		return "", fmt.Errorf("signin base url must be a valid https url")
+	if signinBase.Scheme != "http" && signinBase.Scheme != "https" {
+		return "", fmt.Errorf("signin base url must be a valid http(s) url")
+	}
+	if signinBase.Host == "" {
+		return "", fmt.Errorf("signin base url must include a host")
 	}
 
 	q := signinBase.Query()
