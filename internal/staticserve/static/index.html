@@ -22,7 +22,7 @@
         <script src="/static/vendor/preact-hooks.umd.js"></script>
         <script src="/static/vendor/htm.umd.js"></script>
         <script src="/static/preact-bootstrap.js"></script>
-    
+        
     <!-- Markdown parser (vendored local copy) -->
     <script src="/static/vendor/marked.min.js"></script>
 </head>
@@ -35,7 +35,12 @@
         </div>
     </div>
     
-    <!-- Application entry point - fetches data from /api/review -->
-    <script type="module" src="/static/app.js"></script>
-</body>
+    <script>
+  window.__DATA__ = {{.JSONData}};
+</script>
+<script type="application/json" id="initial-data">
+  {{.JSONData}}
+</script>
+
+<script type="module" src="/static/app.js"></script></body>
 </html>
