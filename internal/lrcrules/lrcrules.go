@@ -211,5 +211,150 @@ func CheckToolsSyntax(lrcDir string) []Issue {
 	return nil
 }
 
+// ExtractToolsConfig extracts the [tools] section from TOML configuration bytes (e.g. from .lrc.toml / ~/.lrc.toml).
+// It returns:
+// 1. A slice of formatted tool summaries (e.g. ["gitleaks (enabled)", "ruff (enabled)"])
+// 2. Sanitized TOML bytes containing only the [tools] section (safe for bundling into review payloads)
+// 3. Any parsing error
+func ExtractToolsConfig(data []byte) ([]string, []byte, error) {
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil, nil, nil
+	}
+
+	var raw map[string]interface{}
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return nil, nil, fmt.Errorf("invalid TOML syntax: %w", err)
+	}
+
+	var toolsMap map[string]interface{}
+	if toolsRaw, exists := raw["tools"]; exists && toolsRaw != nil {
+		if tm, ok := toolsRaw.(map[string]interface{}); ok {
+			toolsMap = sanitizeMap(tm)
+		}
+	}
+
+	// If no top-level "tools" key, check if top-level tables represent tools (e.g. in policy/tools.toml)
+	if toolsMap == nil {
+		candidateTools := make(map[string]interface{})
+		for k, v := range raw {
+			if isSensitiveKey(k) {
+				continue
+			}
+			switch val := v.(type) {
+			case bool:
+				candidateTools[k] = val
+			case map[string]interface{}:
+				cleaned := sanitizeMap(val)
+				if len(cleaned) > 0 {
+					candidateTools[k] = cleaned
+				}
+			}
+		}
+		if len(candidateTools) > 0 {
+			toolsMap = candidateTools
+		}
+	}
+
+	if len(toolsMap) == 0 {
+		return nil, nil, nil
+	}
+
+	var summaries []string
+	for toolName, val := range toolsMap {
+		status := "enabled"
+		switch v := val.(type) {
+		case bool:
+			if !v {
+				status = "disabled"
+			}
+		case map[string]interface{}:
+			if en, exists := v["enabled"]; exists {
+				if b, ok := en.(bool); ok && !b {
+					status = "disabled"
+				}
+			}
+		}
+		summaries = append(summaries, fmt.Sprintf("%s (%s)", toolName, status))
+	}
+	sort.Strings(summaries)
+
+	toolsOnlyMap := map[string]interface{}{
+		"tools": toolsMap,
+	}
+	toolsBytes, err := toml.Marshal(toolsOnlyMap)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal tools config: %w", err)
+	}
+
+	return summaries, toolsBytes, nil
+}
+
+// isSensitiveKey reports whether a configuration key represents a credential, secret, or sensitive metadata.
+func isSensitiveKey(k string) bool {
+	lower := strings.ToLower(strings.TrimSpace(k))
+	sensitive := map[string]bool{
+		"api_key": true, "apikey": true, "api_url": true, "url": true,
+		"org_id": true, "org_name": true, "jwt": true, "refresh_token": true,
+		"user_email": true, "user_id": true, "user_first_name": true,
+		"user_last_name": true, "avatar_url": true, "ai_connectors": true,
+		"token": true, "access_token": true, "auth_token": true, "pat": true, "pat_token": true,
+		"password": true, "passwd": true, "secret": true, "secret_key": true,
+		"client_secret": true, "private_key": true, "credential": true, "credentials": true,
+		"auth": true, "authorization": true,
+		"client_id": true, "key_id": true, "access_key_id": true, "secret_key_id": true,
+	}
+	if sensitive[lower] {
+		return true
+	}
+	if strings.HasSuffix(lower, "_secret") || strings.HasSuffix(lower, "_token") ||
+		strings.HasSuffix(lower, "_password") || strings.HasSuffix(lower, "_api_key") ||
+		strings.HasSuffix(lower, "_key_id") || strings.HasSuffix(lower, "_client_id") ||
+		strings.HasPrefix(lower, "secret_") || strings.HasPrefix(lower, "token_") {
+		return true
+	}
+	return false
+}
+
+// sanitizeMap recursively filters out sensitive keys at any nesting level in maps and arrays.
+func sanitizeMap(m map[string]interface{}) map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+	cleaned := make(map[string]interface{})
+	for k, v := range m {
+		if isSensitiveKey(k) {
+			continue
+		}
+		cleaned[k] = sanitizeValue(v)
+	}
+	return cleaned
+}
+
+// sanitizeValue recursively filters sensitive values contained in maps and slices.
+// Note: In Go, []map[string]interface{} is not assignable to []interface{} (no slice covariance),
+// so both slice types produced by the TOML parser are explicitly handled without reflection.
+func sanitizeValue(val interface{}) interface{} {
+	if val == nil {
+		return nil
+	}
+	switch v := val.(type) {
+	case map[string]interface{}:
+		return sanitizeMap(v)
+	case []map[string]interface{}:
+		cleaned := make([]map[string]interface{}, 0, len(v))
+		for _, item := range v {
+			cleaned = append(cleaned, sanitizeMap(item))
+		}
+		return cleaned
+	case []interface{}:
+		cleanedSlice := make([]interface{}, 0, len(v))
+		for _, item := range v {
+			cleanedSlice = append(cleanedSlice, sanitizeValue(item))
+		}
+		return cleanedSlice
+	default:
+		return val
+	}
+}
 
 

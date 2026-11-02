@@ -316,3 +316,109 @@ func TestCollectZipExtrasUnreadableFile(t *testing.T) {
 		t.Fatalf("expected readable files to still be collected, got %v", extras)
 	}
 }
+func TestExtractToolsConfig(t *testing.T) {
+	// 1. Table format with secrets (both top-level and nested)
+	tomlData := []byte(`
+api_key = "secret_key_123"
+api_url = "https://example.com"
+jwt = "secret_jwt"
+
+[tools]
+top_level_secret = "secret_in_tools_table"
+
+[tools.ruff]
+enabled = true
+include = ["**/*.py"]
+api_key = "nested_ruff_secret"
+private_key = "nested_ruff_privkey"
+aws_key_id = "test_aws_key_id"
+oauth_client_id = "test_oauth_client_id"
+
+[tools.gitleaks]
+enabled = true
+auth_token = "nested_gitleaks_token"
+
+[tools.bandit]
+enabled = false
+`)
+
+	summaries, sanitized, err := ExtractToolsConfig(tomlData)
+	if err != nil {
+		t.Fatalf("ExtractToolsConfig failed: %v", err)
+	}
+
+	wantSummaries := []string{"bandit (disabled)", "gitleaks (enabled)", "ruff (enabled)"}
+	if len(summaries) != len(wantSummaries) {
+		t.Fatalf("summaries = %v, want %v", summaries, wantSummaries)
+	}
+	for i, s := range wantSummaries {
+		if summaries[i] != s {
+			t.Errorf("summaries[%d] = %q, want %q", i, summaries[i], s)
+		}
+	}
+
+	// Verify secrets are NOT in sanitized output at any level
+	sanitizedStr := string(sanitized)
+	leakedKeywords := []string{
+		"secret_key_123", "secret_jwt", "secret_in_tools_table",
+		"nested_ruff_secret", "nested_ruff_privkey", "nested_gitleaks_token",
+		"test_aws_key_id", "test_oauth_client_id",
+	}
+	for _, kw := range leakedKeywords {
+		if strings.Contains(sanitizedStr, kw) {
+			t.Fatalf("sanitized tools TOML leaked secret %q:\n%s", kw, sanitizedStr)
+		}
+	}
+	if !strings.Contains(sanitizedStr, "ruff") || !strings.Contains(sanitizedStr, "gitleaks") {
+		t.Fatalf("sanitized tools TOML missing tools:\n%s", sanitizedStr)
+	}
+
+	// 1b. Policy format without [tools] wrapper, but with nested secrets and arrays
+	policyData := []byte(`
+api_key = "root_api_key"
+
+[ruff]
+enabled = true
+api_key = "nested_ruff_api_key"
+custom_tokens = [
+  { token = "nested_array_token", role = "scanner" }
+]
+
+[shellcheck]
+enabled = true
+`)
+	policySummaries, policySanitized, err := ExtractToolsConfig(policyData)
+	if err != nil {
+		t.Fatalf("ExtractToolsConfig on policyData failed: %v", err)
+	}
+	if len(policySummaries) != 2 || policySummaries[0] != "ruff (enabled)" || policySummaries[1] != "shellcheck (enabled)" {
+		t.Fatalf("policySummaries = %v, want [ruff (enabled), shellcheck (enabled)]", policySummaries)
+	}
+	policySanitizedStr := string(policySanitized)
+	if strings.Contains(policySanitizedStr, "root_api_key") ||
+		strings.Contains(policySanitizedStr, "nested_ruff_api_key") ||
+		strings.Contains(policySanitizedStr, "nested_array_token") {
+		t.Fatalf("sanitized policy TOML leaked nested secrets:\n%s", policySanitizedStr)
+	}
+
+	// 2. Boolean mapping format
+	boolData := []byte(`
+[tools]
+gitleaks = true
+ruff = false
+`)
+	boolSummaries, _, err := ExtractToolsConfig(boolData)
+	if err != nil {
+		t.Fatalf("ExtractToolsConfig failed: %v", err)
+	}
+	if len(boolSummaries) != 2 || boolSummaries[0] != "gitleaks (enabled)" || boolSummaries[1] != "ruff (disabled)" {
+		t.Fatalf("boolSummaries = %v, want [gitleaks (enabled), ruff (disabled)]", boolSummaries)
+	}
+
+	// 3. No tools section
+	emptyData := []byte(`api_key = "test"`)
+	noSummaries, noBytes, err := ExtractToolsConfig(emptyData)
+	if err != nil || noSummaries != nil || noBytes != nil {
+		t.Fatalf("expected nil for no tools, got %v, %v, %v", noSummaries, noBytes, err)
+	}
+}
