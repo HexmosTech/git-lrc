@@ -108,7 +108,8 @@ export function normalizeStreamedComment(rawComment) {
         return null;
     }
 
-    return {
+    const toolName = String(rawComment.ToolName ?? rawComment.tool_name ?? rawComment.toolName ?? '').trim();
+    const res = {
         file_path: filePath,
         line: line,
         content: content,
@@ -118,6 +119,10 @@ export function normalizeStreamedComment(rawComment) {
         category: String(rawComment.Category ?? rawComment.category ?? 'review').trim() || 'review',
         subcategory: String(rawComment.Subcategory ?? rawComment.subcategory ?? '').trim(),
     };
+    if (toolName) {
+        res.tool_name = toolName;
+    }
+    return res;
 }
 
 export function extractExternalCommentsFromEvents(events) {

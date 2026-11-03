@@ -71,6 +71,7 @@ export async function createComment() {
         const badgeClass = getBadgeClass(comment.Severity);
         const lineLabel = comment.Line ? `:${comment.Line}` : '';
         const metaItems = [
+            comment.ToolName ? renderMetaItem('Tool', comment.ToolName, 'comment-meta-item-tool') : null,
             renderMetaItem('Confidence', comment.Confidence),
             renderMetaItem('Type', comment.Type),
             (comment.Category || comment.Subcategory)
@@ -157,6 +158,7 @@ export async function createComment() {
                                     <div class="comment-header">
                                         <div class="comment-header-main">
                                             <span class="comment-badge ${badgeClass}">${comment.Severity}</span>
+                                            ${comment.ToolName ? html`<span class="comment-tool-badge">${comment.ToolName}</span>` : ''}
                                             <span class="comment-location">${filePath}${lineLabel}</span>
                                             ${renderTimingLabel && html`
                                                 <span class="comment-arrival">${renderTimingLabel}</span>

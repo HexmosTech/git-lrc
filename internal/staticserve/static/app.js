@@ -98,7 +98,9 @@ function convertFilesToUIFormat(files) {
                 Content: comment.content || comment.Content || '',
                 HasCategory: !!(comment.category || comment.Category),
                 Line: line,
-                FilePath: filePath
+                FilePath: filePath,
+                ToolName: comment.tool_name || comment.ToolName || comment.toolName || '',
+                Source: comment.source || comment.Source || ''
             });
         });
 
