@@ -7,6 +7,7 @@ export const SELECTION_FIELDS = Object.freeze({
     type: 'types',
     category: 'categories',
     subcategory: 'subcategories',
+    tool: 'tools',
 });
 
 export const FACET_FIELDS = Object.freeze(Object.keys(SELECTION_FIELDS));
@@ -32,7 +33,32 @@ function cloneDisabledSelections(disabled) {
         types: new Set(disabled?.types || []),
         categories: new Set(disabled?.categories || []),
         subcategories: new Set(disabled?.subcategories || []),
+        tools: new Set(disabled?.tools || []),
     };
+}
+
+export function getCommentToolKey(comment) {
+    const toolName = comment?.ToolName ?? comment?.tool_name ?? '';
+    if (typeof toolName === 'string' && toolName.trim()) {
+        return toolName.trim().toLowerCase();
+    }
+    const source = comment?.Source ?? comment?.source ?? '';
+    if (typeof source === 'string' && source.trim().toLowerCase() === 'tool') {
+        return 'tool';
+    }
+    return 'ai';
+}
+
+export function getCommentToolLabel(comment) {
+    const toolName = comment?.ToolName ?? comment?.tool_name ?? '';
+    if (typeof toolName === 'string' && toolName.trim()) {
+        return toolName.trim();
+    }
+    const source = comment?.Source ?? comment?.source ?? '';
+    if (typeof source === 'string' && source.trim().toLowerCase() === 'tool') {
+        return 'Static Analysis';
+    }
+    return 'AI Review';
 }
 
 export function normalizeText(value) {
@@ -60,6 +86,9 @@ export function normalizeCommentShape(comment) {
         subcategory: normalizeText(comment?.Subcategory ?? comment?.subcategory),
         content: normalizeText(comment?.Content ?? comment?.content),
         line: comment?.Line ?? comment?.line ?? '',
+        tool: getCommentToolKey(comment),
+        tool_name: normalizeText(comment?.ToolName ?? comment?.tool_name),
+        source: normalizeText(comment?.Source ?? comment?.source),
     };
 }
 
@@ -88,6 +117,9 @@ export function getNormalizedFacetValue(shape, field) {
     if (field === 'severity') {
         return shape.severity;
     }
+    if (field === 'tool') {
+        return shape.tool;
+    }
     return normalizeFacetValue(shape[field]);
 }
 
@@ -113,6 +145,7 @@ export function normalizeIssueFilters(filters) {
             types: normalizeDisabledSet(source.types),
             categories: normalizeDisabledSet(source.categories),
             subcategories: normalizeDisabledSet(source.subcategories),
+            tools: normalizeDisabledSet(source.tools),
         },
     };
 }

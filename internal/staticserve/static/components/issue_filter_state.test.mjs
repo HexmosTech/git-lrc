@@ -375,4 +375,85 @@ test('resetIssueFilters restores defaults', () => {
     const reset = resetIssueFilters();
     assert.deepEqual([...reset.disabled.severities], []);
     assert.deepEqual([...reset.disabled.confidences], []);
+    assert.deepEqual([...reset.disabled.tools], []);
+});
+
+test('buildIssueFacetOptions includes tool options when tool comments exist', () => {
+    const files = [
+        {
+            FilePath: 'main.go',
+            Hunks: [
+                {
+                    Lines: [
+                        {
+                            IsComment: true,
+                            Comments: [
+                                {
+                                    Severity: 'critical',
+                                    Confidence: 'High',
+                                    Type: 'Bug',
+                                    Category: 'Security',
+                                    Subcategory: 'Secrets Management',
+                                    Content: 'Hardcoded secret',
+                                    Line: 10,
+                                    ToolName: 'gitleaks',
+                                    Source: 'tool',
+                                },
+                                {
+                                    Severity: 'warning',
+                                    Confidence: 'High',
+                                    Type: 'Code Smell',
+                                    Category: 'Maintainability',
+                                    Subcategory: 'Code Duplication',
+                                    Content: 'Duplicate logic',
+                                    Line: 20,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        },
+    ];
+
+    const facets = buildIssueFacetOptions(files, createDefaultIssueFilters(), new Set());
+    assert.equal(facets.tools.length, 2);
+    assert.equal(facets.tools[0].value, 'ai');
+    assert.equal(facets.tools[0].label, 'AI Review');
+    assert.equal(facets.tools[0].count, 1);
+    assert.equal(facets.tools[0].active, true);
+
+    assert.equal(facets.tools[1].value, 'gitleaks');
+    assert.equal(facets.tools[1].label, 'gitleaks');
+    assert.equal(facets.tools[1].count, 1);
+    assert.equal(facets.tools[1].active, true);
+});
+
+test('toggleIssueFilterValue filters comments by tool', () => {
+    const aiComment = {
+        Severity: 'warning',
+        Category: 'Style',
+        Content: 'Nit',
+        Line: 1,
+    };
+    const toolComment = {
+        Severity: 'critical',
+        Category: 'Security',
+        Content: 'Leaked Key',
+        Line: 2,
+        ToolName: 'gitleaks',
+        Source: 'tool',
+    };
+
+    let filters = createDefaultIssueFilters();
+    assert.equal(matchesIssueFilters(aiComment, filters), true);
+    assert.equal(matchesIssueFilters(toolComment, filters), true);
+
+    filters = toggleIssueFilterValue(filters, 'tool', 'gitleaks');
+    assert.equal(matchesIssueFilters(aiComment, filters), true);
+    assert.equal(matchesIssueFilters(toolComment, filters), false);
+
+    filters = toggleIssueFilterValue(filters, 'tool', 'gitleaks');
+    assert.equal(matchesIssueFilters(aiComment, filters), true);
+    assert.equal(matchesIssueFilters(toolComment, filters), true);
 });

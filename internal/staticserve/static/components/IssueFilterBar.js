@@ -201,6 +201,7 @@ export async function createIssueFilterBar() {
                         </div>
                     </div>
                     <div class="issue-filter-groups">
+                        ${renderFacetSection(html, 'Tool', 'tool', filterOptions?.tools, onToggleFilter)}
                         ${renderFacetSection(html, 'Confidence', 'confidence', filterOptions?.confidences, onToggleFilter)}
                         ${renderFacetSection(html, 'Type', 'type', filterOptions?.types, onToggleFilter)}
                         ${renderCategoryTree(html, categoryGroups, onToggleFilter)}

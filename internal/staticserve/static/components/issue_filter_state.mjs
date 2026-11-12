@@ -6,6 +6,8 @@ import {
     cloneIssueFilters,
     createDefaultIssueFilters,
     formatSeverityLabel,
+    getCommentToolKey,
+    getCommentToolLabel,
     getNormalizedFacetValue,
     getSelectionFieldName,
     hasActiveIssueFilters,
@@ -80,6 +82,7 @@ export function buildIssueFilterUniverse(files, hiddenCommentKeys) {
         types: new Set(),
         categories: new Set(),
         subcategories: new Set(),
+        tools: new Set(),
     };
 
     iterateIssueComments(files, ({ filePath, comment }) => {
@@ -99,6 +102,9 @@ export function buildIssueFilterUniverse(files, hiddenCommentKeys) {
         if (shape.subcategory) {
             universe.subcategories.add(normalizeFacetValue(shape.subcategory));
         }
+        if (shape.tool) {
+            universe.tools.add(shape.tool);
+        }
     });
 
     return {
@@ -107,6 +113,7 @@ export function buildIssueFilterUniverse(files, hiddenCommentKeys) {
         types: sortValues(universe.types),
         categories: sortValues(universe.categories),
         subcategories: sortValues(universe.subcategories),
+        tools: sortValues(universe.tools, ['ai']),
     };
 }
 
@@ -134,6 +141,7 @@ export function getIssueFilterSummary(filters, universe = null) {
     const active = [];
     const summaryFields = [
         ['severities', 'Severity', universe?.severities || DEFAULT_SEVERITIES],
+        ['tools', 'Tool', universe?.tools || []],
         ['confidences', 'Confidence', universe?.confidences || []],
         ['types', 'Type', universe?.types || []],
         ['categories', 'Main Category', universe?.categories || []],
@@ -201,25 +209,33 @@ export function buildIssueFacetOptions(files, filters, hiddenCommentKeys) {
         type: new Map(),
         category: new Map(),
         subcategory: new Map(),
+        tool: new Map(),
     };
+    let hasAnyToolFindings = false;
 
     iterateIssueComments(files, ({ filePath, comment }) => {
         if (hiddenCommentKeys instanceof Set && hiddenCommentKeys.has(buildCommentVisibilityKey(filePath, comment))) {
             return;
         }
         const shape = normalizeCommentShape(comment);
+        if (shape.tool !== 'ai') {
+            hasAnyToolFindings = true;
+        }
+
         FACET_FIELDS.forEach((field) => {
             if (!matchesIssueFiltersExcludingField(comment, normalized, field)) {
                 return;
             }
-            const rawValue = shape[field];
+            const rawValue = field === 'tool' ? getCommentToolLabel(comment) : shape[field];
             const normalizedValue = getNormalizedFacetValue(shape, field);
             if (!normalizedValue) {
                 return;
             }
             const current = optionMaps[field].get(normalizedValue) || {
                 value: normalizedValue,
-                label: field === 'severity' ? formatSeverityLabel(normalizedValue) : rawValue,
+                label: field === 'severity'
+                    ? formatSeverityLabel(normalizedValue)
+                    : (field === 'tool' ? getCommentToolLabel(comment) : rawValue),
                 count: 0,
             };
             current.count += 1;
@@ -257,6 +273,10 @@ export function buildIssueFacetOptions(files, filters, hiddenCommentKeys) {
             ...optionMaps.severity.get(value),
             active: !normalized.disabled.severities.has(value),
         })),
+        tools: hasAnyToolFindings ? sortValues(optionMaps.tool.keys(), ['ai']).map((value) => ({
+            ...optionMaps.tool.get(value),
+            active: !normalized.disabled.tools.has(value),
+        })) : [],
         confidences: sortValues(optionMaps.confidence.keys(), CONFIDENCE_ORDER).map((value) => ({
             ...optionMaps.confidence.get(value),
             active: !normalized.disabled.confidences.has(value),
