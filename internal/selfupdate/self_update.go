@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/HexmosTech/git-lrc/internal/graphengine"
 	"github.com/HexmosTech/git-lrc/network"
 	"github.com/HexmosTech/git-lrc/storage"
 	"github.com/gofrs/flock"
@@ -1147,6 +1148,17 @@ func runSelfUpdate(c *cli.Context) error {
 	fmt.Println("Applying update...")
 	if err := applyPendingUpdateState(state, true); err != nil {
 		return fmt.Errorf("failed to apply update: %w", err)
+	}
+
+	// Proactively bring the companion graph engine (codebase-memory-mcp) up
+	// to the new build's PinnedVersion too, so blast-radius scoring doesn't
+	// silently keep running against a stale engine until the next review
+	// happens to notice the mismatch (see issue #151). Best-effort: a
+	// download failure here must never fail the lrc update itself.
+	if res, engErr := graphengine.Install(graphengine.InstallOptions{}); engErr != nil {
+		fmt.Printf("%sWarning: failed to update codebase-memory-mcp (%v); run `lrc graph install` to retry.%s\n", colorYellow, engErr, colorReset)
+	} else if !res.Skipped {
+		fmt.Printf("%s✓ Updated codebase-memory-mcp to %s%s\n", colorGreen, res.Version, colorReset)
 	}
 
 	fmt.Printf("\n%s✓ Update complete! Run 'lrc version' to verify.%s\n", colorGreen, colorReset)

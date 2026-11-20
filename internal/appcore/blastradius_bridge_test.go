@@ -2,8 +2,10 @@ package appcore
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -263,5 +265,56 @@ func TestUploadBlastRadiusReportPostsToArtifactChannel(t *testing.T) {
 	}
 	if gotBody.Project != "demo" {
 		t.Fatalf("expected uploaded report Project=demo, got %q", gotBody.Project)
+	}
+}
+
+func TestEngineVersionIsOutdated(t *testing.T) {
+	cases := []struct {
+		installed, pinned string
+		want              bool
+	}{
+		{"0.9.0", "v0.12.1", true},
+		{"0.12.1", "v0.12.1", false},
+		{"0.12.1", "0.12.1", false}, // pinned without a "v" prefix too
+		{"", "v0.12.1", true},
+	}
+	for _, c := range cases {
+		if got := engineVersionIsOutdated(c.installed, c.pinned); got != c.want {
+			t.Errorf("engineVersionIsOutdated(%q, %q) = %v, want %v", c.installed, c.pinned, got, c.want)
+		}
+	}
+}
+
+// TestUploadBlastRadiusReport_SurfacesScoringError covers issue #151's third
+// fix: a nil report after h.wait must report the real scoring error (h.err)
+// when one is set, not always the generic "did not finish in time" message
+// that masked it before.
+func TestUploadBlastRadiusReport_SurfacesScoringError(t *testing.T) {
+	h := &blastScoringHandle{done: make(chan struct{}), err: fmt.Errorf("graph engine not installed; run `lrc graph install`")}
+	close(h.done)
+
+	uploadBlastRadiusReport(h, "http://unused.invalid", "test-api-key", "42", false)
+
+	status, errMsg, _, _ := blastUploadStateSnapshot()
+	if status != "failed" {
+		t.Fatalf("status = %q, want failed", status)
+	}
+	if !strings.Contains(errMsg, "graph engine not installed") {
+		t.Fatalf("errMsg = %q, want it to surface the real scoring error", errMsg)
+	}
+}
+
+func TestUploadBlastRadiusReport_NilReportNoErrorKeepsGenericMessage(t *testing.T) {
+	h := &blastScoringHandle{done: make(chan struct{})}
+	close(h.done)
+
+	uploadBlastRadiusReport(h, "http://unused.invalid", "test-api-key", "42", false)
+
+	status, errMsg, _, _ := blastUploadStateSnapshot()
+	if status != "failed" {
+		t.Fatalf("status = %q, want failed", status)
+	}
+	if !strings.Contains(errMsg, "did not finish in time") {
+		t.Fatalf("errMsg = %q, want the generic timeout message when h.err is nil", errMsg)
 	}
 }

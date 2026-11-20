@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -198,14 +199,38 @@ func autoInstallGraphEngine(verbose bool) error {
 	return nil
 }
 
+// engineVersionIsOutdated reports whether installed (as reported by
+// graphengine.InstalledVersion, e.g. "0.9.0") differs from pinned (a release
+// tag like "v0.12.1"). Used to upgrade an existing ~/.lrc/bin install that
+// predates a PinnedVersion bump instead of treating "a binary exists" as
+// "the right binary exists" (see issue #151).
+func engineVersionIsOutdated(installed, pinned string) bool {
+	return installed != strings.TrimPrefix(pinned, "v")
+}
+
 // computeBlastRadiusReport does the actual work: binary resolution, project
 // auto-derivation via index_repository (which creates or incrementally
 // refreshes the index and returns the project name), and scoring.
 func computeBlastRadiusReport(opts reviewopts.Options, repoRootPath string, diffContent []byte, verbose bool) (*blastradius.Report, error) {
 	binary, err := graphengine.Resolve()
-	if errors.Is(err, graphengine.ErrNotInstalled) {
+	needsInstall := errors.Is(err, graphengine.ErrNotInstalled)
+
+	// Resolve only checks that a binary exists, not which version - an
+	// existing user on an older engine would otherwise never get upgraded
+	// to PinnedVersion after an lrc release bumps it (see issue #151).
+	if err == nil && !needsInstall {
+		if managedPath, pathErr := graphengine.InstalledBinaryPath(); pathErr == nil && binary == managedPath {
+			if installed, verErr := graphengine.InstalledVersion(binary); verErr == nil {
+				if engineVersionIsOutdated(installed, graphengine.PinnedVersion) {
+					needsInstall = true
+				}
+			}
+		}
+	}
+
+	if needsInstall {
 		if verbose {
-			log.Print("blast-radius: engine not found, attempting one-time install into ~/.lrc/bin")
+			log.Print("blast-radius: engine missing or outdated, installing pinned version into ~/.lrc/bin")
 		}
 		if instErr := autoInstallGraphEngine(verbose); instErr != nil {
 			return nil, fmt.Errorf("graph engine not installed; run `lrc graph install` to enable blast-radius scoring (auto-install failed: %v)", instErr)
@@ -306,8 +331,15 @@ func uploadBlastRadiusReport(h *blastScoringHandle, apiURL, apiKey, reviewID str
 		// Caller already flagged "uploading" before spawning this goroutine
 		// (see review_runtime.go) - move to a terminal state here too, or
 		// the browser's close-guard would think an upload is in flight
-		// forever.
-		setBlastUploadState("failed", "blast-radius scoring did not finish in time; nothing to upload", 0, 0)
+		// forever. h.err distinguishes a real scoring failure (e.g. an
+		// outdated/missing graph engine) from an actual timeout - reporting
+		// every nil report as "did not finish in time" was masking the
+		// former and making root-causing scoring issues harder.
+		errMsg := "blast-radius scoring did not finish in time; nothing to upload"
+		if h.err != nil {
+			errMsg = fmt.Sprintf("blast-radius scoring failed: %v", h.err)
+		}
+		setBlastUploadState("failed", errMsg, 0, 0)
 		return
 	}
 
