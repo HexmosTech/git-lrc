@@ -107,8 +107,15 @@ type QueryResult struct {
 // QueryGraph runs a read-only Cypher query against the project's knowledge
 // graph via `cli query_graph --query <cypher>`. maxRows <= 0 leaves the
 // tool's own default/ceiling in place.
+//
+// --format json is explicit, not assumed: codebase-memory-mcp v0.12.x
+// defaults `cli query_graph` to a human-readable "tree" format (confirmed
+// against v0.12.1 - "tree" is valid output but is not JSON and silently
+// fails the json.Unmarshal below), where earlier pinned versions returned
+// JSON by default. Pin the format here rather than relying on whatever the
+// engine currently defaults to.
 func (c *Client) QueryGraph(ctx context.Context, cypher string, maxRows int) (*QueryResult, error) {
-	args := []string{"--query", cypher}
+	args := []string{"--query", cypher, "--format", "json"}
 	if maxRows > 0 {
 		args = append(args, "--max-rows", strconv.Itoa(maxRows))
 	}
@@ -139,7 +146,7 @@ type CodeUsage struct {
 // SearchCodeUsage runs `cli search_code --mode files` for pattern and
 // summarizes the result.
 func (c *Client) SearchCodeUsage(ctx context.Context, pattern string) (*CodeUsage, error) {
-	out, err := c.run(ctx, "search_code", "--pattern", pattern, "--mode", "files", "--limit", "1")
+	out, err := c.run(ctx, "search_code", "--pattern", pattern, "--mode", "files", "--limit", "1", "--format", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +200,7 @@ type CodeSymbolMatches struct {
 // symbol's pre-rename name after the tree was reindexed. limit <= 0 leaves
 // the tool's own default in place.
 func (c *Client) SearchCodeSymbols(ctx context.Context, pattern string, limit int) (*CodeSymbolMatches, error) {
-	args := []string{"--pattern", pattern, "--mode", "compact"}
+	args := []string{"--pattern", pattern, "--mode", "compact", "--format", "json"}
 	if limit > 0 {
 		args = append(args, "--limit", strconv.Itoa(limit))
 	}
@@ -272,7 +279,7 @@ type ArchitectureContext struct {
 // per value, not comma-joined or JSON-encoded). Meant to be called once per
 // report and cached - this is architecture-wide, not per-hunk/symbol.
 func (c *Client) GetArchitecture(ctx context.Context, aspects []string) (*ArchitectureContext, error) {
-	var args []string
+	args := []string{"--format", "json"}
 	for _, a := range aspects {
 		args = append(args, "--aspects", a)
 	}
@@ -301,7 +308,7 @@ func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, c.binary(), "cli", "list_projects")
+	cmd := exec.CommandContext(ctx, c.binary(), "cli", "list_projects", "--format", "json")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
