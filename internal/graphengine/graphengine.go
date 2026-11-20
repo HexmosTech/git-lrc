@@ -24,7 +24,7 @@ const (
 	// PinnedVersion is the release tag lrc installs. Bumped deliberately with
 	// lrc releases rather than tracking "latest", so an lrc build always pairs
 	// with an engine version its scoring queries were verified against.
-	PinnedVersion = "v0.9.0"
+	PinnedVersion = "v0.12.1"
 
 	releaseBaseURL = "https://github.com/DeusData/codebase-memory-mcp/releases/download"
 )
