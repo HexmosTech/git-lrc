@@ -5,6 +5,19 @@ run from the repo root via the top-level `Makefile`.
 
 ## Prerequisites
 
+- **Local security scanners pass, run before cutting the release, not
+  discovered after.** CI re-runs these on push, but by release time the
+  tag and uploaded binaries are already the artifact that ships - catch a
+  real finding before that, not after:
+  - `make security-govulncheck` (Go stdlib/dependency CVEs)
+  - `make security-osv` (requires `osv-scanner` installed locally)
+  - `make security-gitleaks` (requires `gitleaks` installed locally)
+  A real finding blocks the release until fixed or explicitly triaged as a
+  false positive. A finding caused by the *scanner's own infra* (e.g. a
+  rate-limited GitHub API call resolving "latest" for the scanner itself,
+  not the code) is not a security finding - fix the workflow/script and
+  confirm the underlying scan is actually clean locally, same as the
+  equivalent rule in LiveReview's `AGENTS.md` Release Process section.
 - Clean working tree (`git status` shows nothing to commit) — `make bump`
   and `scripts/lrc_build.py` both refuse to run otherwise.
 - `.env` with `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET_NAME`, `B2_BUCKET_ID` (see
