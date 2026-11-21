@@ -25,6 +25,14 @@ func ReviewUploadArtifact(client *Client, apiURL, reviewID, artifactType string,
 	return client.DoJSON(http.MethodPost, ReviewArtifactURL(apiURL, reviewID, artifactType), payload, "", "", map[string]string{"X-API-Key": apiKey})
 }
 
+// ReviewCrossRepoMatches asks LiveReview to match the supplied outbound call
+// sites to declared routes in the reviewed repository's related repos. The
+// endpoint is read-only and best-effort: callers keep the locally scored
+// report unchanged when it fails.
+func ReviewCrossRepoMatches(client *Client, apiURL, reviewID string, payload any, apiKey string) (*Response, error) {
+	return client.DoJSON(http.MethodPost, ReviewCrossRepoMatchesURL(apiURL, reviewID), payload, "", "", map[string]string{"X-API-Key": apiKey})
+}
+
 // ReviewCoverage asks LiveReview's backend which of the given commit
 // SHAs/ranges have a stored review, per the review-coverage endpoint.
 func ReviewCoverage(client *Client, apiURL string, payload any, apiKey string) (*Response, error) {

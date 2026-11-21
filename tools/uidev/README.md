@@ -24,6 +24,15 @@ served from disk, no rebuild.
 | `blastradius.json` | `GET /api/blastradius` of the same review | risk sort, score badges, signal panels, risk nav |
 | `usage-chip.json` | `GET /api/runtime/usage-chip` (best-effort) | usage banner |
 
+`fixtures/crossrepo/` is a second, self-contained pair captured from a real
+consumer-repo review with cross-repo impacts (friendly repository names,
+visible route chips, and a two-hop chain). Use it to iterate on the related-repo
+cards without running a review:
+
+```bash
+./uidev -fixtures tools/uidev/fixtures/crossrepo -port 8132
+```
+
 They were captured from a real `lrc review --range HEAD~8...HEAD` run in the
 LiveReview repository. To refresh them (triggers a real billed review):
 

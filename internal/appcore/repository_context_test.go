@@ -2,6 +2,7 @@ package appcore
 
 import (
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -84,5 +85,28 @@ func TestResolveReviewRepositoryNameReturnsWorkingDirError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("resolveReviewRepositoryName() error = nil, want non-nil")
+	}
+}
+
+func TestResolveRepoRemoteURL(t *testing.T) {
+	if got := resolveRepoRemoteURL("https://example.com/org/repo.git", ""); got != "https://example.com/org/repo.git" {
+		t.Fatalf("explicit remote = %q", got)
+	}
+	if got := resolveRepoRemoteURL("https://user:secret-token@example.com/org/repo.git", ""); got != "https://example.com/org/repo.git" {
+		t.Fatalf("credential-bearing remote was not sanitized: %q", got)
+	}
+
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "remote", "add", "origin", "git@example.com:org/repo.git").CombinedOutput(); err != nil {
+		t.Fatalf("git remote add: %v: %s", err, out)
+	}
+	if got := resolveRepoRemoteURL("", dir); got != "git@example.com:org/repo.git" {
+		t.Fatalf("origin remote = %q", got)
+	}
+	if got := resolveRepoRemoteURL("", t.TempDir()); got != "" {
+		t.Fatalf("remote-less repo = %q, want empty", got)
 	}
 }

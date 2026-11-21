@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, DEPTH_COLORS, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
+import { buildImpactHierarchy, hasImpactBranches, relatedNodeFill, DEPTH_COLORS, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 // renderFlameGraph owns d3 rendering only; tooltip content/visibility is
 // reported via onHover(info, x, y) rather than mutated directly on a ref'd
@@ -22,7 +22,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
         .attr('viewBox', `0 0 ${width} ${height}`)
         .style('background', 'transparent');
 
-    if (!symbol.Callers || symbol.Callers.length === 0) {
+    if ((!symbol.Callers || symbol.Callers.length === 0) && !hasImpactBranches(symbol)) {
         svg.append('text').attr('x', width / 2).attr('y', height / 2)
             .attr('text-anchor', 'middle').attr('fill', '#8a7060').attr('font-size', '13px')
             .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
@@ -30,7 +30,7 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
         return 0;
     }
 
-    const root = buildHierarchy(symbol);
+    const root = buildImpactHierarchy(symbol);
 
     function maxDepth(node) {
         if (!node.children || node.children.length === 0) return 0;
@@ -101,7 +101,8 @@ function renderFlameGraph(svgEl, symbol, width, height, tooltipRef, onHover, onH
             .merge(rects);
 
         const gradId = depthGradientId(depth + 1);
-        merged.attr('fill', `url(#${gradId})`).attr('rx', 0).attr('ry', 0).attr('cursor', 'pointer')
+        merged.attr('fill', d => relatedNodeFill({ data: d.node, depth: depth + 1 }) || `url(#${gradId})`)
+            .attr('rx', 0).attr('ry', 0).attr('cursor', 'pointer')
             .attr('stroke', '#3d0000').attr('stroke-width', 1.5);
 
         if (skipAnim) {
@@ -229,7 +230,7 @@ export async function createFlameGraph() {
                     .style('opacity', 0.92).attr('filter', null);
             }
         }, [hoveredCaller, d3Ready]);
-        if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
+        if (!symbol || ((!symbol.Callers || symbol.Callers.length === 0) && !hasImpactBranches(symbol))) {
             return html`<div class="viz-container-fg"><div class="viz-empty">${emptyCallGraphMessage(symbol)}</div></div>`;
         }
         return html`

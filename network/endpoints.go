@@ -70,6 +70,14 @@ func ReviewArtifactURL(apiURL, reviewID, artifactType string) string {
 	return strings.TrimSuffix(apiURL, "/") + "/api/v1/diff-review/" + reviewID + "/artifacts/" + artifactType
 }
 
+// ReviewCrossRepoMatchesURL builds the URL for the read-only cross-repo
+// route-matching endpoint used by CLI reviews. The CLI sends its own touched
+// symbols' outbound calls; the server answers with matches against the
+// related repositories it already has indexed.
+func ReviewCrossRepoMatchesURL(apiURL, reviewID string) string {
+	return strings.TrimSuffix(apiURL, "/") + "/api/v1/diff-review/" + reviewID + "/cross-repo/matches"
+}
+
 // ReviewCoverageURL builds the URL for the CI/CD-facing review-coverage
 // lookup: given commit SHAs/ranges, which backend-stored reviews cover them.
 func ReviewCoverageURL(apiURL string) string {

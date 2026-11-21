@@ -168,11 +168,36 @@ func SubmitReview(apiURL, apiKey, base64Diff, repoName string, verbose bool) (re
 // the diff being submitted corresponds to. Only --commit/--range reviews
 // have these at submission time — staged/working diffs pass nil.
 func SubmitReviewWithCommitRefs(apiURL, apiKey, base64Diff, repoName string, commitRefs []reviewmodel.CommitRef, verbose bool) (reviewmodel.DiffReviewCreateResponse, error) {
+	return SubmitReviewWithOptions(SubmitOptions{
+		APIURL: apiURL, APIKey: apiKey, Base64Diff: base64Diff,
+		RepoName: repoName, CommitRefs: commitRefs, Verbose: verbose,
+	})
+}
+
+// SubmitOptions carries the full review-create payload. RepoRemoteURL is
+// optional: when present, LiveReview can resolve this CLI review to a
+// connected repository row for cross-repo blast-radius matching.
+type SubmitOptions struct {
+	APIURL        string
+	APIKey        string
+	Base64Diff    string
+	RepoName      string
+	RepoRemoteURL string
+	CommitRefs    []reviewmodel.CommitRef
+	Verbose       bool
+}
+
+// SubmitReviewWithOptions sends a review-create request with every optional
+// identity field. Existing callers should keep using SubmitReview /
+// SubmitReviewWithCommitRefs.
+func SubmitReviewWithOptions(opts SubmitOptions) (reviewmodel.DiffReviewCreateResponse, error) {
+	apiURL, apiKey, base64Diff, repoName, verbose := opts.APIURL, opts.APIKey, opts.Base64Diff, opts.RepoName, opts.Verbose
 	payload := reviewmodel.DiffReviewRequest{
 		DiffZipBase64: base64Diff,
 		RepoName:      repoName,
 		BranchName:    CurrentBranchName(),
-		CommitRefs:    commitRefs,
+		CommitRefs:    opts.CommitRefs,
+		RepoRemoteURL: opts.RepoRemoteURL,
 	}
 
 	if verbose {

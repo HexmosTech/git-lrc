@@ -1,0 +1,80 @@
+{
+  "reviewID": "14284",
+  "friendlyName": "Cross-repo E2E",
+  "generatedTime": "2026-11-21T18:12:00Z",
+  "repositoryPath": "/repo/consumer",
+  "status": "completed",
+  "blocked": false,
+  "summary": "",
+  "files": [
+    {
+      "file_path": "src/module/e-kyc/service/e-kyc.service.ts",
+      "hunks": [
+        {
+          "old_start_line": 96,
+          "old_line_count": 11,
+          "new_start_line": 97,
+          "new_line_count": 11,
+          "content": " \n   async updateEkycUserStatus(user: IUser) {\n     const docsRes = await this.getUserDocuments(user);\n+    // A user with no document rows has nothing to verify; previously this\n+    // fell through to marking them verified, which is the wrong default.\n+    if (!docsRes) {\n+      return;\n+    }\n     let newState = UserStateEnum.EkycVerified;\n     let ekycStatus = DocumentStatusEnum.VERIFIED;\n     for (const key in docsRes) {",
+          "blast_radius": 47.29875307933723
+        },
+        {
+          "old_start_line": 192,
+          "old_line_count": 7,
+          "new_start_line": 193,
+          "new_line_count": 7,
+          "content": "       const responseFront = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-aadhaar`,\n         formDataFront,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       aadhaarFrontRes = responseFront.data.data.result[0];\n     } catch (e) {",
+          "blast_radius": 100
+        },
+        {
+          "old_start_line": 208,
+          "old_line_count": 7,
+          "new_start_line": 209,
+          "new_line_count": 7,
+          "content": "       const responseBack = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-aadhaar`,\n         formDataBack,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       aadhaarBackRes = responseBack.data.data.result[0];\n     } catch (e) {",
+          "blast_radius": 50.31711899500138
+        },
+        {
+          "old_start_line": 344,
+          "old_line_count": 7,
+          "new_start_line": 345,
+          "new_line_count": 7,
+          "content": "       const responseFront = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-dl`,\n         formDataFront,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       dlFrontRes = responseFront.data.data.result[0];\n     } catch (e) {",
+          "blast_radius": 98.95178274880811
+        },
+        {
+          "old_start_line": 360,
+          "old_line_count": 7,
+          "new_start_line": 361,
+          "new_line_count": 7,
+          "content": "       const responseBack = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-dl`,\n         formDataBack,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       dlBackRes = responseBack.data.data.result[0];\n     } catch (e) {",
+          "blast_radius": 49.268901743809494
+        },
+        {
+          "old_start_line": 456,
+          "old_line_count": 7,
+          "new_start_line": 457,
+          "new_line_count": 7,
+          "content": "   //   const formData = new FormData();\n   //   const blob = new Blob([file.buffer], { type: file.mimetype });\n   //   formData.append('image', blob);\n-  //   const config: AxiosRequestConfig = { headers: this.formHeader };\n+  //   const config: AxiosRequestConfig = { headers: this.formHeader, timeout: 15_000 };\n   //   const body: ReadDL = {\n   //     userId: user.id,\n   //     type: DocumentTypeEnum.DRIVING_LICENSE,",
+          "blast_radius": 3.353725285640687
+        },
+        {
+          "old_start_line": 564,
+          "old_line_count": 7,
+          "new_start_line": 565,
+          "new_line_count": 7,
+          "content": "     formData.append('id', aadhaarBlob);\n     formData.append('selfie', selfieBlob);\n \n-    const config: AxiosRequestConfig = { headers: this.formHeader };\n+    const config: AxiosRequestConfig = { headers: this.formHeader, timeout: 15_000 };\n     const body: FaceMatch = {\n       userId: user.id,\n     };",
+          "blast_radius": 94.54132956728594
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "quiz": [],
+  "totalFiles": 1,
+  "totalComments": 0,
+  "interactive": false,
+  "isPostCommitReview": false,
+  "initialMsg": "",
+  "apiURL": "http://127.0.0.1:8899"
+}

@@ -52,6 +52,29 @@ export {
     callerGroupLabel,
 } from './callgraph_model.mjs';
 
+// Same split for cross-repo presentation logic.
+export {
+    buildImpactHierarchy,
+    hasImpactBranches,
+    relatedRepoDisplayName,
+    relatedRepoNameVariants,
+    crossRepoRouteLabel,
+    groupRelatedRepos,
+    findRepoMentions,
+} from './crossrepo_model.mjs';
+
+// Blue family for branches that are cross-repo impacts rather than callers -
+// the eye must be able to tell "calls this symbol" from "reaches this repo".
+export const RELATED_COLORS = ['#1d4ed8', '#2563eb', '#3b82f6'];
+
+export function relatedNodeFill(d) {
+    const data = d && d.data ? d.data : d;
+    if (!data) return null;
+    if (data.isRelatedRepo) return RELATED_COLORS[Math.min(d.depth || 0, RELATED_COLORS.length - 1)];
+    if (data.isRelatedRoute) return RELATED_COLORS[RELATED_COLORS.length - 1];
+    return null;
+}
+
 export const DEPTH_COLORS = {
     0: { base: '#990000', light: '#e60000' },
     1: { base: '#ff1744', light: '#ff616f' },
@@ -97,6 +120,12 @@ export function countLeaves(node) {
 // both charts build hierarchies from the same buildHierarchy() shape above.
 export function hoverInfoFromDatum(d) {
     const b = d.data;
+    if (b.isRelatedRepo) {
+        return { isRelatedRepo: true, name: b.name, qualifiedName: b.qualifiedName, depth: d.depth, webURL: b.relatedRepoWebURL };
+    }
+    if (b.isRelatedRoute) {
+        return { isRelatedRoute: true, name: b.name, qualifiedName: b.qualifiedName, depth: d.depth, webURL: b.relatedRepoWebURL };
+    }
     if (b.isIntermediate) {
         return { isIntermediate: true, qualifiedName: b.qualifiedName, depth: d.depth };
     }
@@ -113,6 +142,12 @@ export function hoverInfoFromDatum(d) {
 // render verbatim in the tooltip instead of the symbol it names.
 export function renderHoverTooltip(html, hover) {
     if (!hover) return null;
+    if (hover.isRelatedRepo) {
+        return html`<strong>${hover.name}</strong><br /><span style="color:#93b4f5;font-size:10px">related repo · reached by an outbound call</span>`;
+    }
+    if (hover.isRelatedRoute) {
+        return html`<strong>${hover.name}</strong><br /><span style="color:#93b4f5;font-size:10px">route in related repo</span>`;
+    }
     if (hover.isIntermediate) {
         return html`<strong>↳</strong> ${hover.qualifiedName}<br /><span style="color:#9a8070;font-size:10px">intermediate · depth ${hover.depth}</span>`;
     }

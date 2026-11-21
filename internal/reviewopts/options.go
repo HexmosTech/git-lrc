@@ -47,6 +47,10 @@ type Options struct {
 	BlastRadius           bool
 	BlastRadiusProject    string
 	SortByBlastRadius     bool
+	CrossRepo             bool
+	CrossRepoTimeout      time.Duration
+	RepoURL               string
+	SaveBlastRadius       string
 	AgentMode             bool
 }
 
@@ -85,6 +89,10 @@ func BuildFromContext(c *cli.Context, includeDebug bool) (Options, error) {
 		BlastRadius:           c.Bool("blast-radius"),
 		BlastRadiusProject:    c.String("blast-radius-project"),
 		SortByBlastRadius:     c.Bool("sort-by-blast-radius"),
+		CrossRepo:             c.Bool("cross-repo"),
+		CrossRepoTimeout:      c.Duration("cross-repo-timeout"),
+		RepoURL:               c.String("repo-url"),
+		SaveBlastRadius:       c.String("save-blast-radius"),
 		AgentMode:             c.Bool("agent-mode"),
 	}
 

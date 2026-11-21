@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	cmdapp "github.com/HexmosTech/git-lrc/cmd"
 	"github.com/HexmosTech/git-lrc/internal/appcore"
@@ -47,6 +48,10 @@ var baseFlags = []cli.Flag{
 	&cli.BoolFlag{Name: "blast-radius", Value: true, Usage: "score hunks by blast radius using the local graph engine (default on; auto-indexes the current repo, silently skipped when the engine isn't installed - see `lrc graph install`); disable with --blast-radius=false", EnvVars: []string{"LRC_BLAST_RADIUS"}},
 	&cli.StringFlag{Name: "blast-radius-project", Usage: "override the codebase-memory-mcp project name to score against (default: auto-derived from the repo root; see `lrc graph status`)", EnvVars: []string{"LRC_BLAST_RADIUS_PROJECT"}},
 	&cli.BoolFlag{Name: "sort-by-blast-radius", Usage: "reorder hunks within each file by descending blast-radius score (implies --blast-radius)", EnvVars: []string{"LRC_SORT_BY_BLAST_RADIUS"}},
+	&cli.BoolFlag{Name: "cross-repo", Value: true, Usage: "enrich the local blast-radius report with route matches from related repositories configured in LiveReview (no related repo is cloned or indexed locally); disable with --cross-repo=false", EnvVars: []string{"LRC_CROSS_REPO"}},
+	&cli.DurationFlag{Name: "cross-repo-timeout", Value: 45 * time.Second, Usage: "maximum time to wait for the cross-repo match request before keeping the baseline report", EnvVars: []string{"LRC_CROSS_REPO_TIMEOUT"}},
+	&cli.StringFlag{Name: "repo-url", Usage: "override the git remote URL used to resolve this review to a connected LiveReview repository (default: remote.origin.url)", EnvVars: []string{"LRC_REPO_URL"}},
+	&cli.StringFlag{Name: "save-blast-radius", Usage: "write the final blast-radius report (including cross-repo enrichment) to this JSON file", EnvVars: []string{"LRC_SAVE_BLAST_RADIUS"}},
 	&cli.BoolFlag{Name: "agent-mode", Usage: "one-flag non-interactive review for coding agents: implies --no-serve, --output json (unless --output is set explicitly), and forces staged diff unless --commit/--range/--diff-file is given; on a completed review, writes an 'agent-reviewed' attestation so 'git commit' proceeds without a separate --skip/--vouch step", EnvVars: []string{"LRC_AGENT_MODE"}},
 }
 

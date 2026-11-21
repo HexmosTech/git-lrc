@@ -2,6 +2,7 @@ package reviewapi
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -94,5 +95,36 @@ func TestPollReview_ParsesEnvelopeContract(t *testing.T) {
 	}
 	if resp.Envelope.AIExecutionMode != "hosted_auto" {
 		t.Fatalf("unexpected ai execution mode: %s", resp.Envelope.AIExecutionMode)
+	}
+}
+
+func TestSubmitReviewWithOptionsSendsRepoRemoteURL(t *testing.T) {
+	var gotRepoRemoteURL string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			RepoName      string `json:"repo_name"`
+			RepoRemoteURL string `json:"repo_remote_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		gotRepoRemoteURL = payload.RepoRemoteURL
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"review_id":"r-1","status":"processing"}`))
+	}))
+	defer ts.Close()
+
+	_, err := SubmitReviewWithOptions(SubmitOptions{
+		APIURL:        ts.URL,
+		APIKey:        "key",
+		Base64Diff:    base64.StdEncoding.EncodeToString([]byte("diff")),
+		RepoName:      "consumer",
+		RepoRemoteURL: "git@git.apps.hexmos.com:framework-examples/typescript/nestjs/blive-microservice-2-consumer.git",
+	})
+	if err != nil {
+		t.Fatalf("SubmitReviewWithOptions: %v", err)
+	}
+	if gotRepoRemoteURL != "git@git.apps.hexmos.com:framework-examples/typescript/nestjs/blive-microservice-2-consumer.git" {
+		t.Fatalf("repo_remote_url = %q", gotRepoRemoteURL)
 	}
 }

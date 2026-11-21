@@ -67,9 +67,20 @@ BASE="http://localhost:$PORT"
 deadline=$(( $(date +%s) + TIMEOUT_SECS ))
 while :; do
     review_status="$(curl -sf "$BASE/api/review?r=$RID" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || echo "")"
-    blast_status="$(curl -sf "$BASE/api/blastradius?r=$RID" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || echo "")"
-    echo "  review=$review_status blast=$blast_status"
-    if [[ "$review_status" == "completed" && ( "$blast_status" == "ready" || "$blast_status" == "unavailable" ) ]]; then
+    # The baseline blast report lands (status=ready) before cross-repo
+    # enrichment finishes, so wait for the cross_repo sub-state and the upload
+    # to reach a terminal state too. Older servers omit cross_repo; treat that
+    # as already terminal.
+    blast_json="$(curl -sf "$BASE/api/blastradius?r=$RID" 2>/dev/null || echo '{}')"
+    blast_status="$(printf '%s' "$blast_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || echo "")"
+    cross_status="$(printf '%s' "$blast_json" | python3 -c 'import json,sys; print((json.load(sys.stdin).get("cross_repo") or {}).get("status",""))' 2>/dev/null || echo "")"
+    upload_status="$(printf '%s' "$blast_json" | python3 -c 'import json,sys; print((json.load(sys.stdin).get("upload") or {}).get("status",""))' 2>/dev/null || echo "")"
+    echo "  review=$review_status blast=$blast_status cross_repo=$cross_status upload=$upload_status"
+    cross_done=0
+    case "$cross_status" in ""|ready|unavailable|skipped) cross_done=1 ;; esac
+    upload_done=0
+    case "$upload_status" in ""|uploaded|failed|idle) upload_done=1 ;; esac
+    if [[ "$review_status" == "completed" && ( "$blast_status" == "ready" || "$blast_status" == "unavailable" ) && "$cross_done" == "1" && "$upload_done" == "1" ]]; then
         break
     fi
     if [[ "$review_status" == "failed" ]]; then
@@ -78,7 +89,7 @@ while :; do
         exit 1
     fi
     if (( $(date +%s) > deadline )); then
-        echo "Timed out after ${TIMEOUT_SECS}s (review=$review_status blast=$blast_status)" >&2
+        echo "Timed out after ${TIMEOUT_SECS}s (review=$review_status blast=$blast_status cross_repo=$cross_status upload=$upload_status)" >&2
         exit 1
     fi
     sleep 5

@@ -289,11 +289,15 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	if err != nil {
 		return err
 	}
+	repoRemoteURL := resolveRepoRemoteURL(opts.RepoURL, repoRootPath)
 
 	if verbose {
 		log.Printf("Repository name: %s", repoName)
 		if repoRootPath != "" {
 			log.Printf("Repository path: %s", repoRootPath)
+		}
+		if repoRemoteURL != "" {
+			log.Printf("Repository remote: resolved")
 		}
 		log.Printf("API URL: %s", config.APIURL)
 	}
@@ -411,7 +415,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 		submitResp = buildFakeSubmitResponse()
 	} else {
 		var updatedConfig Config
-		submitResp, updatedConfig, err = submitReviewWithRecovery(*config, base64Diff, repoName, commitRefs, verbose)
+		submitResp, updatedConfig, err = submitReviewWithRecovery(*config, base64Diff, repoName, repoRemoteURL, commitRefs, verbose)
 		config = &updatedConfig
 	}
 	if err != nil {
@@ -491,14 +495,26 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	// "uploading" state is set synchronously here (not from inside the
 	// goroutine) so the browser's poll loop can never observe scoring as
 	// finished without also seeing the upload as in-flight.
-	if !fakeMode && blastHandle != nil {
-		setBlastUploadState("uploading", "", 0, 0)
-		uploadDone := make(chan struct{})
+	var blastFinalDone chan struct{}
+	if blastHandle != nil {
+		if !fakeMode {
+			setBlastUploadState("uploading", "", 0, 0)
+		}
+		blastFinalDone = make(chan struct{})
+		finalizeOpts := opts
+		if fakeMode {
+			finalizeOpts.CrossRepo = false
+		}
 		go func() {
-			defer close(uploadDone)
-			uploadBlastRadiusReport(blastHandle, config.APIURL, config.APIKey, reviewID, verbose)
+			// finalize closes blastHandle.finalDone; keep this second channel
+			// for the callers below (they can't see the handle's field).
+			defer close(blastFinalDone)
+			finalizeAndUploadBlastRadiusReport(
+				blastHandle, config.APIURL, config.APIKey, reviewID, repoRemoteURL,
+				finalizeOpts, !fakeMode, verbose,
+			)
 		}()
-		defer waitForBlastUploadOrTimeout(uploadDone, blastUploadExitGrace, verbose)
+		defer waitForBlastUploadOrTimeout(blastFinalDone, blastUploadExitGrace, verbose)
 	}
 
 	// Track whether progressive loading mode is active
@@ -767,6 +783,18 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 						upload["error"] = uploadErrMsg
 					}
 					payload["upload"] = upload
+				}
+				{
+					crossStatus, crossImpacts, crossRelated, crossErrMsg := crossRepoStateSnapshot()
+					cross := map[string]any{
+						"status":        crossStatus,
+						"impacts":       crossImpacts,
+						"related_repos": crossRelated,
+					}
+					if crossErrMsg != "" {
+						cross["error"] = crossErrMsg
+					}
+					payload["cross_repo"] = cross
 				}
 				if err := json.NewEncoder(w).Encode(payload); err != nil && verbose {
 					log.Printf("failed to write blastradius response: %v", err)
@@ -1491,7 +1519,7 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 	// renders, waiting briefly (blastResultGrace) if scoring is still
 	// running - a huge first-time index shouldn't hang a finished review.
 	if result != nil && (opts.SaveJSON != "" || opts.SaveText != "" || opts.SaveHTML != "") {
-		applyBlastRadiusFromHandle(blastHandle, result.Files)
+		applyBlastRadiusFromHandle(blastHandle, result.Files, opts.CrossRepo)
 	}
 
 	// Save JSON response if requested
@@ -1523,6 +1551,18 @@ func runReviewWithOptions(opts reviewopts.Options) error {
 			fmt.Printf("HTML review saved to (auto-selected): %s\n", htmlPath)
 		} else {
 			fmt.Printf("HTML review saved to: %s\n", htmlPath)
+		}
+	}
+
+	// Save the full blast-radius report (including cross-repo enrichment).
+	// The finalize goroutine usually finishes before the review does; this
+	// wait is the explicit safety net for agent/CI runs.
+	if blastPath := opts.SaveBlastRadius; blastPath != "" {
+		if blastFinalDone != nil {
+			waitForBlastUploadOrTimeout(blastFinalDone, opts.CrossRepoTimeout+blastResultGrace, verbose)
+		}
+		if err := saveBlastRadiusOutput(blastPath, verbose); err != nil {
+			return fmt.Errorf("failed to save blast-radius report: %w", err)
 		}
 	}
 

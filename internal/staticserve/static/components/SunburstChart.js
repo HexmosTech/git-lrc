@@ -1,5 +1,5 @@
 import { waitForPreact } from './utils.js';
-import { buildHierarchy, DEPTH_COLORS, hoverInfoFromDatum, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
+import { buildImpactHierarchy, hasImpactBranches, relatedNodeFill, DEPTH_COLORS, hoverInfoFromDatum, renderHoverTooltip, emptyCallGraphMessage, loadD3, verifyChartRender } from './callgraph-utils.js';
 
 function arcTween(a, arcGen) {
     const i = window.d3.interpolate({ x0: a.x0, x1: a.x0 }, a);
@@ -54,7 +54,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
     const g = svg.append('g')
         .attr('transform', `translate(${width / 2},${height / 2})`);
 
-    if (!symbol.Callers || symbol.Callers.length === 0) {
+    if ((!symbol.Callers || symbol.Callers.length === 0) && !hasImpactBranches(symbol)) {
         g.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em')
             .attr('fill', '#8a7060').attr('font-size', '13px')
             .attr('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif')
@@ -62,7 +62,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
         return 0;
     }
 
-    const root = buildHierarchy(symbol);
+    const root = buildImpactHierarchy(symbol);
     const hierarchy = d3.hierarchy(root)
         .sum(d => (d.children && d.children.length > 0) ? 0 : 1)
         .sort((a, b) => b.value - a.value);
@@ -107,7 +107,7 @@ function renderSunburst(svgEl, symbol, width, height, tooltipRef, onHover, onHov
         );
 
     g.selectAll('path.sunburst-arc')
-        .attr('fill', d => `url(#sb-grad-${d.depth})`)
+        .attr('fill', d => relatedNodeFill(d) || `url(#sb-grad-${d.depth})`)
         .attr('stroke', '#4a0000').attr('stroke-width', 0.7)
         .attr('cursor', 'pointer')
         .on('mouseenter', function (event, d) {
@@ -215,7 +215,7 @@ export async function createSunburstChart() {
                     .attr('stroke', '#4a0000').attr('stroke-width', 0.7).attr('filter', null);
             }
         }, [hoveredCaller, d3Ready]);
-        if (!symbol || (!symbol.Callers || symbol.Callers.length === 0)) {
+        if (!symbol || ((!symbol.Callers || symbol.Callers.length === 0) && !hasImpactBranches(symbol))) {
             return html`<div class="viz-container-sq"><div class="viz-empty">${emptyCallGraphMessage(symbol)}</div></div>`;
         }
         return html`

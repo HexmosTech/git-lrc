@@ -12,6 +12,7 @@ import { waitForPreact } from './utils.js';
 import { renderIcon } from './icons.js';
 import { blastRadiusTier, allSignals, SEVERITY_WEIGHT, blendRiskScore } from './blast_radius_sort_state.mjs';
 import { callerGroupLabel, groupCallers } from './callgraph_model.mjs';
+import { crossRepoRouteLabel, findRepoMentions, groupRelatedRepos, relatedRepoDisplayName } from './crossrepo_model.mjs';
 import { getSunburstChart } from './SunburstChart.js';
 import { getFlameGraph } from './FlameGraph.js';
 
@@ -37,7 +38,7 @@ const SCORE_HINTS = {
     },
     blast: {
         title: 'Blast radius: how far this change can reach',
-        body: 'Counts callers up to 3 hops. Adds points for HTTP routes, repository hotspots, architectural layers, and widely used interfaces. Adds points when the file touches auth, persistence, config, build, or schema.',
+        body: 'Counts callers up to 3 hops. Adds points for HTTP routes, outbound calls that match a related repository\'s declared routes (cross-repo impact), repository hotspots, architectural layers, and widely used interfaces. Adds points when the file touches auth, persistence, config, build, or schema.',
     },
     priority: {
         title: 'Review priority: how much attention this hunk needs',
@@ -59,7 +60,7 @@ const SCORE_HINTS = {
 
 const METHODOLOGY_PARAGRAPHS = [
     'Each hunk gets two scores. Both range from 0 to 100 within this diff. 100 marks the highest-risk hunk in this diff, not a universal scale. Combined blends them at 60 percent Blast Radius and 40 percent Review Priority. Sort by Combined. Read Blast and Priority to see why.',
-    'Blast radius measures how far the change can reach. Inputs: callers up to 3 hops, HTTP routes, repository hotspots, architectural layers, interface implementations, cross-package callers, and file paths near auth, persistence, config, build, or schema.',
+    'Blast radius measures how far the change can reach. Inputs: callers up to 3 hops, HTTP routes, outbound calls that match a route declared by a related repository (cross-repo impact), repository hotspots, architectural layers, interface implementations, cross-package callers, and file paths near auth, persistence, config, build, or schema.',
     'Review priority measures how much attention this hunk needs. Main inputs: a near-duplicate function in another file, and missing direct tests. Secondary inputs: cyclomatic complexity, loop depth, and fan-out. Code complexity alone does not predict customer impact.',
     'File co-change coupling adds a small bonus to Blast Radius when git history shows files that change together. Hygiene signals (formatting, comments, generated code, logging, test-only files, dead code) multiply the Combined score down. A small change to a key function must still rank low.',
     'Finding severity adds a third dimension: the most serious issue the hunk introduces. Critical findings add the most, warnings less, info least — blended in at 10 percent weight so a critical security bug in a small change still outranks a trivial one in a big change.',
@@ -161,13 +162,126 @@ export async function createBlastRadiusPanel() {
     // out of the ranked active list (which would otherwise be swamped with
     // zeros) but never dropped, since the user should always be able to see
     // every factor that was considered, not just the ones that fired.
-    function SignalRow({ s, dormant }) {
+    // ExternalRepoLink is a real anchor (right-click, ctrl/cmd-click, middle
+    // click, copy link) to the provider's repository page. The local review
+    // has no in-app repository settings page, so the provider URL is the
+    // correct destination here.
+    function ExternalRepoLink({ name, webURL, title }) {
+        if (!webURL) {
+            return html`<span class="blast-related-name">${name}</span>`;
+        }
+        return html`
+            <a
+                class="blast-related-link"
+                href=${webURL}
+                target="_blank"
+                rel="noopener noreferrer"
+                title=${title || `Open ${name}`}
+                onClick=${(e) => e.stopPropagation()}
+            >
+                <span>${name}</span>
+                ${renderIcon(html, 'externalLink', { size: 11, className: 'blast-related-link-icon' })}
+            </a>
+        `;
+    }
+
+    // LinkedRepoText finds every related-repo name (friendly name or the raw
+    // engine id older artifacts carry) inside server-generated signal detail
+    // text and renders the friendly name as the same external link used by
+    // the cards.
+    function LinkedRepoText({ text, impacts }) {
+        const mentions = findRepoMentions(text, impacts);
+        if (mentions.length === 0) return text;
+        const parts = [];
+        let cursor = 0;
+        mentions.forEach((m, i) => {
+            if (m.start > cursor) parts.push(text.slice(cursor, m.start));
+            parts.push(html`<${ExternalRepoLink} key=${i} name=${m.display} webURL=${m.webURL} />`);
+            cursor = m.end;
+        });
+        if (cursor < text.length) parts.push(text.slice(cursor));
+        return parts;
+    }
+
+    function RelatedRepoCard({ group }) {
+        const [showAllRoutes, setShowAllRoutes] = useState(false);
+        const routes = group.callSites
+            .map(crossRepoRouteLabel)
+            .filter((v, i, arr) => v && arr.indexOf(v) === i);
+        const visibleRoutes = showAllRoutes ? routes : routes.slice(0, 2);
+        const hiddenRoutes = routes.length - visibleRoutes.length;
+        return html`
+            <div class="blast-related-card">
+                <div class="blast-related-head">
+                    <${ExternalRepoLink} name=${group.name} webURL=${group.webURL} title=${`Open ${group.name} in the provider`} />
+                    <span class="blast-related-badge">related repo</span>
+                    ${group.matchKinds.includes('version-alias') && html`
+                        <span class="blast-related-badge version" title="Matched across a URI version segment such as /v1">version match</span>
+                    `}
+                </div>
+                ${routes.length > 0 && html`
+                    <div class="blast-related-routes">
+                        <span class="blast-related-routes-label">${routes.length === 1 ? 'Route' : `Routes (${routes.length})`}</span>
+                        ${visibleRoutes.map((route) => html`<code key=${route} class="blast-related-route">${route}</code>`)}
+                        ${hiddenRoutes > 0 && html`
+                            <button type="button" class="blast-related-showall" onClick=${() => setShowAllRoutes(true)}>
+                                show all ${routes.length}
+                            </button>
+                        `}
+                        ${showAllRoutes && routes.length > 2 && html`
+                            <button type="button" class="blast-related-showall" onClick=${() => setShowAllRoutes(false)}>
+                                show less
+                            </button>
+                        `}
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
+    function RelatedRepoChips({ impacts, label }) {
+        const groups = groupRelatedRepos(impacts);
+        if (groups.length === 0) return null;
+        return html`
+            <div class="blast-related-list">
+                <div class="blast-related-label">${label || `Impacted related repos (${groups.length})`}</div>
+                <div class="blast-related-cards">
+                    ${groups.map((group) => html`<${RelatedRepoCard} key=${group.key} group=${group} />`)}
+                </div>
+            </div>
+        `;
+    }
+
+    function ChainList({ chains }) {
+        const list = (chains || []).filter((c) => (c.Hops || []).length > 0);
+        if (list.length === 0) return null;
+        return html`
+            <div class="blast-related-list">
+                <div class="blast-related-label">Extended impact chain</div>
+                <ul class="blast-chain-list">
+                    ${list.map((chain, idx) => html`
+                        <li key=${idx} class="blast-chain-item">
+                            ${chain.Hops.map((hop, hidx) => html`
+                                <span key=${hidx} class="blast-chain-hop">
+                                    ${hidx > 0 && html`<span class="blast-chain-arrow">→</span>`}
+                                    <${ExternalRepoLink} name=${relatedRepoDisplayName(hop)} webURL=${hop.RelatedRepoWebURL} />
+                                    ${hop.CallSite && html`<span class="blast-chain-route">${crossRepoRouteLabel(hop.CallSite)}</span>`}
+                                </span>
+                            `)}
+                        </li>
+                    `)}
+                </ul>
+            </div>
+        `;
+    }
+
+    function SignalRow({ s, dormant, impacts }) {
         const cls = dormant ? 'dormant' : ((s.Points || 0) < 0 ? 'negative' : 'positive');
         return html`
             <li class="blast-signal ${cls}">
                 <span class="blast-signal-points">${dormant ? '+0.0' : `${(s.Points || 0) >= 0 ? '+' : ''}${(s.Points || 0).toFixed(1)}`}</span>
                 <span class="blast-signal-name">${s.Name}</span>
-                ${s.Detail && html`<span class="blast-signal-detail">${s.Detail}</span>`}
+                ${s.Detail && html`<span class="blast-signal-detail"><${LinkedRepoText} text=${s.Detail} impacts=${impacts} /></span>`}
             </li>
         `;
     }
@@ -178,8 +292,8 @@ export async function createBlastRadiusPanel() {
     // stale one reused for different content. idx stays as a final
     // tiebreak: a symbol implementing several interfaces can legitimately
     // produce multiple same-named "Interface implementation" signals.
-    function SignalRows({ signals, dormant, keyPrefix }) {
-        return html`${signals.map((s, idx) => html`<${SignalRow} key=${`${keyPrefix}-${s._symbolName || 'hunk'}-${s.Name}-${idx}`} s=${s} dormant=${dormant} />`)}`;
+    function SignalRows({ signals, dormant, keyPrefix, impacts }) {
+        return html`${signals.map((s, idx) => html`<${SignalRow} key=${`${keyPrefix}-${s._symbolName || 'hunk'}-${s.Name}-${idx}`} s=${s} dormant=${dormant} impacts=${impacts} />`)}`;
     }
 
     // Renders a signal list either flat (one <ul>, the common single-symbol
@@ -187,27 +301,27 @@ export async function createBlastRadiusPanel() {
     // symbol's contribution to this list) whenever it mixes signals from
     // more than one symbol - see groupSignalsBySymbol. Hunk-level signals
     // (no symbol) render in a plain, unheaded list ahead of the sections.
-    function SignalBlock({ signals, dormant, keyPrefix }) {
+    function SignalBlock({ signals, dormant, keyPrefix, impacts }) {
         if (distinctSymbolCount(signals) <= 1) {
-            return html`<ul class="blast-signal-list"><${SignalRows} signals=${signals} dormant=${dormant} keyPrefix=${keyPrefix} /></ul>`;
+            return html`<ul class="blast-signal-list"><${SignalRows} signals=${signals} dormant=${dormant} keyPrefix=${keyPrefix} impacts=${impacts} /></ul>`;
         }
         const { ungrouped, groups } = groupSignalsBySymbol(signals);
         return html`
             <div class="blast-signal-sections">
                 ${ungrouped.length > 0 && html`
-                    <ul class="blast-signal-list"><${SignalRows} signals=${ungrouped} dormant=${dormant} keyPrefix=${`${keyPrefix}-u`} /></ul>
+                    <ul class="blast-signal-list"><${SignalRows} signals=${ungrouped} dormant=${dormant} keyPrefix=${`${keyPrefix}-u`} impacts=${impacts} /></ul>
                 `}
                 ${groups.map(([name, sigs]) => html`
                     <div key=${name} class="blast-signal-section">
                         <div class="blast-signal-section-header"><code class="blast-signal-code">${shortName(name)}</code></div>
-                        <ul class="blast-signal-list"><${SignalRows} signals=${sigs} dormant=${dormant} keyPrefix=${`${keyPrefix}-${name}`} /></ul>
+                        <ul class="blast-signal-list"><${SignalRows} signals=${sigs} dormant=${dormant} keyPrefix=${`${keyPrefix}-${name}`} impacts=${impacts} /></ul>
                     </div>
                 `)}
             </div>
         `;
     }
 
-    function SignalList({ signals }) {
+    function SignalList({ signals, impacts }) {
         const [showDormant, setShowDormant] = useState(false);
         const ranked = sortedSignals(signals);
         const active = ranked.filter((s) => (s.Points || 0) !== 0);
@@ -216,8 +330,8 @@ export async function createBlastRadiusPanel() {
             return html`<div class="blast-signal-empty">No signals recorded.</div>`;
         }
         return html`
-            <${SignalBlock} signals=${active} keyPrefix="active" />
-            ${showDormant && html`<${SignalBlock} signals=${dormant} dormant=${true} keyPrefix="dormant" />`}
+            <${SignalBlock} signals=${active} keyPrefix="active" impacts=${impacts} />
+            ${showDormant && html`<${SignalBlock} signals=${dormant} dormant=${true} keyPrefix="dormant" impacts=${impacts} />`}
             ${dormant.length > 0 && html`
                 <button class="blast-chip-more" onClick=${() => setShowDormant(!showDormant)}>
                     ${showDormant ? 'hide checked-but-inactive signals' : `${dormant.length} signal${dormant.length !== 1 ? 's' : ''} checked, not contributing`}
@@ -486,7 +600,12 @@ export async function createBlastRadiusPanel() {
                         <span key=${chip.label} class="blast-metric-chip ${chip.warn ? 'warn' : ''}" title="${chip.title}">${chip.label}</span>
                     `)}
                 </div>
-                <${SignalList} signals=${sym.Signals} />
+                <${SignalList} signals=${sym.Signals} impacts=${sym.ImpactedRelatedRepos} />
+                <${RelatedRepoChips}
+                    impacts=${sym.ImpactedRelatedRepos}
+                    label=${`Impacted related repos (${groupRelatedRepos(sym.ImpactedRelatedRepos).length})`}
+                />
+                <${ChainList} chains=${sym.ImpactedRepoChains} />
                 ${totalCallers > 0 && html`
                     <div class="blast-callers">
                         <div class="blast-section-title">Reached from ${totalCallers} caller${totalCallers !== 1 ? 's' : ''}</div>
@@ -702,14 +821,14 @@ export async function createBlastRadiusPanel() {
     // active+dormant split already gives at the per-symbol level, one level
     // up. Two of these side by side (see .blast-dimension-grid) replace what
     // used to be one flat, unattributed signal list mixing both dimensions.
-    function DimensionCard({ title, norm, raw, max, signals }) {
+    function DimensionCard({ title, norm, raw, max, signals, impacts }) {
         return html`
             <div class="blast-dimension-card">
                 <div class="blast-dimension-header">
                     <span class="blast-dimension-title">${title}</span>
                     <span class="blast-dimension-math">${normMathText(raw, max, norm)}</span>
                 </div>
-                <${SignalList} signals=${signals} />
+                <${SignalList} signals=${signals} impacts=${impacts} />
             </div>
         `;
     }
@@ -766,7 +885,20 @@ export async function createBlastRadiusPanel() {
             [detail.Symbols]
         );
         const { blast: blastSignals, priority: prioritySignals, other: otherSignals } = splitSignalsByDimension(allSignals(detail));
+        // Prefer a symbol the chart can actually draw (real callers or a
+        // related-repo branch) over a higher-scoring class that only has text
+        // references - otherwise the panel opens on an empty graph even
+        // though another symbol has a real cross-repo reach path.
+        const defaultSymbolIdx = useMemo(() => {
+            const idx = symbols.findIndex((s) => (
+                ((s.Callers || []).some((c) => !c.PreRename))
+                || (s.ImpactedRelatedRepos || []).length > 0
+                || (s.ImpactedRepoChains || []).length > 0
+            ));
+            return idx >= 0 ? idx : 0;
+        }, [symbols]);
         const [selectedIdx, setSelectedIdx] = useState(0);
+        useEffect(() => { setSelectedIdx(defaultSymbolIdx); }, [defaultSymbolIdx]);
         const [vizMode, setVizMode] = useState('sunburst');
         const [hoveredCaller, setHoveredCaller] = useState(null);
         const [scoreMode, setScoreMode] = useState('summary');
@@ -828,6 +960,11 @@ export async function createBlastRadiusPanel() {
                     chipClass="blast-pkg-chip"
                     label="Impacted packages (${(detail.ImpactedPackages || []).length})"
                 />
+                <${RelatedRepoChips}
+                    impacts=${detail.ImpactedRelatedRepos}
+                    label=${`Impacted related repos (${groupRelatedRepos(detail.ImpactedRelatedRepos).length})`}
+                />
+                <${ChainList} chains=${detail.ImpactedRepoChains} />
                 <div class="blast-score-mode-toggle">
                     <button class=${scoreMode === 'summary' ? 'active' : ''} onClick=${() => setScoreMode('summary')}>
                         Summary
@@ -846,6 +983,7 @@ export async function createBlastRadiusPanel() {
                                 raw=${detail.BlastRadiusRaw}
                                 max=${detail.MaxBlastRadiusRaw}
                                 signals=${blastSignals}
+                                impacts=${detail.ImpactedRelatedRepos}
                             />
                             <${DimensionCard}
                                 title="Review Priority"
@@ -853,6 +991,7 @@ export async function createBlastRadiusPanel() {
                                 raw=${detail.ReviewPriorityRaw}
                                 max=${detail.MaxReviewPriorityRaw}
                                 signals=${prioritySignals}
+                                impacts=${detail.ImpactedRelatedRepos}
                             />
                             <${SeverityCard}
                                 severityScore=${severityScore}

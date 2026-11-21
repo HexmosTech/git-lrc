@@ -351,6 +351,25 @@ during which the review proceeds normally and scores appear when ready); subsequ
 refresh the index incrementally in about a second. Reviews work exactly as before without
 the engine — scoring stays off. Disable explicitly with `--blast-radius=false`.
 
+### Cross-repo impact (related repositories)
+
+When the repository is connected to LiveReview and has **Related Repos** configured
+(Explore → Repository → Settings → Related Repos), a local review also asks LiveReview
+to match the touched symbols' outbound HTTP calls against routes declared by those
+related repositories. A match adds a capped `Cross-repo impact` signal (and a small
+`Cross-repo chain` signal for multi-hop reach: A → B → C). The review panel shows the
+related repository as a blue underlined link to its provider page, plus the matched
+route(s) as visible chips — never only in a hover tooltip — and draws cross-repo
+branches in blue on the Sunburst/Flamegraph even when the symbol has no inbound callers.
+
+No related repository is cloned or indexed on your machine. The CLI sends only the
+outbound call sites of symbols in its own diff; LiveReview reuses the indexes it already
+keeps for those repositories (an existing index means no fetch and no reindex). Disable
+with `--cross-repo=false`. The match request is best-effort: if the server, relation
+graph, or index is unavailable, the baseline report is unchanged. Use `--repo-url` when
+the reviewed checkout's remote is not `origin`, and `--save-blast-radius <path>` to write
+the final report (including cross-repo data) for CI or inspection.
+
 
 ## Git Log Tracking
 

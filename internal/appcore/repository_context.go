@@ -2,10 +2,12 @@ package appcore
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/HexmosTech/git-lrc/gitops"
 	"github.com/HexmosTech/git-lrc/internal/reviewapi"
 )
 
@@ -64,4 +66,38 @@ func resolveReviewRepositoryName(explicitRepoName, repositoryPath string, getwd 
 
 func resolveRuntimeRepositoryName(explicitRepoName, repositoryPath string) (string, error) {
 	return resolveReviewRepositoryName(explicitRepoName, repositoryPath, os.Getwd)
+}
+
+// resolveRepoRemoteURL returns the git remote URL the review came from, used
+// only to resolve the review to a connected LiveReview repository row for
+// cross-repo blast-radius matching. It is best-effort: a missing remote (or a
+// non-git directory) simply disables cross-repo enrichment for this run.
+func resolveRepoRemoteURL(explicit, repoRoot string) string {
+	if v := strings.TrimSpace(explicit); v != "" {
+		return sanitizeRemoteRepoURL(v)
+	}
+	if strings.TrimSpace(repoRoot) == "" {
+		return ""
+	}
+	for _, key := range []string{"remote.origin.url", "remote.upstream.url"} {
+		if v, err := gitops.ReadGitConfig(repoRoot, key); err == nil {
+			if v = strings.TrimSpace(v); v != "" {
+				return sanitizeRemoteRepoURL(v)
+			}
+		}
+	}
+	return ""
+}
+
+// sanitizeRemoteRepoURL removes embedded credentials (e.g. a token in an
+// https://user:token@host/... remote) before this value is sent to
+// LiveReview and stored in review metadata. scp-like git@host:path remotes
+// carry no secret and are left alone.
+func sanitizeRemoteRepoURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	u.User = nil
+	return u.String()
 }

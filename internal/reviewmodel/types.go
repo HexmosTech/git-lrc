@@ -40,6 +40,11 @@ type DiffReviewRequest struct {
 	RepoName      string      `json:"repo_name"`
 	BranchName    string      `json:"branch_name"`
 	CommitRefs    []CommitRef `json:"commit_refs,omitempty"`
+	// RepoRemoteURL is the git remote (origin) the local review came from.
+	// The server uses it to resolve this CLI review to a connected
+	// repositories row for cross-repo blast-radius matching. Optional and
+	// ignored by older servers.
+	RepoRemoteURL string `json:"repo_remote_url,omitempty"`
 }
 
 // CommitRef identifies a commit or commit range that a --commit/--range

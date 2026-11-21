@@ -3235,6 +3235,158 @@ body {
   border-color: rgba(55, 148, 255, 0.35);
 }
 
+/* Cross-repo impacts. The repository name must read as a link (blue,
+   underlined) and every matched route must be visible without hovering. */
+.blast-related-list {
+  margin: 7px 0 9px;
+}
+.blast-related-label {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.blast-related-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.blast-related-card {
+  flex: 1 1 280px;
+  min-width: 240px;
+  max-width: 100%;
+  padding: 7px 9px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 8px;
+  background: rgba(30, 58, 95, 0.22);
+}
+.blast-related-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.blast-related-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: #7cb0ff;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(124, 176, 255, 0.7);
+  word-break: break-all;
+}
+.blast-related-link:hover {
+  color: #b6d2ff;
+  text-decoration-color: currentColor;
+}
+.blast-related-link:focus-visible {
+  outline: 1px solid #7cb0ff;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.blast-related-link-icon {
+  flex: none;
+  color: #7cb0ff;
+}
+.blast-related-name {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.blast-related-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.blast-related-badge.version {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+.blast-related-routes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+}
+.blast-related-routes-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.blast-related-route {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-secondary);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+.blast-related-showall {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #7cb0ff;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.blast-related-showall:hover {
+  color: #b6d2ff;
+}
+.blast-chain-list {
+  margin: 7px 0 9px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.blast-chain-item,
+.blast-chain-hop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.blast-chain-arrow {
+  color: var(--text-dim);
+}
+.blast-chain-route {
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+}
+@media (max-width: 720px) {
+  .blast-related-card {
+    flex-basis: 100%;
+  }
+}
+
 /* Per-symbol cards: collapsed = identity + reach; expanded = full drill-down. */
 .blast-panel-symbols {
   margin-top: 10px;

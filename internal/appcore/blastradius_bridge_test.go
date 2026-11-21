@@ -72,7 +72,7 @@ func TestStartBlastRadiusScoringDisabled(t *testing.T) {
 	files := []reviewmodel.DiffReviewFileResult{
 		{FilePath: "foo.go", Hunks: []reviewmodel.DiffReviewHunk{{NewStartLine: 1, NewLineCount: 1}}},
 	}
-	applyBlastRadiusFromHandle(h, files)
+	applyBlastRadiusFromHandle(h, files, false)
 	if files[0].Hunks[0].BlastRadius != nil {
 		t.Fatalf("expected BlastRadius to stay nil when scoring is disabled, got %v", files[0].Hunks[0].BlastRadius)
 	}
@@ -130,14 +130,14 @@ func TestUploadBlastRadiusReportNoOpCases(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	uploadBlastRadiusReport(nil, srv.URL, "key", "42", false)
+	uploadBlastRadiusReport(nil, nil, srv.URL, "key", "42", false)
 	if called {
 		t.Fatal("nil handle must not make an HTTP call")
 	}
 
 	failed := &blastScoringHandle{done: make(chan struct{})}
 	close(failed.done) // report stays nil - scoring failed
-	uploadBlastRadiusReport(failed, srv.URL, "key", "42", false)
+	uploadBlastRadiusReport(nil, failed, srv.URL, "key", "42", false)
 	if called {
 		t.Fatal("a handle with no report must not make an HTTP call")
 	}
@@ -164,7 +164,7 @@ func TestUploadBlastRadiusReportUpdatesUploadState(t *testing.T) {
 
 		h := &blastScoringHandle{done: make(chan struct{}), report: report}
 		close(h.done)
-		uploadBlastRadiusReport(h, srv.URL, "key", "42", false)
+		uploadBlastRadiusReport(report, h, srv.URL, "key", "42", false)
 
 		status, errMsg, sizeBytes, durationMS := blastUploadStateSnapshot()
 		if status != "uploaded" || errMsg != "" {
@@ -187,7 +187,7 @@ func TestUploadBlastRadiusReportUpdatesUploadState(t *testing.T) {
 
 		h := &blastScoringHandle{done: make(chan struct{}), report: report}
 		close(h.done)
-		uploadBlastRadiusReport(h, srv.URL, "key", "42", false)
+		uploadBlastRadiusReport(report, h, srv.URL, "key", "42", false)
 
 		status, errMsg, sizeBytes, _ := blastUploadStateSnapshot()
 		if status != "failed" || errMsg == "" {
@@ -202,7 +202,7 @@ func TestUploadBlastRadiusReportUpdatesUploadState(t *testing.T) {
 		setBlastUploadState("idle", "", 0, 0)
 		h := &blastScoringHandle{done: make(chan struct{}), report: report}
 		close(h.done)
-		uploadBlastRadiusReport(h, "http://127.0.0.1:0", "key", "42", false)
+		uploadBlastRadiusReport(report, h, "http://127.0.0.1:0", "key", "42", false)
 
 		if status, errMsg, _, _ := blastUploadStateSnapshot(); status != "failed" || errMsg == "" {
 			t.Fatalf("expected a terminal 'failed' state with a message on a transport error, got status=%q errMsg=%q", status, errMsg)
@@ -251,7 +251,7 @@ func TestUploadBlastRadiusReportPostsToArtifactChannel(t *testing.T) {
 	h := &blastScoringHandle{done: make(chan struct{}), report: report}
 	close(h.done)
 
-	uploadBlastRadiusReport(h, srv.URL, "test-api-key", "42", false)
+	uploadBlastRadiusReport(report, h, srv.URL, "test-api-key", "42", false)
 
 	wantPath := "/api/v1/diff-review/42/artifacts/blast-radius"
 	if gotPath != wantPath {
@@ -293,7 +293,7 @@ func TestUploadBlastRadiusReport_SurfacesScoringError(t *testing.T) {
 	h := &blastScoringHandle{done: make(chan struct{}), err: fmt.Errorf("graph engine not installed; run `lrc graph install`")}
 	close(h.done)
 
-	uploadBlastRadiusReport(h, "http://unused.invalid", "test-api-key", "42", false)
+	uploadBlastRadiusReport(nil, h, "http://unused.invalid", "test-api-key", "42", false)
 
 	status, errMsg, _, _ := blastUploadStateSnapshot()
 	if status != "failed" {
@@ -308,7 +308,7 @@ func TestUploadBlastRadiusReport_NilReportNoErrorKeepsGenericMessage(t *testing.
 	h := &blastScoringHandle{done: make(chan struct{})}
 	close(h.done)
 
-	uploadBlastRadiusReport(h, "http://unused.invalid", "test-api-key", "42", false)
+	uploadBlastRadiusReport(nil, h, "http://unused.invalid", "test-api-key", "42", false)
 
 	status, errMsg, _, _ := blastUploadStateSnapshot()
 	if status != "failed" {

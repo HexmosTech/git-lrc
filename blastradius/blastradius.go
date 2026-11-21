@@ -219,6 +219,14 @@ type SymbolContribution struct {
 	// undetected breakage risk is a reviewer-attention signal, not a
 	// blast-radius one.
 	TestCount int
+
+	// ImpactedRelatedRepos are cross-repo calls from this symbol into routes
+	// declared by a related repository (see crossrepo.go). Additive and
+	// populated after scoring, never by ScoreHunks itself.
+	ImpactedRelatedRepos []CrossRepoImpact `json:"ImpactedRelatedRepos,omitempty"`
+	// ImpactedRepoChains are multi-hop paths (A -> B -> C) reached from this
+	// symbol. Informational; the direct hop already carries the main bonus.
+	ImpactedRepoChains []CrossRepoChain `json:"ImpactedRepoChains,omitempty"`
 }
 
 // HunkReport is the computed score for one hunk, along both dimensions.
@@ -279,6 +287,13 @@ type HunkReport struct {
 	// other files (FILE_CHANGES_WITH) - exposed separately for transparency,
 	// see fileCouplingBonus.
 	FileCouplingBonus float64
+	// ImpactedRelatedRepos rolls up every Symbols[].ImpactedRelatedRepos entry
+	// for this hunk, rebuilt by Renormalize so the panel can render a
+	// hunk-level list without reading into Symbols itself.
+	ImpactedRelatedRepos []CrossRepoImpact `json:"ImpactedRelatedRepos,omitempty"`
+	// ImpactedRepoChains rolls up every Symbols[].ImpactedRepoChains entry,
+	// deduped by ChainSignature.
+	ImpactedRepoChains []CrossRepoChain `json:"ImpactedRepoChains,omitempty"`
 }
 
 // FileReport groups HunkReports for one file, in diff order.
@@ -304,6 +319,10 @@ type Report struct {
 	// reach them, descending - a coarse "which parts of the codebase does
 	// this change ripple into" view.
 	ImpactedPackages []PackageImpact
+	// CrossRepoDiagnostics records best-effort cross-repo enrichment problems
+	// (server unreachable, related index unavailable, ...). Diagnostic only;
+	// the UI ignores it.
+	CrossRepoDiagnostics []string `json:"CrossRepoDiagnostics,omitempty"`
 }
 
 // ScoreDiff parses raw unified-diff bytes and scores every hunk against the
@@ -926,9 +945,6 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 	hunkReportsByFile := make(map[string][]HunkReport)
 	packageHunkCount := make(map[string]int)
 	packageMaxBlastRadius := make(map[string]float64)
-	maxBlastRadius, maxReviewPriority := 0.0, 0.0
-	var maxBlastRadiusFile, maxBlastRadiusHeader string
-	var maxReviewPriorityFile, maxReviewPriorityHeader string
 	for _, p := range pending {
 		hr := HunkReport{
 			FilePath: p.hunk.FilePath,
@@ -991,37 +1007,19 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 				packageMaxBlastRadius[pkg] = hr.BlastRadiusRaw
 			}
 		}
-		if hr.BlastRadiusRaw > maxBlastRadius {
-			maxBlastRadiusFile, maxBlastRadiusHeader = hr.FilePath, hr.Header
-		}
-		maxBlastRadius = math.Max(maxBlastRadius, hr.BlastRadiusRaw)
-		if hr.ReviewPriorityRaw > maxReviewPriority {
-			maxReviewPriorityFile, maxReviewPriorityHeader = hr.FilePath, hr.Header
-		}
-		maxReviewPriority = math.Max(maxReviewPriority, hr.ReviewPriorityRaw)
 		hunkReportsByFile[p.hunk.FilePath] = append(hunkReportsByFile[p.hunk.FilePath], hr)
 	}
 
 	for _, path := range fileOrder {
 		hrs := hunkReportsByFile[path]
 		for i := range hrs {
-			hrs[i].MaxBlastRadiusRaw = maxBlastRadius
-			hrs[i].MaxBlastRadiusHunkFile = maxBlastRadiusFile
-			hrs[i].MaxBlastRadiusHunkHeader = maxBlastRadiusHeader
-			hrs[i].MaxReviewPriorityRaw = maxReviewPriority
-			hrs[i].MaxReviewPriorityHunkFile = maxReviewPriorityFile
-			hrs[i].MaxReviewPriorityHunkHeader = maxReviewPriorityHeader
 			hrs[i].Weights = weights
-			if maxBlastRadius > 0 {
-				hrs[i].BlastRadiusNorm = hrs[i].BlastRadiusRaw / maxBlastRadius * 100
-			}
-			if maxReviewPriority > 0 {
-				hrs[i].ReviewPriorityNorm = hrs[i].ReviewPriorityRaw / maxReviewPriority * 100
-			}
-			hrs[i].Combined = (weights.BlastRadius*hrs[i].BlastRadiusNorm + weights.ReviewPriority*hrs[i].ReviewPriorityNorm) * hrs[i].HygieneMultiplier
 		}
 		report.Files = append(report.Files, FileReport{Path: path, Hunks: hrs})
 	}
+	// Normalization lives in Renormalize so post-scoring cross-repo enrichment
+	// (see crossrepo.go) recomputes it with exactly the same rules.
+	Renormalize(report)
 
 	for pkg, count := range packageHunkCount {
 		report.ImpactedPackages = append(report.ImpactedPackages, PackageImpact{
