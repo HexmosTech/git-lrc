@@ -318,3 +318,18 @@ func TestUploadBlastRadiusReport_NilReportNoErrorKeepsGenericMessage(t *testing.
 		t.Fatalf("errMsg = %q, want the generic timeout message when h.err is nil", errMsg)
 	}
 }
+
+func TestFinalizeBlastRadiusReportSkipsWhenCrossRepoDisabled(t *testing.T) {
+	report := &blastradius.Report{Project: "demo"}
+	h := &blastScoringHandle{done: make(chan struct{}), report: report}
+	close(h.done)
+
+	got := finalizeBlastRadiusReport(h, "http://unused.invalid", "key", "42", "git@example.com:org/repo.git",
+		reviewopts.Options{CrossRepo: false}, false)
+	if got != report {
+		t.Fatalf("expected the baseline report, got %+v", got)
+	}
+	if status, _, _, _ := crossRepoStateSnapshot(); status != "skipped" {
+		t.Fatalf("cross-repo state = %q, want skipped", status)
+	}
+}
