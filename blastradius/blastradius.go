@@ -279,6 +279,15 @@ type HunkReport struct {
 	Weights Weights
 
 	Symbols []SymbolContribution
+	// SymbolCombine records how per-symbol contributions were rolled into
+	// BlastRadiusRaw/ReviewPriorityRaw:
+	//   - "sqrt" (current): sqrt(sum of symbol contributions) + hunk signals
+	//   - "linear" (reports before 2026-10-01, field absent): sum + hunk signals
+	// UIs that show the derivation need this to render the same arithmetic
+	// the generator actually used. Absent on historical artifacts, which
+	// infer the mode from their recorded raw score.
+	SymbolCombine string `json:"SymbolCombine,omitempty"`
+
 	// ImpactedPackages is the union of every touched symbol's
 	// ImpactedPackages, sorted.
 	ImpactedPackages []string
@@ -980,6 +989,7 @@ func ScoreHunks(ctx context.Context, project string, hunks []Hunk, opts ...Optio
 		// symbols.
 		hr.BlastRadiusRaw += math.Sqrt(symbolBlastRadiusSum)
 		hr.ReviewPriorityRaw += math.Sqrt(symbolReviewPrioritySum)
+		hr.SymbolCombine = "sqrt"
 		hr.FileCouplingBonus = fileCouplingWeight * couplingByFile[p.hunk.FilePath]
 		if hr.FileCouplingBonus > 0 {
 			hr.Signals = append(hr.Signals, Signal{

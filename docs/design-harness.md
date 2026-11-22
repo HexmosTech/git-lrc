@@ -53,6 +53,18 @@ Captured from a real `lrc review --range HEAD~8...HEAD` of the LiveReview reposi
 31 files, 207 hunks (all scored), 60 real AI comments, 45 hunks with per-symbol signal
 breakdowns. They are committed so the harness works from a fresh clone.
 
+Two self-contained replay sets sit beside the captured one:
+
+- `fixtures/crossrepo-latest/` — the real production review 14285: one
+  consumer-repo file with 3 cross-repo impacts, friendly repo names, and route
+  chips.
+- `fixtures/crossrepo/` — the same consumer shape plus a synthetic two-hop
+  chain for chain-UI coverage (the real diff produced no multi-hop chain).
+- `fixtures/review-11632-current/` — review 11632's diff re-scored by the
+  current saturating (`sqrt`) formula, for checking the Math Mode sqrt and
+  file-level signal steps. Its provenance and reproduction recipe are in
+  `blastradius/testdata/reviews/README.md`.
+
 To refresh them (note: this triggers a **real billed review** against the configured backend):
 
 ```bash

@@ -1,0 +1,1346 @@
+{
+  "generatedAt": "2026-11-21T19:30:00Z",
+  "report": {
+    "Project": "tmp-opencode-lrc-crossrepo-prod-consumer",
+    "GeneratedAt": "2026-11-21T19:29:35.576346122Z",
+    "Files": [
+      {
+        "Path": "src/module/e-kyc/service/e-kyc.service.ts",
+        "Hunks": [
+          {
+            "FilePath": "src/module/e-kyc/service/e-kyc.service.ts",
+            "Header": "@@ -97,6 +97,11 @@ export class EKycService {",
+            "NewStart": 97,
+            "NewLines": 11,
+            "Content": " \n   async updateEkycUserStatus(user: IUser) {\n     const docsRes = await this.getUserDocuments(user);\n+    // A user with no document rows has nothing to verify; previously this\n+    // fell through to marking them verified, which is the wrong default.\n+    if (!docsRes) {\n+      return;\n+    }\n     let newState = UserStateEnum.EkycVerified;\n     let ekycStatus = DocumentStatusEnum.VERIFIED;\n     for (const key in docsRes) {",
+            "Signals": null,
+            "BlastRadiusRaw": 3.202769664375765,
+            "BlastRadiusNorm": 30.526078490060854,
+            "MaxBlastRadiusRaw": 10.491913219113853,
+            "MaxBlastRadiusHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxBlastRadiusHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "ReviewPriorityRaw": 4.09878030638384,
+            "ReviewPriorityNorm": 85.09629433967632,
+            "MaxReviewPriorityRaw": 4.8166378315169185,
+            "MaxReviewPriorityHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxReviewPriorityHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "Combined": 52.354164829907035,
+            "HygieneMultiplier": 1,
+            "Weights": {
+              "BlastRadius": 0.6,
+              "ReviewPriority": 0.4
+            },
+            "Symbols": [
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService",
+                "Name": "EKycService",
+                "Label": "Class",
+                "Method": "text-references",
+                "Signals": [
+                  {
+                    "Name": "Text references",
+                    "Detail": "5 reference(s) to this name across the codebase",
+                    "Points": 2.23606797749979,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Method call-graph activity",
+                    "Detail": "this type's own methods have an aggregated caller reach of 2.95",
+                    "Points": 1.4735635140945713,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Interface implementation",
+                    "Detail": "implements no interfaces",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 3.709631491594361,
+                "ReviewPriorityRaw": 3,
+                "DirectCount": 5,
+                "TransitiveCount": 0,
+                "Callers": null,
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src"
+                ],
+                "MethodBlastRadius": 2.9471270281891426,
+                "IsEntryPoint": false,
+                "Complexity": 0,
+                "Cognitive": 0,
+                "LoopDepth": 0,
+                "OutDegree": 0,
+                "TestCount": 0
+              },
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.updateEkycUserStatus",
+                "Name": "updateEkycUserStatus",
+                "Label": "Method",
+                "Method": "calls",
+                "Signals": [
+                  {
+                    "Name": "Caller reach",
+                    "Detail": "4 direct + 4 transitive caller(s), up to 3 hops",
+                    "Points": 2.449489742783178,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "callers span 2 packages: src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1, src/module/e-kyc/service/e-kyc/service/EKycService",
+                    "Points": 1.0986122886681096,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Entry point",
+                    "Detail": "not a route handler, not flagged as an entry point",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Reached from 4 service entry point(s)",
+                    "Detail": "POST /e-kyc/face-match, POST /e-kyc/local-address-proof, POST /e-kyc/read-aadhaar, POST /e-kyc/read-dl",
+                    "Points": 3,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cyclomatic complexity",
+                    "Detail": "complexity score 4",
+                    "Points": 4,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Cognitive complexity",
+                    "Detail": "cognitive score 7",
+                    "Points": 3.5,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Nested loops",
+                    "Detail": "max loop nesting depth 1",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Fan-out",
+                    "Detail": "calls/uses 1 other symbols",
+                    "Points": 0.3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 6.548102031451288,
+                "ReviewPriorityRaw": 13.8,
+                "DirectCount": 4,
+                "TransitiveCount": 4,
+                "Callers": [
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.faceMatch",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  },
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.localAddressProof",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  },
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.readAadhaar",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  },
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.readDL",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  },
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.dlAadhaar",
+                    "Depth": 2,
+                    "Weight": 0.5,
+                    "Path": [
+                      "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.readDL"
+                    ],
+                    "PreRename": false
+                  },
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.faceMatch",
+                    "Depth": 2,
+                    "Weight": 0.5,
+                    "Path": [
+                      "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.faceMatch"
+                    ],
+                    "PreRename": false
+                  },
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.localAddressProof",
+                    "Depth": 2,
+                    "Weight": 0.5,
+                    "Path": [
+                      "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.localAddressProof"
+                    ],
+                    "PreRename": false
+                  },
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.readAadhaar",
+                    "Depth": 2,
+                    "Weight": 0.5,
+                    "Path": [
+                      "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.readAadhaar"
+                    ],
+                    "PreRename": false
+                  }
+                ],
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1",
+                  "src/module/e-kyc/service/e-kyc/service/EKycService"
+                ],
+                "MethodBlastRadius": 0,
+                "IsEntryPoint": false,
+                "Complexity": 4,
+                "Cognitive": 7,
+                "LoopDepth": 1,
+                "OutDegree": 1,
+                "TestCount": 0
+              }
+            ],
+            "ImpactedPackages": [
+              "src",
+              "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1",
+              "src/module/e-kyc/service/e-kyc/service/EKycService"
+            ],
+            "FileCouplingBonus": 0
+          },
+          {
+            "FilePath": "src/module/e-kyc/service/e-kyc.service.ts",
+            "Header": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "NewStart": 193,
+            "NewLines": 7,
+            "Content": "       const responseFront = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-aadhaar`,\n         formDataFront,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       aadhaarFrontRes = responseFront.data.data.result[0];\n     } catch (e) {",
+            "Signals": null,
+            "BlastRadiusRaw": 10.491913219113853,
+            "BlastRadiusNorm": 100,
+            "MaxBlastRadiusRaw": 10.491913219113853,
+            "MaxBlastRadiusHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxBlastRadiusHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "ReviewPriorityRaw": 4.8166378315169185,
+            "ReviewPriorityNorm": 100,
+            "MaxReviewPriorityRaw": 4.8166378315169185,
+            "MaxReviewPriorityHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxReviewPriorityHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "Combined": 100,
+            "HygieneMultiplier": 1,
+            "Weights": {
+              "BlastRadius": 0.6,
+              "ReviewPriority": 0.4
+            },
+            "Symbols": [
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService",
+                "Name": "EKycService",
+                "Label": "Class",
+                "Method": "text-references",
+                "Signals": [
+                  {
+                    "Name": "Text references",
+                    "Detail": "5 reference(s) to this name across the codebase",
+                    "Points": 2.23606797749979,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Method call-graph activity",
+                    "Detail": "this type's own methods have an aggregated caller reach of 2.95",
+                    "Points": 1.4735635140945713,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Interface implementation",
+                    "Detail": "implements no interfaces",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 3.709631491594361,
+                "ReviewPriorityRaw": 3,
+                "DirectCount": 5,
+                "TransitiveCount": 0,
+                "Callers": null,
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src"
+                ],
+                "MethodBlastRadius": 2.9471270281891426,
+                "IsEntryPoint": false,
+                "Complexity": 0,
+                "Cognitive": 0,
+                "LoopDepth": 0,
+                "OutDegree": 0,
+                "TestCount": 0
+              },
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.readAadhaar",
+                "Name": "readAadhaar",
+                "Label": "Method",
+                "Method": "calls",
+                "Signals": [
+                  {
+                    "Name": "Caller reach",
+                    "Detail": "1 direct + 0 transitive caller(s), up to 3 hops",
+                    "Points": 1,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "callers concentrated in 1 package(s), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Entry point",
+                    "Detail": "not a route handler, not flagged as an entry point",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Reached from 1 service entry point(s)",
+                    "Detail": "POST /e-kyc/read-aadhaar",
+                    "Points": 1.5,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cyclomatic complexity",
+                    "Detail": "complexity score 10",
+                    "Points": 10,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Cognitive complexity",
+                    "Detail": "cognitive score 12",
+                    "Points": 6,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Fan-out",
+                    "Detail": "calls/uses 4 other symbols",
+                    "Points": 1.2,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cross-repo impact",
+                    "Detail": "Calls into framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "Points": 8,
+                    "Category": "graph"
+                  }
+                ],
+                "BlastRadiusRaw": 10.5,
+                "ReviewPriorityRaw": 20.2,
+                "DirectCount": 1,
+                "TransitiveCount": 0,
+                "Callers": [
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.readAadhaar",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  }
+                ],
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+                ],
+                "MethodBlastRadius": 0,
+                "IsEntryPoint": false,
+                "Complexity": 10,
+                "Cognitive": 12,
+                "LoopDepth": 0,
+                "OutDegree": 4,
+                "TestCount": 0,
+                "ImpactedRelatedRepos": [
+                  {
+                    "RelatedRepo": "root-public_lr-lrdata-repo_cache-677-237-framework-examples__typescript__nestjs__blive-microservice-3-integration-repo",
+                    "RelatedRepoID": 2203,
+                    "RelatedRepoName": "framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "RelatedRepoWebURL": "https://git.apps.hexmos.com/framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "CallSite": "__route__POST__/v1/e-kyc/read-aadhaar",
+                    "EdgeType": "CROSS_HTTP_CALLS",
+                    "Confidence": 0.95,
+                    "MatchKind": "exact"
+                  }
+                ]
+              }
+            ],
+            "ImpactedPackages": [
+              "src",
+              "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+            ],
+            "FileCouplingBonus": 0,
+            "ImpactedRelatedRepos": [
+              {
+                "RelatedRepo": "root-public_lr-lrdata-repo_cache-677-237-framework-examples__typescript__nestjs__blive-microservice-3-integration-repo",
+                "RelatedRepoID": 2203,
+                "RelatedRepoName": "framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                "RelatedRepoWebURL": "https://git.apps.hexmos.com/framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                "CallSite": "__route__POST__/v1/e-kyc/read-aadhaar",
+                "EdgeType": "CROSS_HTTP_CALLS",
+                "Confidence": 0.95,
+                "MatchKind": "exact"
+              }
+            ]
+          },
+          {
+            "FilePath": "src/module/e-kyc/service/e-kyc.service.ts",
+            "Header": "@@ -204,7 +209,7 @@ export class EKycService {",
+            "NewStart": 209,
+            "NewLines": 7,
+            "Content": "       const responseBack = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-aadhaar`,\n         formDataBack,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       aadhaarBackRes = responseBack.data.data.result[0];\n     } catch (e) {",
+            "Signals": null,
+            "BlastRadiusRaw": 2.491913219113852,
+            "BlastRadiusNorm": 23.750798992257767,
+            "MaxBlastRadiusRaw": 10.491913219113853,
+            "MaxBlastRadiusHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxBlastRadiusHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "ReviewPriorityRaw": 4.8166378315169185,
+            "ReviewPriorityNorm": 100,
+            "MaxReviewPriorityRaw": 4.8166378315169185,
+            "MaxReviewPriorityHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxReviewPriorityHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "Combined": 54.25047939535466,
+            "HygieneMultiplier": 1,
+            "Weights": {
+              "BlastRadius": 0.6,
+              "ReviewPriority": 0.4
+            },
+            "Symbols": [
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService",
+                "Name": "EKycService",
+                "Label": "Class",
+                "Method": "text-references",
+                "Signals": [
+                  {
+                    "Name": "Text references",
+                    "Detail": "5 reference(s) to this name across the codebase",
+                    "Points": 2.23606797749979,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Method call-graph activity",
+                    "Detail": "this type's own methods have an aggregated caller reach of 2.95",
+                    "Points": 1.4735635140945713,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Interface implementation",
+                    "Detail": "implements no interfaces",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 3.709631491594361,
+                "ReviewPriorityRaw": 3,
+                "DirectCount": 5,
+                "TransitiveCount": 0,
+                "Callers": null,
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src"
+                ],
+                "MethodBlastRadius": 2.9471270281891426,
+                "IsEntryPoint": false,
+                "Complexity": 0,
+                "Cognitive": 0,
+                "LoopDepth": 0,
+                "OutDegree": 0,
+                "TestCount": 0
+              },
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.readAadhaar",
+                "Name": "readAadhaar",
+                "Label": "Method",
+                "Method": "calls",
+                "Signals": [
+                  {
+                    "Name": "Caller reach",
+                    "Detail": "1 direct + 0 transitive caller(s), up to 3 hops",
+                    "Points": 1,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "callers concentrated in 1 package(s), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Entry point",
+                    "Detail": "not a route handler, not flagged as an entry point",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Reached from 1 service entry point(s)",
+                    "Detail": "POST /e-kyc/read-aadhaar",
+                    "Points": 1.5,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cyclomatic complexity",
+                    "Detail": "complexity score 10",
+                    "Points": 10,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Cognitive complexity",
+                    "Detail": "cognitive score 12",
+                    "Points": 6,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Fan-out",
+                    "Detail": "calls/uses 4 other symbols",
+                    "Points": 1.2,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 2.5,
+                "ReviewPriorityRaw": 20.2,
+                "DirectCount": 1,
+                "TransitiveCount": 0,
+                "Callers": [
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.readAadhaar",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  }
+                ],
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+                ],
+                "MethodBlastRadius": 0,
+                "IsEntryPoint": false,
+                "Complexity": 10,
+                "Cognitive": 12,
+                "LoopDepth": 0,
+                "OutDegree": 4,
+                "TestCount": 0
+              }
+            ],
+            "ImpactedPackages": [
+              "src",
+              "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+            ],
+            "FileCouplingBonus": 0
+          },
+          {
+            "FilePath": "src/module/e-kyc/service/e-kyc.service.ts",
+            "Header": "@@ -340,7 +345,7 @@ export class EKycService {",
+            "NewStart": 345,
+            "NewLines": 7,
+            "Content": "       const responseFront = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-dl`,\n         formDataFront,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       dlFrontRes = responseFront.data.data.result[0];\n     } catch (e) {",
+            "Signals": null,
+            "BlastRadiusRaw": 10.491913219113853,
+            "BlastRadiusNorm": 100,
+            "MaxBlastRadiusRaw": 10.491913219113853,
+            "MaxBlastRadiusHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxBlastRadiusHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "ReviewPriorityRaw": 4.69041575982343,
+            "ReviewPriorityNorm": 97.37945687202027,
+            "MaxReviewPriorityRaw": 4.8166378315169185,
+            "MaxReviewPriorityHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxReviewPriorityHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "Combined": 98.95178274880811,
+            "HygieneMultiplier": 1,
+            "Weights": {
+              "BlastRadius": 0.6,
+              "ReviewPriority": 0.4
+            },
+            "Symbols": [
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService",
+                "Name": "EKycService",
+                "Label": "Class",
+                "Method": "text-references",
+                "Signals": [
+                  {
+                    "Name": "Text references",
+                    "Detail": "5 reference(s) to this name across the codebase",
+                    "Points": 2.23606797749979,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Method call-graph activity",
+                    "Detail": "this type's own methods have an aggregated caller reach of 2.95",
+                    "Points": 1.4735635140945713,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Interface implementation",
+                    "Detail": "implements no interfaces",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 3.709631491594361,
+                "ReviewPriorityRaw": 3,
+                "DirectCount": 5,
+                "TransitiveCount": 0,
+                "Callers": null,
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src"
+                ],
+                "MethodBlastRadius": 2.9471270281891426,
+                "IsEntryPoint": false,
+                "Complexity": 0,
+                "Cognitive": 0,
+                "LoopDepth": 0,
+                "OutDegree": 0,
+                "TestCount": 0
+              },
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.readDL",
+                "Name": "readDL",
+                "Label": "Method",
+                "Method": "calls",
+                "Signals": [
+                  {
+                    "Name": "Caller reach",
+                    "Detail": "1 direct + 0 transitive caller(s), up to 3 hops",
+                    "Points": 1,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "callers concentrated in 1 package(s), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Entry point",
+                    "Detail": "not a route handler, not flagged as an entry point",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Reached from 1 service entry point(s)",
+                    "Detail": "POST /e-kyc/read-dl",
+                    "Points": 1.5,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cyclomatic complexity",
+                    "Detail": "complexity score 9",
+                    "Points": 9,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Cognitive complexity",
+                    "Detail": "cognitive score 11",
+                    "Points": 5.5,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Fan-out",
+                    "Detail": "calls/uses 5 other symbols",
+                    "Points": 1.5,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cross-repo impact",
+                    "Detail": "Calls into framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "Points": 8,
+                    "Category": "graph"
+                  }
+                ],
+                "BlastRadiusRaw": 10.5,
+                "ReviewPriorityRaw": 19,
+                "DirectCount": 1,
+                "TransitiveCount": 0,
+                "Callers": [
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.dlAadhaar",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  }
+                ],
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+                ],
+                "MethodBlastRadius": 0,
+                "IsEntryPoint": false,
+                "Complexity": 9,
+                "Cognitive": 11,
+                "LoopDepth": 0,
+                "OutDegree": 5,
+                "TestCount": 0,
+                "ImpactedRelatedRepos": [
+                  {
+                    "RelatedRepo": "root-public_lr-lrdata-repo_cache-677-237-framework-examples__typescript__nestjs__blive-microservice-3-integration-repo",
+                    "RelatedRepoID": 2203,
+                    "RelatedRepoName": "framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "RelatedRepoWebURL": "https://git.apps.hexmos.com/framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "CallSite": "__route__POST__/v1/e-kyc/read-dl",
+                    "EdgeType": "CROSS_HTTP_CALLS",
+                    "Confidence": 0.95,
+                    "MatchKind": "exact"
+                  }
+                ]
+              }
+            ],
+            "ImpactedPackages": [
+              "src",
+              "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+            ],
+            "FileCouplingBonus": 0,
+            "ImpactedRelatedRepos": [
+              {
+                "RelatedRepo": "root-public_lr-lrdata-repo_cache-677-237-framework-examples__typescript__nestjs__blive-microservice-3-integration-repo",
+                "RelatedRepoID": 2203,
+                "RelatedRepoName": "framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                "RelatedRepoWebURL": "https://git.apps.hexmos.com/framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                "CallSite": "__route__POST__/v1/e-kyc/read-dl",
+                "EdgeType": "CROSS_HTTP_CALLS",
+                "Confidence": 0.95,
+                "MatchKind": "exact"
+              }
+            ]
+          },
+          {
+            "FilePath": "src/module/e-kyc/service/e-kyc.service.ts",
+            "Header": "@@ -356,7 +361,7 @@ export class EKycService {",
+            "NewStart": 361,
+            "NewLines": 7,
+            "Content": "       const responseBack = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-dl`,\n         formDataBack,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       dlBackRes = responseBack.data.data.result[0];\n     } catch (e) {",
+            "Signals": null,
+            "BlastRadiusRaw": 2.491913219113852,
+            "BlastRadiusNorm": 23.750798992257767,
+            "MaxBlastRadiusRaw": 10.491913219113853,
+            "MaxBlastRadiusHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxBlastRadiusHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "ReviewPriorityRaw": 4.69041575982343,
+            "ReviewPriorityNorm": 97.37945687202027,
+            "MaxReviewPriorityRaw": 4.8166378315169185,
+            "MaxReviewPriorityHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxReviewPriorityHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "Combined": 53.20226214416277,
+            "HygieneMultiplier": 1,
+            "Weights": {
+              "BlastRadius": 0.6,
+              "ReviewPriority": 0.4
+            },
+            "Symbols": [
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService",
+                "Name": "EKycService",
+                "Label": "Class",
+                "Method": "text-references",
+                "Signals": [
+                  {
+                    "Name": "Text references",
+                    "Detail": "5 reference(s) to this name across the codebase",
+                    "Points": 2.23606797749979,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Method call-graph activity",
+                    "Detail": "this type's own methods have an aggregated caller reach of 2.95",
+                    "Points": 1.4735635140945713,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Interface implementation",
+                    "Detail": "implements no interfaces",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 3.709631491594361,
+                "ReviewPriorityRaw": 3,
+                "DirectCount": 5,
+                "TransitiveCount": 0,
+                "Callers": null,
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src"
+                ],
+                "MethodBlastRadius": 2.9471270281891426,
+                "IsEntryPoint": false,
+                "Complexity": 0,
+                "Cognitive": 0,
+                "LoopDepth": 0,
+                "OutDegree": 0,
+                "TestCount": 0
+              },
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.readDL",
+                "Name": "readDL",
+                "Label": "Method",
+                "Method": "calls",
+                "Signals": [
+                  {
+                    "Name": "Caller reach",
+                    "Detail": "1 direct + 0 transitive caller(s), up to 3 hops",
+                    "Points": 1,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "callers concentrated in 1 package(s), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Entry point",
+                    "Detail": "not a route handler, not flagged as an entry point",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Reached from 1 service entry point(s)",
+                    "Detail": "POST /e-kyc/read-dl",
+                    "Points": 1.5,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cyclomatic complexity",
+                    "Detail": "complexity score 9",
+                    "Points": 9,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Cognitive complexity",
+                    "Detail": "cognitive score 11",
+                    "Points": 5.5,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Fan-out",
+                    "Detail": "calls/uses 5 other symbols",
+                    "Points": 1.5,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 2.5,
+                "ReviewPriorityRaw": 19,
+                "DirectCount": 1,
+                "TransitiveCount": 0,
+                "Callers": [
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.dlAadhaar",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  }
+                ],
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+                ],
+                "MethodBlastRadius": 0,
+                "IsEntryPoint": false,
+                "Complexity": 9,
+                "Cognitive": 11,
+                "LoopDepth": 0,
+                "OutDegree": 5,
+                "TestCount": 0
+              }
+            ],
+            "ImpactedPackages": [
+              "src",
+              "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+            ],
+            "FileCouplingBonus": 0
+          },
+          {
+            "FilePath": "src/module/e-kyc/service/e-kyc.service.ts",
+            "Header": "@@ -452,7 +457,7 @@ export class EKycService {",
+            "NewStart": 457,
+            "NewLines": 7,
+            "Content": "   //   const formData = new FormData();\n   //   const blob = new Blob([file.buffer], { type: file.mimetype });\n   //   formData.append('image', blob);\n-  //   const config: AxiosRequestConfig = { headers: this.formHeader };\n+  //   const config: AxiosRequestConfig = { headers: this.formHeader, timeout: 15_000 };\n   //   const body: ReadDL = {\n   //     userId: user.id,\n   //     type: DocumentTypeEnum.DRIVING_LICENSE,",
+            "Signals": [
+              {
+                "Name": "Comments only",
+                "Detail": "every changed line is a comment",
+                "Points": -0.85,
+                "Category": "diff-shape"
+              }
+            ],
+            "BlastRadiusRaw": 1.9260403660345131,
+            "BlastRadiusNorm": 18.357379877348876,
+            "MaxBlastRadiusRaw": 10.491913219113853,
+            "MaxBlastRadiusHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxBlastRadiusHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "ReviewPriorityRaw": 1.7320508075688772,
+            "ReviewPriorityNorm": 35.959747611403806,
+            "MaxReviewPriorityRaw": 4.8166378315169185,
+            "MaxReviewPriorityHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxReviewPriorityHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "Combined": 3.8097490456456273,
+            "HygieneMultiplier": 0.15,
+            "Weights": {
+              "BlastRadius": 0.6,
+              "ReviewPriority": 0.4
+            },
+            "Symbols": [
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService",
+                "Name": "EKycService",
+                "Label": "Class",
+                "Method": "text-references",
+                "Signals": [
+                  {
+                    "Name": "Text references",
+                    "Detail": "5 reference(s) to this name across the codebase",
+                    "Points": 2.23606797749979,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Method call-graph activity",
+                    "Detail": "this type's own methods have an aggregated caller reach of 2.95",
+                    "Points": 1.4735635140945713,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Interface implementation",
+                    "Detail": "implements no interfaces",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 3.709631491594361,
+                "ReviewPriorityRaw": 3,
+                "DirectCount": 5,
+                "TransitiveCount": 0,
+                "Callers": null,
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src"
+                ],
+                "MethodBlastRadius": 2.9471270281891426,
+                "IsEntryPoint": false,
+                "Complexity": 0,
+                "Cognitive": 0,
+                "LoopDepth": 0,
+                "OutDegree": 0,
+                "TestCount": 0
+              }
+            ],
+            "ImpactedPackages": [
+              "src"
+            ],
+            "FileCouplingBonus": 0
+          },
+          {
+            "FilePath": "src/module/e-kyc/service/e-kyc.service.ts",
+            "Header": "@@ -560,7 +565,7 @@ export class EKycService {",
+            "NewStart": 565,
+            "NewLines": 7,
+            "Content": "     formData.append('id', aadhaarBlob);\n     formData.append('selfie', selfieBlob);\n \n-    const config: AxiosRequestConfig = { headers: this.formHeader };\n+    const config: AxiosRequestConfig = { headers: this.formHeader, timeout: 15_000 };\n     const body: FaceMatch = {\n       userId: user.id,\n     };",
+            "Signals": null,
+            "BlastRadiusRaw": 10.491913219113853,
+            "BlastRadiusNorm": 100,
+            "MaxBlastRadiusRaw": 10.491913219113853,
+            "MaxBlastRadiusHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxBlastRadiusHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "ReviewPriorityRaw": 4.159326868617084,
+            "ReviewPriorityNorm": 86.35332391821484,
+            "MaxReviewPriorityRaw": 4.8166378315169185,
+            "MaxReviewPriorityHunkFile": "src/module/e-kyc/service/e-kyc.service.ts",
+            "MaxReviewPriorityHunkHeader": "@@ -188,7 +193,7 @@ export class EKycService {",
+            "Combined": 94.54132956728594,
+            "HygieneMultiplier": 1,
+            "Weights": {
+              "BlastRadius": 0.6,
+              "ReviewPriority": 0.4
+            },
+            "Symbols": [
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService",
+                "Name": "EKycService",
+                "Label": "Class",
+                "Method": "text-references",
+                "Signals": [
+                  {
+                    "Name": "Text references",
+                    "Detail": "5 reference(s) to this name across the codebase",
+                    "Points": 2.23606797749979,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Method call-graph activity",
+                    "Detail": "this type's own methods have an aggregated caller reach of 2.95",
+                    "Points": 1.4735635140945713,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Interface implementation",
+                    "Detail": "implements no interfaces",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  }
+                ],
+                "BlastRadiusRaw": 3.709631491594361,
+                "ReviewPriorityRaw": 3,
+                "DirectCount": 5,
+                "TransitiveCount": 0,
+                "Callers": null,
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src"
+                ],
+                "MethodBlastRadius": 2.9471270281891426,
+                "IsEntryPoint": false,
+                "Complexity": 0,
+                "Cognitive": 0,
+                "LoopDepth": 0,
+                "OutDegree": 0,
+                "TestCount": 0
+              },
+              {
+                "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.service.e-kyc.service.EKycService.faceMatch",
+                "Name": "faceMatch",
+                "Label": "Method",
+                "Method": "calls",
+                "Signals": [
+                  {
+                    "Name": "Caller reach",
+                    "Detail": "1 direct + 0 transitive caller(s), up to 3 hops",
+                    "Points": 1,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Cross-package impact",
+                    "Detail": "callers concentrated in 1 package(s), no cross-package spread",
+                    "Points": 0,
+                    "Category": "graph"
+                  },
+                  {
+                    "Name": "Entry point",
+                    "Detail": "not a route handler, not flagged as an entry point",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Reached from 1 service entry point(s)",
+                    "Detail": "POST /e-kyc/face-match",
+                    "Points": 1.5,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cyclomatic complexity",
+                    "Detail": "complexity score 6",
+                    "Points": 6,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Cognitive complexity",
+                    "Detail": "cognitive score 10",
+                    "Points": 5,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Fan-out",
+                    "Detail": "calls/uses 1 other symbols",
+                    "Points": 0.3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Test coverage",
+                    "Detail": "no direct test coverage",
+                    "Points": 3,
+                    "Category": "code-metrics"
+                  },
+                  {
+                    "Name": "Writes persistent data",
+                    "Detail": "does not mutate a database/persistent store directly",
+                    "Points": 0,
+                    "Category": "architecture"
+                  },
+                  {
+                    "Name": "Cross-repo impact",
+                    "Detail": "Calls into framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "Points": 8,
+                    "Category": "graph"
+                  }
+                ],
+                "BlastRadiusRaw": 10.5,
+                "ReviewPriorityRaw": 14.3,
+                "DirectCount": 1,
+                "TransitiveCount": 0,
+                "Callers": [
+                  {
+                    "QualifiedName": "tmp-opencode-lrc-crossrepo-prod-consumer.src.module.e-kyc.controller.v1.e-kyc.controller.EKycControllerV1.faceMatch",
+                    "Depth": 1,
+                    "Weight": 1,
+                    "Path": null,
+                    "PreRename": false
+                  }
+                ],
+                "RenamedFrom": "",
+                "ImpactedPackages": [
+                  "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+                ],
+                "MethodBlastRadius": 0,
+                "IsEntryPoint": false,
+                "Complexity": 6,
+                "Cognitive": 10,
+                "LoopDepth": 0,
+                "OutDegree": 1,
+                "TestCount": 0,
+                "ImpactedRelatedRepos": [
+                  {
+                    "RelatedRepo": "root-public_lr-lrdata-repo_cache-677-237-framework-examples__typescript__nestjs__blive-microservice-3-integration-repo",
+                    "RelatedRepoID": 2203,
+                    "RelatedRepoName": "framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "RelatedRepoWebURL": "https://git.apps.hexmos.com/framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                    "CallSite": "__route__POST__/v1/e-kyc/face-match",
+                    "EdgeType": "CROSS_HTTP_CALLS",
+                    "Confidence": 0.95,
+                    "MatchKind": "exact"
+                  }
+                ]
+              }
+            ],
+            "ImpactedPackages": [
+              "src",
+              "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1"
+            ],
+            "FileCouplingBonus": 0,
+            "ImpactedRelatedRepos": [
+              {
+                "RelatedRepo": "root-public_lr-lrdata-repo_cache-677-237-framework-examples__typescript__nestjs__blive-microservice-3-integration-repo",
+                "RelatedRepoID": 2203,
+                "RelatedRepoName": "framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                "RelatedRepoWebURL": "https://git.apps.hexmos.com/framework-examples/typescript/nestjs/blive-microservice-3-integration",
+                "CallSite": "__route__POST__/v1/e-kyc/face-match",
+                "EdgeType": "CROSS_HTTP_CALLS",
+                "Confidence": 0.95,
+                "MatchKind": "exact"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "ImpactedPackages": [
+      {
+        "Package": "src",
+        "HunkCount": 7,
+        "MaxBlastRadiusRaw": 3.202769664375765
+      },
+      {
+        "Package": "src/module/e-kyc/controller/v1/e-kyc/controller/EKycControllerV1",
+        "HunkCount": 6,
+        "MaxBlastRadiusRaw": 3.202769664375765
+      },
+      {
+        "Package": "src/module/e-kyc/service/e-kyc/service/EKycService",
+        "HunkCount": 1,
+        "MaxBlastRadiusRaw": 3.202769664375765
+      }
+    ]
+  },
+  "status": "ready"
+}

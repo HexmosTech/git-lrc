@@ -1,0 +1,198 @@
+{
+  "reviewID": "14285",
+  "friendlyName": "Wild Prism",
+  "generatedTime": "2026-11-21T19:29:36.118585Z",
+  "repositoryPath": "/repo/consumer",
+  "status": "completed",
+  "blocked": false,
+  "summary": "# Fix E-KYC Verification Status and Add API Timeouts\n\n## Overview\nThis change corrects E-KYC verification status updates. It also adds explicit timeouts to external E-KYC API calls. This improves system reliability and fault tolerance.\n\n## Technical Highlights\n- **src/module/e-kyc/service/e-kyc.service.ts**: Prevents incorrect user status updates for E-KYC verification.\n- **src/module/e-kyc/service/e-kyc.service.ts**: Adds 15-second timeouts to all external HTTP requests.\n\n## Impact\n- **Functionality**: E-KYC verification status is now accurate. External API calls fail gracefully instead of hanging.\n- **Risk**: New timeout errors may occur if external services are consistently slow.",
+  "files": [
+    {
+      "comments": [
+        {
+          "category": "Correctness",
+          "confidence": "High",
+          "content": "An early exit has been implemented for cases where no documents are present. This change prevents an incorrect `EkycVerified` status from being assigned.",
+          "line": 102,
+          "severity": "warning",
+          "subcategory": "Logic Errors",
+          "type": "Bug"
+        },
+        {
+          "category": "Maintainability",
+          "confidence": "Medium",
+          "content": "The timeout value here is hardcoded. Please consider replacing it with a named constant or moving it to a configuration file for better maintainability.",
+          "line": 196,
+          "severity": "info",
+          "subcategory": "Magic Numbers",
+          "type": "Code Smell"
+        },
+        {
+          "category": "Maintainability",
+          "confidence": "Medium",
+          "content": "The timeout value here is hardcoded. Please consider replacing it with a named constant or moving it to a configuration file for better maintainability.",
+          "line": 212,
+          "severity": "info",
+          "subcategory": "Magic Numbers",
+          "type": "Code Smell"
+        },
+        {
+          "category": "Maintainability",
+          "confidence": "Medium",
+          "content": "The timeout value here is hardcoded. Please consider replacing it with a named constant or moving it to a configuration file for better maintainability.",
+          "line": 348,
+          "severity": "info",
+          "subcategory": "Magic Numbers",
+          "type": "Code Smell"
+        },
+        {
+          "category": "Maintainability",
+          "confidence": "Medium",
+          "content": "The timeout value here is hardcoded. Please consider replacing it with a named constant or moving it to a configuration file for better maintainability.",
+          "line": 364,
+          "severity": "info",
+          "subcategory": "Magic Numbers",
+          "type": "Code Smell"
+        },
+        {
+          "category": "Maintainability",
+          "confidence": "Medium",
+          "content": "The timeout value here is hardcoded. Please consider replacing it with a named constant or moving it to a configuration file for better maintainability.",
+          "line": 460,
+          "severity": "info",
+          "subcategory": "Magic Numbers",
+          "type": "Code Smell"
+        },
+        {
+          "category": "Maintainability",
+          "confidence": "Medium",
+          "content": "The timeout value here is hardcoded. Please consider replacing it with a named constant or moving it to a configuration file for better maintainability.",
+          "line": 568,
+          "severity": "info",
+          "subcategory": "Magic Numbers",
+          "type": "Code Smell"
+        }
+      ],
+      "file_path": "src/module/e-kyc/service/e-kyc.service.ts",
+      "hunks": [
+        {
+          "content": "@@ -97,6 +97,11 @@ export class EKycService {\n \n   async updateEkycUserStatus(user: IUser) {\n     const docsRes = await this.getUserDocuments(user);\n+    // A user with no document rows has nothing to verify; previously this\n+    // fell through to marking them verified, which is the wrong default.\n+    if (!docsRes) {\n+      return;\n+    }\n     let newState = UserStateEnum.EkycVerified;\n     let ekycStatus = DocumentStatusEnum.VERIFIED;\n     for (const key in docsRes) {",
+          "new_line_count": 11,
+          "new_start_line": 97,
+          "old_line_count": 6,
+          "old_start_line": 97
+        },
+        {
+          "content": "@@ -188,7 +193,7 @@ export class EKycService {\n       const responseFront = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-aadhaar`,\n         formDataFront,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       aadhaarFrontRes = responseFront.data.data.result[0];\n     } catch (e) {",
+          "new_line_count": 7,
+          "new_start_line": 193,
+          "old_line_count": 7,
+          "old_start_line": 188
+        },
+        {
+          "content": "@@ -204,7 +209,7 @@ export class EKycService {\n       const responseBack = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-aadhaar`,\n         formDataBack,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       aadhaarBackRes = responseBack.data.data.result[0];\n     } catch (e) {",
+          "new_line_count": 7,
+          "new_start_line": 209,
+          "old_line_count": 7,
+          "old_start_line": 204
+        },
+        {
+          "content": "@@ -340,7 +345,7 @@ export class EKycService {\n       const responseFront = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-dl`,\n         formDataFront,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       dlFrontRes = responseFront.data.data.result[0];\n     } catch (e) {",
+          "new_line_count": 7,
+          "new_start_line": 345,
+          "old_line_count": 7,
+          "old_start_line": 340
+        },
+        {
+          "content": "@@ -356,7 +361,7 @@ export class EKycService {\n       const responseBack = await axios.post(\n         `${this.integrationBaseUrl}/v1/e-kyc/read-dl`,\n         formDataBack,\n-        { headers: this.formHeader },\n+        { headers: this.formHeader, timeout: 15_000 },\n       );\n       dlBackRes = responseBack.data.data.result[0];\n     } catch (e) {",
+          "new_line_count": 7,
+          "new_start_line": 361,
+          "old_line_count": 7,
+          "old_start_line": 356
+        },
+        {
+          "content": "@@ -452,7 +457,7 @@ export class EKycService {\n   //   const formData = new FormData();\n   //   const blob = new Blob([file.buffer], { type: file.mimetype });\n   //   formData.append('image', blob);\n-  //   const config: AxiosRequestConfig = { headers: this.formHeader };\n+  //   const config: AxiosRequestConfig = { headers: this.formHeader, timeout: 15_000 };\n   //   const body: ReadDL = {\n   //     userId: user.id,\n   //     type: DocumentTypeEnum.DRIVING_LICENSE,",
+          "new_line_count": 7,
+          "new_start_line": 457,
+          "old_line_count": 7,
+          "old_start_line": 452
+        },
+        {
+          "content": "@@ -560,7 +565,7 @@ export class EKycService {\n     formData.append('id', aadhaarBlob);\n     formData.append('selfie', selfieBlob);\n \n-    const config: AxiosRequestConfig = { headers: this.formHeader };\n+    const config: AxiosRequestConfig = { headers: this.formHeader, timeout: 15_000 };\n     const body: FaceMatch = {\n       userId: user.id,\n     };\n ",
+          "new_line_count": 7,
+          "new_start_line": 565,
+          "old_line_count": 7,
+          "old_start_line": 560
+        }
+      ]
+    }
+  ],
+  "quiz": [
+    {
+      "type": "core_objective",
+      "question": "What user experience does this change improve?",
+      "options": [
+        "E-KYC status shows correct data.",
+        "E-KYC process finishes faster.",
+        "New E-KYC document types are supported.",
+        "E-KYC user interface looks better."
+      ],
+      "correctIndex": 0,
+      "explanation": "Users see correct verification status."
+    },
+    {
+      "type": "blast_radius",
+      "question": "Which system is most affected by this change?",
+      "options": [
+        "User login system.",
+        "E-KYC document upload.",
+        "E-KYC status display.",
+        "Payment processing."
+      ],
+      "correctIndex": 2,
+      "explanation": "The change directly updates E-KYC status logic."
+    },
+    {
+      "type": "trade_off",
+      "question": "What trade-off did the timeout addition make?",
+      "options": [
+        "Improved stability for new error types.",
+        "Faster response for more memory use.",
+        "Simpler code for less logging.",
+        "Better security for slower calls."
+      ],
+      "correctIndex": 0,
+      "explanation": "Timeouts stop hangs but introduce timeout errors."
+    },
+    {
+      "type": "edge_case",
+      "question": "What happens if the E-KYC service is slow?",
+      "options": [
+        "The system waits forever.",
+        "The request fails with a timeout.",
+        "The request retries automatically.",
+        "The user is marked verified."
+      ],
+      "correctIndex": 1,
+      "explanation": "New timeouts prevent indefinite waiting."
+    },
+    {
+      "type": "reviewer_confidence",
+      "question": "What testing is most important before deployment?",
+      "options": [
+        "Run all unit tests.",
+        "Manually check E-KYC flow.",
+        "Perform load testing.",
+        "Review code style only."
+      ],
+      "correctIndex": 1,
+      "explanation": "The core change affects E-KYC functional behavior."
+    }
+  ],
+  "totalFiles": 1,
+  "totalComments": 7,
+  "interactive": false,
+  "isPostCommitReview": false,
+  "initialMsg": "",
+  "apiURL": "http://127.0.0.1:8132"
+}

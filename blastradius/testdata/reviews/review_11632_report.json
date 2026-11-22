@@ -1,0 +1,1080 @@
+{
+  "Project": "home-lovestaco-hex-lr-LiveReview",
+  "GeneratedAt": "2026-08-23T20:41:43.052303199+05:30",
+  "Files": [
+    {
+      "Path": "ui/src/pages/Chatbot/ChatConversation.tsx",
+      "Hunks": [
+        {
+          "FilePath": "ui/src/pages/Chatbot/ChatConversation.tsx",
+          "Header": "@@ -21,6 +21,8 @@ import {",
+          "NewStart": 21,
+          "NewLines": 8,
+          "Content": "   computeBandStats,\n   isCalendarHeatmap,\n   computeHeatmapStats,\n+  isSlopeGraph,\n+  computeSlopeStats,\n   Granularity,\n } from './rebucketChart';\n ",
+          "Signals": null,
+          "BlastRadiusRaw": 0,
+          "BlastRadiusNorm": 0,
+          "MaxBlastRadiusRaw": 30.702042046643918,
+          "MaxBlastRadiusHunkFile": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "MaxBlastRadiusHunkHeader": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "ReviewPriorityRaw": 0,
+          "ReviewPriorityNorm": 0,
+          "MaxReviewPriorityRaw": 69.7,
+          "MaxReviewPriorityHunkFile": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "MaxReviewPriorityHunkHeader": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "Combined": 0,
+          "HygieneMultiplier": 1,
+          "Weights": {
+            "BlastRadius": 0.6,
+            "ReviewPriority": 0.4
+          },
+          "Symbols": null,
+          "ImpactedPackages": [],
+          "FileCouplingBonus": 0
+        },
+        {
+          "FilePath": "ui/src/pages/Chatbot/ChatConversation.tsx",
+          "Header": "@@ -839,7 +841,12 @@ export const ChatConversation: React.FC<{ surface: ChatSurface }> = ({ surface }",
+          "NewStart": 841,
+          "NewLines": 12,
+          "Content": "                             const bandChart = !trendChart && isBandChart(chart.spec);\n                             const heatmapChart = !trendChart && !bandChart && isCalendarHeatmap(chart.spec);\n                             const heatmapStats = heatmapChart ? computeHeatmapStats(chart.spec) : null;\n-                            const categoryStats = !trendChart && !bandChart && isCategoricalChart(chart.spec) ? computeCategoryStats(chart.spec) : null;\n+                            const slopeChart = !trendChart && !bandChart && !heatmapChart && isSlopeGraph(chart.spec);\n+                            const slopeStats = slopeChart ? computeSlopeStats(chart.spec) : null;\n+                            const categoryStats =\n+                              !trendChart && !bandChart && !slopeChart && isCategoricalChart(chart.spec)\n+                                ? computeCategoryStats(chart.spec)\n+                                : null;\n                             const bandStats = bandChart ? computeBandStats(chart.spec) : null;\n                             return (\n                             <div key={chart.title || i} className=\"space-y-3\">",
+          "Signals": null,
+          "BlastRadiusRaw": 6.980266605821071,
+          "BlastRadiusNorm": 22.735512495280727,
+          "MaxBlastRadiusRaw": 30.702042046643918,
+          "MaxBlastRadiusHunkFile": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "MaxBlastRadiusHunkHeader": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "ReviewPriorityRaw": 38.1,
+          "ReviewPriorityNorm": 54.66284074605452,
+          "MaxReviewPriorityRaw": 69.7,
+          "MaxReviewPriorityHunkFile": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "MaxReviewPriorityHunkHeader": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "Combined": 35.50644379559024,
+          "HygieneMultiplier": 1,
+          "Weights": {
+            "BlastRadius": 0.6,
+            "ReviewPriority": 0.4
+          },
+          "Symbols": [
+            {
+              "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+              "Name": "ChatConversation",
+              "Label": "Function",
+              "Method": "calls",
+              "Signals": [
+                {
+                  "Name": "Caller reach",
+                  "Detail": "2 direct + 4 transitive caller(s), up to 3 hops",
+                  "Points": 1.8708286933869707,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Cross-package impact",
+                  "Detail": "callers span 4 packages: ui/src/pages/Chatbot/ChatDebugPage, ui/src/pages/Chatbot/ChatDebugRoutes, ui/src/pages/Chatbot/Chatbot, ui/src/pages/Chatbot/ChatbotRoutes",
+                  "Points": 1.6094379124341003,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Entry point",
+                  "Detail": "directly reachable from outside the codebase (e.g. CLI/main)",
+                  "Points": 2,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Cyclomatic complexity",
+                  "Detail": "complexity score 15",
+                  "Points": 15,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Cognitive complexity",
+                  "Detail": "cognitive score 24",
+                  "Points": 12,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Fan-out",
+                  "Detail": "calls/uses 27 other symbols",
+                  "Points": 8.1,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Test coverage",
+                  "Detail": "no direct test coverage",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Writes persistent data",
+                  "Detail": "mutates a database/persistent store directly",
+                  "Points": 1.5,
+                  "Category": "architecture"
+                }
+              ],
+              "BlastRadiusRaw": 6.980266605821071,
+              "ReviewPriorityRaw": 38.1,
+              "DirectCount": 2,
+              "TransitiveCount": 4,
+              "Callers": [
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugForRoute",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotForRoute",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugRoutes",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugForRoute"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotRoutes",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotForRoute"
+                  ],
+                  "PreRename": false
+                }
+              ],
+              "RenamedFrom": "",
+              "ImpactedPackages": [
+                "ui/src/pages/Chatbot/ChatDebugPage",
+                "ui/src/pages/Chatbot/ChatDebugRoutes",
+                "ui/src/pages/Chatbot/Chatbot",
+                "ui/src/pages/Chatbot/ChatbotRoutes"
+              ],
+              "MethodBlastRadius": 0,
+              "IsEntryPoint": true,
+              "Complexity": 15,
+              "Cognitive": 24,
+              "LoopDepth": 0,
+              "OutDegree": 27,
+              "TestCount": 0
+            }
+          ],
+          "ImpactedPackages": [
+            "ui/src/pages/Chatbot/ChatDebugPage",
+            "ui/src/pages/Chatbot/ChatDebugRoutes",
+            "ui/src/pages/Chatbot/Chatbot",
+            "ui/src/pages/Chatbot/ChatbotRoutes"
+          ],
+          "FileCouplingBonus": 0
+        },
+        {
+          "FilePath": "ui/src/pages/Chatbot/ChatConversation.tsx",
+          "Header": "@@ -906,6 +913,23 @@ export const ChatConversation: React.FC<{ surface: ChatSurface }> = ({ surface }",
+          "NewStart": 913,
+          "NewLines": 23,
+          "Content": "                                   <StatChip label=\"Largest band's share\" value={`${bandStats.largestSharePct}%`} />\n                                 </div>\n                               )}\n+                              {slopeStats && (\n+                                <div className=\"grid grid-cols-2 sm:grid-cols-3 gap-2\">\n+                                  <StatChip label=\"Entities\" value={String(slopeStats.entityCount)} />\n+                                  <StatChip\n+                                    label=\"Gained / Lost / Flat\"\n+                                    value={`${slopeStats.gained} / ${slopeStats.lost} / ${slopeStats.flat}`}\n+                                  />\n+                                  <StatChip\n+                                    label=\"Biggest gain\"\n+                                    value={`${slopeStats.biggestGain.label} (+${slopeStats.biggestGain.delta.toLocaleString()})`}\n+                                  />\n+                                  <StatChip\n+                                    label=\"Biggest loss\"\n+                                    value={`${slopeStats.biggestLoss.label} (${slopeStats.biggestLoss.delta.toLocaleString()})`}\n+                                  />\n+                                </div>\n+                              )}\n                               {heatmapStats && (\n                                 <div className=\"grid grid-cols-2 sm:grid-cols-3 gap-2\">\n                                   <StatChip label=\"Total\" value={heatmapStats.total.toLocaleString()} />",
+          "Signals": null,
+          "BlastRadiusRaw": 6.980266605821071,
+          "BlastRadiusNorm": 22.735512495280727,
+          "MaxBlastRadiusRaw": 30.702042046643918,
+          "MaxBlastRadiusHunkFile": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "MaxBlastRadiusHunkHeader": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "ReviewPriorityRaw": 38.1,
+          "ReviewPriorityNorm": 54.66284074605452,
+          "MaxReviewPriorityRaw": 69.7,
+          "MaxReviewPriorityHunkFile": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "MaxReviewPriorityHunkHeader": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "Combined": 35.50644379559024,
+          "HygieneMultiplier": 1,
+          "Weights": {
+            "BlastRadius": 0.6,
+            "ReviewPriority": 0.4
+          },
+          "Symbols": [
+            {
+              "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+              "Name": "ChatConversation",
+              "Label": "Function",
+              "Method": "calls",
+              "Signals": [
+                {
+                  "Name": "Caller reach",
+                  "Detail": "2 direct + 4 transitive caller(s), up to 3 hops",
+                  "Points": 1.8708286933869707,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Cross-package impact",
+                  "Detail": "callers span 4 packages: ui/src/pages/Chatbot/ChatDebugPage, ui/src/pages/Chatbot/ChatDebugRoutes, ui/src/pages/Chatbot/Chatbot, ui/src/pages/Chatbot/ChatbotRoutes",
+                  "Points": 1.6094379124341003,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Entry point",
+                  "Detail": "directly reachable from outside the codebase (e.g. CLI/main)",
+                  "Points": 2,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Cyclomatic complexity",
+                  "Detail": "complexity score 15",
+                  "Points": 15,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Cognitive complexity",
+                  "Detail": "cognitive score 24",
+                  "Points": 12,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Fan-out",
+                  "Detail": "calls/uses 27 other symbols",
+                  "Points": 8.1,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Test coverage",
+                  "Detail": "no direct test coverage",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Writes persistent data",
+                  "Detail": "mutates a database/persistent store directly",
+                  "Points": 1.5,
+                  "Category": "architecture"
+                }
+              ],
+              "BlastRadiusRaw": 6.980266605821071,
+              "ReviewPriorityRaw": 38.1,
+              "DirectCount": 2,
+              "TransitiveCount": 4,
+              "Callers": [
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugForRoute",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotForRoute",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugRoutes",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugForRoute"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotRoutes",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotForRoute"
+                  ],
+                  "PreRename": false
+                }
+              ],
+              "RenamedFrom": "",
+              "ImpactedPackages": [
+                "ui/src/pages/Chatbot/ChatDebugPage",
+                "ui/src/pages/Chatbot/ChatDebugRoutes",
+                "ui/src/pages/Chatbot/Chatbot",
+                "ui/src/pages/Chatbot/ChatbotRoutes"
+              ],
+              "MethodBlastRadius": 0,
+              "IsEntryPoint": true,
+              "Complexity": 15,
+              "Cognitive": 24,
+              "LoopDepth": 0,
+              "OutDegree": 27,
+              "TestCount": 0
+            }
+          ],
+          "ImpactedPackages": [
+            "ui/src/pages/Chatbot/ChatDebugPage",
+            "ui/src/pages/Chatbot/ChatDebugRoutes",
+            "ui/src/pages/Chatbot/Chatbot",
+            "ui/src/pages/Chatbot/ChatbotRoutes"
+          ],
+          "FileCouplingBonus": 0
+        }
+      ]
+    },
+    {
+      "Path": "ui/src/pages/Chatbot/rebucketChart.ts",
+      "Hunks": [
+        {
+          "FilePath": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "Header": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "NewStart": 557,
+          "NewLines": 96,
+          "Content": "     busiest: { date: String(busiest[parts.dateField]), value: Number(busiest[parts.colorField]) || 0 },\n   };\n }\n+\n+interface SlopeEncodingParts {\n+  periodField: string;\n+  valField: string;\n+  entityField: string;\n+  periodOrder?: string[];\n+}\n+\n+// Detects a `slope_graph` chart (chart_types.json): x is two nominal period\n+// labels (not per-entity categories - every entity shares the same two x\n+// values), the real per-entity identity lives in the `detail` channel, and\n+// each entity contributes two rows (one per period) rather than one. None of\n+// the other detectors' assumptions hold here (isCategoricalChart would\n+// wrongly sum every entity's value together per period), so this needs its\n+// own before/after comparison per entity.\n+function getSlopeEncoding(spec: Record<string, unknown>): SlopeEncodingParts | null {\n+  if (!spec || 'layer' in spec || 'facet' in spec || 'hconcat' in spec || 'vconcat' in spec) return null;\n+  const enc = getEncoding(spec);\n+  if (!enc) return null;\n+  const x = enc.x as { field?: string; type?: string; sort?: unknown } | undefined;\n+  const y = enc.y as { field?: string; type?: string } | undefined;\n+  const detail = enc.detail as { field?: string } | undefined;\n+  if (!x?.field || (x.type !== 'nominal' && x.type !== 'ordinal')) return null;\n+  if (!y?.field || y.type !== 'quantitative') return null;\n+  if (!detail?.field) return null;\n+  const periodOrder = Array.isArray(x.sort) ? (x.sort as unknown[]).map(String) : undefined;\n+  return { periodField: x.field, valField: y.field, entityField: detail.field, periodOrder };\n+}\n+\n+export function isSlopeGraph(spec: Record<string, unknown>): boolean {\n+  if (!getSlopeEncoding(spec)) return false;\n+  const values = (spec as any).data?.values;\n+  return Array.isArray(values) && values.length > 0;\n+}\n+\n+export interface SlopeStats {\n+  entityCount: number;\n+  gained: number;\n+  lost: number;\n+  flat: number;\n+  biggestGain: { label: string; delta: number };\n+  biggestLoss: { label: string; delta: number };\n+}\n+\n+export function computeSlopeStats(spec: Record<string, unknown>): SlopeStats | null {\n+  const parts = getSlopeEncoding(spec);\n+  if (!parts) return null;\n+  const values = (spec as any).data?.values as Array<Record<string, unknown>> | undefined;\n+  if (!Array.isArray(values) || values.length === 0) return null;\n+\n+  const byEntity = new Map<string, Map<string, number>>();\n+  const seenPeriods: string[] = [];\n+  for (const row of values) {\n+    const entity = String(row[parts.entityField]);\n+    const period = String(row[parts.periodField]);\n+    const val = Number(row[parts.valField]) || 0;\n+    if (!seenPeriods.includes(period)) seenPeriods.push(period);\n+    if (!byEntity.has(entity)) byEntity.set(entity, new Map());\n+    byEntity.get(entity)!.set(period, val);\n+  }\n+  const order = parts.periodOrder && parts.periodOrder.length >= 2 ? parts.periodOrder : seenPeriods;\n+  if (order.length < 2) return null;\n+  const [before, after] = order;\n+\n+  let gained = 0;\n+  let lost = 0;\n+  let flat = 0;\n+  let biggestGain: { label: string; delta: number } | null = null;\n+  let biggestLoss: { label: string; delta: number } | null = null;\n+  let entityCount = 0;\n+  for (const [entity, periods] of byEntity) {\n+    const beforeVal = periods.get(before);\n+    const afterVal = periods.get(after);\n+    if (beforeVal === undefined || afterVal === undefined) continue;\n+    entityCount++;\n+    const delta = afterVal - beforeVal;\n+    if (delta > 0) gained++;\n+    else if (delta < 0) lost++;\n+    else flat++;\n+    if (!biggestGain || delta > biggestGain.delta) biggestGain = { label: entity, delta };\n+    if (!biggestLoss || delta < biggestLoss.delta) biggestLoss = { label: entity, delta };\n+  }\n+  if (entityCount === 0 || !biggestGain || !biggestLoss) return null;\n+\n+  return {\n+    entityCount,\n+    gained,\n+    lost,\n+    flat,\n+    biggestGain: { label: biggestGain.label, delta: Math.round(biggestGain.delta * 100) / 100 },\n+    biggestLoss: { label: biggestLoss.label, delta: Math.round(biggestLoss.delta * 100) / 100 },\n+  };\n+}",
+          "Signals": [
+            {
+              "Name": "File co-change coupling",
+              "Detail": "this file has historically changed alongside other files not otherwise touched here",
+              "Points": 0.25980762113533157,
+              "Category": "graph"
+            }
+          ],
+          "BlastRadiusRaw": 30.702042046643918,
+          "BlastRadiusNorm": 100,
+          "MaxBlastRadiusRaw": 30.702042046643918,
+          "MaxBlastRadiusHunkFile": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "MaxBlastRadiusHunkHeader": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "ReviewPriorityRaw": 69.7,
+          "ReviewPriorityNorm": 100,
+          "MaxReviewPriorityRaw": 69.7,
+          "MaxReviewPriorityHunkFile": "ui/src/pages/Chatbot/rebucketChart.ts",
+          "MaxReviewPriorityHunkHeader": "@@ -557,3 +557,96 @@ export function computeHeatmapStats(spec: Record<string, unknown>): HeatmapStats",
+          "Combined": 100,
+          "HygieneMultiplier": 1,
+          "Weights": {
+            "BlastRadius": 0.6,
+            "ReviewPriority": 0.4
+          },
+          "Symbols": [
+            {
+              "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.SlopeEncodingParts",
+              "Name": "SlopeEncodingParts",
+              "Label": "Interface",
+              "Method": "text-references",
+              "Signals": [
+                {
+                  "Name": "Text references",
+                  "Detail": "1 reference(s) to this name across the codebase",
+                  "Points": 1,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Cross-package impact",
+                  "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                  "Points": 0,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Interface definition",
+                  "Detail": "no known implementers",
+                  "Points": 0,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Test coverage",
+                  "Detail": "no direct test coverage",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Writes persistent data",
+                  "Detail": "does not mutate a database/persistent store directly",
+                  "Points": 0,
+                  "Category": "architecture"
+                }
+              ],
+              "BlastRadiusRaw": 1,
+              "ReviewPriorityRaw": 3,
+              "DirectCount": 1,
+              "TransitiveCount": 0,
+              "Callers": null,
+              "RenamedFrom": "",
+              "ImpactedPackages": [
+                "ui"
+              ],
+              "MethodBlastRadius": 0,
+              "IsEntryPoint": false,
+              "Complexity": 0,
+              "Cognitive": 0,
+              "LoopDepth": 0,
+              "OutDegree": 0,
+              "TestCount": 0
+            },
+            {
+              "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.SlopeStats",
+              "Name": "SlopeStats",
+              "Label": "Interface",
+              "Method": "text-references",
+              "Signals": [
+                {
+                  "Name": "Text references",
+                  "Detail": "3 reference(s) to this name across the codebase",
+                  "Points": 1.7320508075688772,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Cross-package impact",
+                  "Detail": "references concentrated in 1 directory(ies), no cross-package spread",
+                  "Points": 0,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Interface definition",
+                  "Detail": "no known implementers",
+                  "Points": 0,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Test coverage",
+                  "Detail": "no direct test coverage",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Writes persistent data",
+                  "Detail": "does not mutate a database/persistent store directly",
+                  "Points": 0,
+                  "Category": "architecture"
+                }
+              ],
+              "BlastRadiusRaw": 1.7320508075688772,
+              "ReviewPriorityRaw": 3,
+              "DirectCount": 3,
+              "TransitiveCount": 0,
+              "Callers": null,
+              "RenamedFrom": "",
+              "ImpactedPackages": [
+                "ui"
+              ],
+              "MethodBlastRadius": 0,
+              "IsEntryPoint": false,
+              "Complexity": 0,
+              "Cognitive": 0,
+              "LoopDepth": 0,
+              "OutDegree": 0,
+              "TestCount": 0
+            },
+            {
+              "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.computeHeatmapStats",
+              "Name": "computeHeatmapStats",
+              "Label": "Function",
+              "Method": "calls",
+              "Signals": [
+                {
+                  "Name": "Caller reach",
+                  "Detail": "1 direct + 4 transitive caller(s), up to 3 hops",
+                  "Points": 1.5811388300841898,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Cross-package impact",
+                  "Detail": "callers span 5 packages: ui/src/pages/Chatbot/ChatConversation, ui/src/pages/Chatbot/ChatDebugPage, ui/src/pages/Chatbot/ChatDebugRoutes, ui/src/pages/Chatbot/Chatbot, ui/src/pages/Chatbot/ChatbotRoutes",
+                  "Points": 1.791759469228055,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Entry point",
+                  "Detail": "directly reachable from outside the codebase (e.g. CLI/main)",
+                  "Points": 2,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Reached from 1 service entry point(s)",
+                  "Detail": "ChatConversation",
+                  "Points": 1.5,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Cyclomatic complexity",
+                  "Detail": "complexity score 6",
+                  "Points": 6,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Cognitive complexity",
+                  "Detail": "cognitive score 8",
+                  "Points": 4,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Nested loops",
+                  "Detail": "max loop nesting depth 1",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Fan-out",
+                  "Detail": "calls/uses 1 other symbols",
+                  "Points": 0.3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Test coverage",
+                  "Detail": "no direct test coverage",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Writes persistent data",
+                  "Detail": "does not mutate a database/persistent store directly",
+                  "Points": 0,
+                  "Category": "architecture"
+                }
+              ],
+              "BlastRadiusRaw": 6.8728982993122445,
+              "ReviewPriorityRaw": 16.3,
+              "DirectCount": 1,
+              "TransitiveCount": 4,
+              "Callers": [
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugForRoute",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotForRoute",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot"
+                  ],
+                  "PreRename": false
+                }
+              ],
+              "RenamedFrom": "",
+              "ImpactedPackages": [
+                "ui/src/pages/Chatbot/ChatConversation",
+                "ui/src/pages/Chatbot/ChatDebugPage",
+                "ui/src/pages/Chatbot/ChatDebugRoutes",
+                "ui/src/pages/Chatbot/Chatbot",
+                "ui/src/pages/Chatbot/ChatbotRoutes"
+              ],
+              "MethodBlastRadius": 0,
+              "IsEntryPoint": true,
+              "Complexity": 6,
+              "Cognitive": 8,
+              "LoopDepth": 1,
+              "OutDegree": 1,
+              "TestCount": 0
+            },
+            {
+              "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.computeSlopeStats",
+              "Name": "computeSlopeStats",
+              "Label": "Function",
+              "Method": "calls",
+              "Signals": [
+                {
+                  "Name": "Caller reach",
+                  "Detail": "1 direct + 4 transitive caller(s), up to 3 hops",
+                  "Points": 1.5811388300841898,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Cross-package impact",
+                  "Detail": "callers span 5 packages: ui/src/pages/Chatbot/ChatConversation, ui/src/pages/Chatbot/ChatDebugPage, ui/src/pages/Chatbot/ChatDebugRoutes, ui/src/pages/Chatbot/Chatbot, ui/src/pages/Chatbot/ChatbotRoutes",
+                  "Points": 1.791759469228055,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Entry point",
+                  "Detail": "directly reachable from outside the codebase (e.g. CLI/main)",
+                  "Points": 2,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Reached from 1 service entry point(s)",
+                  "Detail": "ChatConversation",
+                  "Points": 1.5,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Cyclomatic complexity",
+                  "Detail": "complexity score 13",
+                  "Points": 13,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Cognitive complexity",
+                  "Detail": "cognitive score 21",
+                  "Points": 10.5,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Nested loops",
+                  "Detail": "max loop nesting depth 1",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Fan-out",
+                  "Detail": "calls/uses 1 other symbols",
+                  "Points": 0.3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Test coverage",
+                  "Detail": "no direct test coverage",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Writes persistent data",
+                  "Detail": "does not mutate a database/persistent store directly",
+                  "Points": 0,
+                  "Category": "architecture"
+                }
+              ],
+              "BlastRadiusRaw": 6.8728982993122445,
+              "ReviewPriorityRaw": 29.8,
+              "DirectCount": 1,
+              "TransitiveCount": 4,
+              "Callers": [
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugForRoute",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotForRoute",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot"
+                  ],
+                  "PreRename": false
+                }
+              ],
+              "RenamedFrom": "",
+              "ImpactedPackages": [
+                "ui/src/pages/Chatbot/ChatConversation",
+                "ui/src/pages/Chatbot/ChatDebugPage",
+                "ui/src/pages/Chatbot/ChatDebugRoutes",
+                "ui/src/pages/Chatbot/Chatbot",
+                "ui/src/pages/Chatbot/ChatbotRoutes"
+              ],
+              "MethodBlastRadius": 0,
+              "IsEntryPoint": true,
+              "Complexity": 13,
+              "Cognitive": 21,
+              "LoopDepth": 1,
+              "OutDegree": 1,
+              "TestCount": 0
+            },
+            {
+              "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.getSlopeEncoding",
+              "Name": "getSlopeEncoding",
+              "Label": "Function",
+              "Method": "calls",
+              "Signals": [
+                {
+                  "Name": "Caller reach",
+                  "Detail": "2 direct + 3 transitive caller(s), up to 3 hops",
+                  "Points": 1.7320508075688772,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Cross-package impact",
+                  "Detail": "callers span 4 packages: ui/src/pages/Chatbot/ChatConversation, ui/src/pages/Chatbot/ChatDebugPage, ui/src/pages/Chatbot/Chatbot, ui/src/pages/Chatbot/rebucketChart",
+                  "Points": 1.6094379124341003,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Entry point",
+                  "Detail": "not a route handler, not flagged as an entry point",
+                  "Points": 0,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Reached from 3 service entry point(s)",
+                  "Detail": "ChatConversation, computeSlopeStats, isSlopeGraph",
+                  "Points": 3.75,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Cyclomatic complexity",
+                  "Detail": "complexity score 5",
+                  "Points": 5,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Cognitive complexity",
+                  "Detail": "cognitive score 5",
+                  "Points": 2.5,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Fan-out",
+                  "Detail": "calls/uses 1 other symbols",
+                  "Points": 0.3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Test coverage",
+                  "Detail": "no direct test coverage",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Writes persistent data",
+                  "Detail": "does not mutate a database/persistent store directly",
+                  "Points": 0,
+                  "Category": "architecture"
+                }
+              ],
+              "BlastRadiusRaw": 7.091488720002977,
+              "ReviewPriorityRaw": 10.8,
+              "DirectCount": 2,
+              "TransitiveCount": 3,
+              "Callers": [
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.computeSlopeStats",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.isSlopeGraph",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.isSlopeGraph"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.isSlopeGraph",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.isSlopeGraph",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation"
+                  ],
+                  "PreRename": false
+                }
+              ],
+              "RenamedFrom": "",
+              "ImpactedPackages": [
+                "ui/src/pages/Chatbot/ChatConversation",
+                "ui/src/pages/Chatbot/ChatDebugPage",
+                "ui/src/pages/Chatbot/Chatbot",
+                "ui/src/pages/Chatbot/rebucketChart"
+              ],
+              "MethodBlastRadius": 0,
+              "IsEntryPoint": false,
+              "Complexity": 5,
+              "Cognitive": 5,
+              "LoopDepth": 0,
+              "OutDegree": 1,
+              "TestCount": 0
+            },
+            {
+              "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.rebucketChart.isSlopeGraph",
+              "Name": "isSlopeGraph",
+              "Label": "Function",
+              "Method": "calls",
+              "Signals": [
+                {
+                  "Name": "Caller reach",
+                  "Detail": "1 direct + 4 transitive caller(s), up to 3 hops",
+                  "Points": 1.5811388300841898,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Cross-package impact",
+                  "Detail": "callers span 5 packages: ui/src/pages/Chatbot/ChatConversation, ui/src/pages/Chatbot/ChatDebugPage, ui/src/pages/Chatbot/ChatDebugRoutes, ui/src/pages/Chatbot/Chatbot, ui/src/pages/Chatbot/ChatbotRoutes",
+                  "Points": 1.791759469228055,
+                  "Category": "graph"
+                },
+                {
+                  "Name": "Entry point",
+                  "Detail": "directly reachable from outside the codebase (e.g. CLI/main)",
+                  "Points": 2,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Reached from 1 service entry point(s)",
+                  "Detail": "ChatConversation",
+                  "Points": 1.5,
+                  "Category": "architecture"
+                },
+                {
+                  "Name": "Cyclomatic complexity",
+                  "Detail": "complexity score 1",
+                  "Points": 1,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Cognitive complexity",
+                  "Detail": "cognitive score 1",
+                  "Points": 0.5,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Fan-out",
+                  "Detail": "calls/uses 1 other symbols",
+                  "Points": 0.3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Test coverage",
+                  "Detail": "no direct test coverage",
+                  "Points": 3,
+                  "Category": "code-metrics"
+                },
+                {
+                  "Name": "Similar implementation exists elsewhere",
+                  "Detail": "100% similar to isCalendarHeatmap (same file)",
+                  "Points": 2,
+                  "Category": "duplication"
+                },
+                {
+                  "Name": "Writes persistent data",
+                  "Detail": "does not mutate a database/persistent store directly",
+                  "Points": 0,
+                  "Category": "architecture"
+                }
+              ],
+              "BlastRadiusRaw": 6.8728982993122445,
+              "ReviewPriorityRaw": 6.8,
+              "DirectCount": 1,
+              "TransitiveCount": 4,
+              "Callers": [
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                  "Depth": 1,
+                  "Weight": 1,
+                  "Path": null,
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot",
+                  "Depth": 2,
+                  "Weight": 0.5,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugRoutes.ChatDebugForRoute",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatDebugPage.ChatDebugPage"
+                  ],
+                  "PreRename": false
+                },
+                {
+                  "QualifiedName": "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatbotRoutes.ChatbotForRoute",
+                  "Depth": 3,
+                  "Weight": 0.25,
+                  "Path": [
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.ChatConversation.ChatConversation",
+                    "home-lovestaco-hex-lr-LiveReview.ui.src.pages.Chatbot.Chatbot.Chatbot"
+                  ],
+                  "PreRename": false
+                }
+              ],
+              "RenamedFrom": "",
+              "ImpactedPackages": [
+                "ui/src/pages/Chatbot/ChatConversation",
+                "ui/src/pages/Chatbot/ChatDebugPage",
+                "ui/src/pages/Chatbot/ChatDebugRoutes",
+                "ui/src/pages/Chatbot/Chatbot",
+                "ui/src/pages/Chatbot/ChatbotRoutes"
+              ],
+              "MethodBlastRadius": 0,
+              "IsEntryPoint": true,
+              "Complexity": 1,
+              "Cognitive": 1,
+              "LoopDepth": 0,
+              "OutDegree": 1,
+              "TestCount": 0
+            }
+          ],
+          "ImpactedPackages": [
+            "ui",
+            "ui/src/pages/Chatbot/ChatConversation",
+            "ui/src/pages/Chatbot/ChatDebugPage",
+            "ui/src/pages/Chatbot/ChatDebugRoutes",
+            "ui/src/pages/Chatbot/Chatbot",
+            "ui/src/pages/Chatbot/ChatbotRoutes",
+            "ui/src/pages/Chatbot/rebucketChart"
+          ],
+          "FileCouplingBonus": 0.25980762113533157
+        }
+      ]
+    }
+  ],
+  "ImpactedPackages": [
+    {
+      "Package": "ui/src/pages/Chatbot/ChatbotRoutes",
+      "HunkCount": 3,
+      "MaxBlastRadiusRaw": 30.702042046643918
+    },
+    {
+      "Package": "ui/src/pages/Chatbot/ChatDebugPage",
+      "HunkCount": 3,
+      "MaxBlastRadiusRaw": 30.702042046643918
+    },
+    {
+      "Package": "ui/src/pages/Chatbot/ChatDebugRoutes",
+      "HunkCount": 3,
+      "MaxBlastRadiusRaw": 30.702042046643918
+    },
+    {
+      "Package": "ui/src/pages/Chatbot/Chatbot",
+      "HunkCount": 3,
+      "MaxBlastRadiusRaw": 30.702042046643918
+    },
+    {
+      "Package": "ui",
+      "HunkCount": 1,
+      "MaxBlastRadiusRaw": 30.702042046643918
+    },
+    {
+      "Package": "ui/src/pages/Chatbot/ChatConversation",
+      "HunkCount": 1,
+      "MaxBlastRadiusRaw": 30.702042046643918
+    },
+    {
+      "Package": "ui/src/pages/Chatbot/rebucketChart",
+      "HunkCount": 1,
+      "MaxBlastRadiusRaw": 30.702042046643918
+    }
+  ]
+}

@@ -24,13 +24,29 @@ served from disk, no rebuild.
 | `blastradius.json` | `GET /api/blastradius` of the same review | risk sort, score badges, signal panels, risk nav |
 | `usage-chip.json` | `GET /api/runtime/usage-chip` (best-effort) | usage banner |
 
-`fixtures/crossrepo/` is a second, self-contained pair captured from a real
-consumer-repo review with cross-repo impacts (friendly repository names,
-visible route chips, and a two-hop chain). Use it to iterate on the related-repo
-cards without running a review:
+`fixtures/crossrepo-latest/` is the real production review 14285 (one
+consumer-repo file, 7 hunks, 7 comments, 3 cross-repo impacts). Use it to see
+the same related-repo cards, friendly names, and visible route chips the hosted
+UI shows, without running a review:
 
 ```bash
-./uidev -fixtures tools/uidev/fixtures/crossrepo -port 8132
+./uidev -fixtures tools/uidev/fixtures/crossrepo-latest -port 8132
+```
+
+`fixtures/crossrepo/` is the same shape but includes a **synthetic** two-hop
+chain for exercising the chain UI; real reviews on this diff did not produce a
+multi-hop chain. Use it only when iterating on `ChainList`:
+
+```bash
+./uidev -fixtures tools/uidev/fixtures/crossrepo -port 8134
+```
+
+`fixtures/review-11632-current/` replays review 11632's diff with the current
+saturating (`sqrt`) scoring formula, so the Math Mode sqrt and file-level
+signal steps can be inspected without running a review:
+
+```bash
+./uidev -fixtures tools/uidev/fixtures/review-11632-current -port 8133
 ```
 
 They were captured from a real `lrc review --range HEAD~8...HEAD` run in the

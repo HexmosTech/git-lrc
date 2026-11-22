@@ -11,6 +11,7 @@
 import { waitForPreact } from './utils.js';
 import { renderIcon } from './icons.js';
 import { blastRadiusTier, allSignals, SEVERITY_WEIGHT, blendRiskScore } from './blast_radius_sort_state.mjs';
+import { BLAST_CATEGORIES, PRIORITY_CATEGORIES, buildMathMode } from './blast_math_model.mjs';
 import { callerGroupLabel, groupCallers } from './callgraph_model.mjs';
 import { crossRepoRouteLabel, findRepoMentions, groupRelatedRepos, relatedRepoDisplayName } from './crossrepo_model.mjs';
 import { getSunburstChart } from './SunburstChart.js';
@@ -115,13 +116,6 @@ function groupSignalsBySymbol(signals) {
     return { ungrouped, groups };
 }
 
-// Mirrors blastRadiusCategories/reviewPriorityCategories in blastradius.go:
-// every Signal's Category maps to exactly one of these two dimensions,
-// except "diff-shape" (hygiene) signals, which are informational/dampening
-// only and feed neither raw score - see splitSignalsByDimension.
-const BLAST_CATEGORIES = new Set(['architecture', 'graph']);
-const PRIORITY_CATEGORIES = new Set(['duplication', 'code-metrics']);
-
 // splitSignalsByDimension groups a flat signal list the same way the Go
 // backend sums them into BlastRadiusRaw/ReviewPriorityRaw, so the UI's
 // grouping can never drift from the actual math - see sumSignalPoints in
@@ -137,19 +131,6 @@ function splitSignalsByDimension(signals) {
         else other.push(s);
     });
     return { blast, priority, other };
-}
-
-// sumExpression spells a list of numbers out as a literal "1.8 + 1.4 - 0.9"
-// arithmetic expression (Math Mode's whole point: never just assert a total,
-// always show the addition that produces it) plus the total itself.
-function sumExpression(nums) {
-    if (!nums || nums.length === 0) return { text: '0', total: 0 };
-    const total = nums.reduce((a, b) => a + b, 0);
-    const text = nums.reduce((acc, n, i) => {
-        if (i === 0) return n.toFixed(1);
-        return `${acc} ${n >= 0 ? '+' : '-'} ${Math.abs(n).toFixed(1)}`;
-    }, '');
-    return { text, total };
 }
 
 export async function createBlastRadiusPanel() {
@@ -648,64 +629,81 @@ export async function createBlastRadiusPanel() {
         return (path || '').split('/').pop() || path;
     }
 
-    function renderMathDimension(startStep, title, symbolLines, hunkSignals, raw, max, norm, maxSource, self) {
-        const perSymbol = symbolLines.map((l) => ({ name: l.name, ...sumExpression(l.signals.map((s) => s.Points || 0)) }));
-        const hunkExpr = hunkSignals.length > 0 ? sumExpression(hunkSignals.map((s) => s.Points || 0)) : null;
-        const subtotalNums = [...perSymbol.map((l) => l.total), ...(hunkExpr ? [hunkExpr.total] : [])];
-        const hasMultipleParts = subtotalNums.length > 1;
-        const totalExpr = sumExpression(subtotalNums);
-
-        let n = startStep;
-        const stepAdd = n++;
-        const stepSum = hasMultipleParts ? n++ : null;
-        const stepScale = n++;
-
-        // isSelf: this very hunk is the one that set the max - "divided by
-        // itself" needs saying explicitly, since otherwise it looks like an
-        // unexplained external reference the same way the plain number did.
-        const isSelf = self && maxSource.file === self.file && maxSource.header === self.header;
-
+    function renderMathDimension(d) {
+        const { perSymbol, hunkExpression, mode } = d;
         const node = html`
             <div class="math-section">
-                <div class="math-section-title">${title}</div>
+                <div class="math-section-title">${d.title}</div>
                 <div class="math-step">
-                    <div class="math-step-label">Step ${stepAdd} — add up each symbol's own signals</div>
-                    ${perSymbol.length === 0 && !hunkExpr && html`<div class="math-step-line dim">No signals fired for this dimension.</div>`}
+                    <div class="math-step-label">Step ${d.stepAdd} — add up each symbol's own signals</div>
+                    ${perSymbol.length === 0 && !hunkExpression && html`<div class="math-step-line dim">No signals fired for this dimension.</div>`}
                     ${perSymbol.map((l, i) => html`
                         <div key=${i} class="math-step-line">
                             <code class="math-step-subject">${l.name}</code>: ${l.text} = <strong>${l.total.toFixed(1)}</strong>
                         </div>
                     `)}
-                    ${hunkExpr && html`
+                    ${mode === 'linear' && hunkExpression && html`
                         <div class="math-step-line">
-                            <span class="math-step-subject">This hunk (file-level signals)</span>: ${hunkExpr.text} = <strong>${hunkExpr.total.toFixed(1)}</strong>
+                            <span class="math-step-subject">This hunk (file-level signals)</span>: ${hunkExpression.text} = <strong>${hunkExpression.total.toFixed(1)}</strong>
                         </div>
                     `}
                 </div>
-                ${stepSum !== null && html`
+                ${d.stepSum > 0 && html`
                     <div class="math-step">
-                        <div class="math-step-label">Step ${stepSum} — add every subtotal together</div>
-                        <div class="math-step-line">${totalExpr.text} = <strong>${totalExpr.total.toFixed(1)}</strong></div>
+                        <div class="math-step-label">Step ${d.stepSum} — add every subtotal together</div>
+                        <div class="math-step-line">${d.sumExpression.text} = <strong>${d.sumExpression.total.toFixed(1)}</strong></div>
+                    </div>
+                `}
+                ${d.stepCombine > 0 && html`
+                    <div class="math-step">
+                        <div class="math-step-label">Step ${d.stepCombine} — saturating combine (sqrt of the summed symbols)</div>
+                        <div class="math-step-line">
+                            √(${d.symbolSubtotal.toFixed(1)}) = <strong>${d.combinedSymbols.toFixed(1)}</strong>
+                        </div>
+                        <div class="math-step-line dim">
+                            Dampens "many low-risk symbols changed" without changing any single symbol's own signals.
+                        </div>
+                    </div>
+                `}
+                ${d.stepHunk > 0 && html`
+                    <div class="math-step">
+                        <div class="math-step-label">Step ${d.stepHunk} — add this hunk's file-level signals</div>
+                        <div class="math-step-line">
+                            ${d.combinedSymbols.toFixed(1)} + ${d.hunkSubtotal.toFixed(1)} = <strong>${d.total.toFixed(1)}</strong>
+                        </div>
+                    </div>
+                `}
+                ${d.stepAdjust > 0 && html`
+                    <div class="math-step">
+                        <div class="math-step-label">Step ${d.stepAdjust} — apply post-scoring adjustments</div>
+                        <div class="math-step-line">
+                            ${d.total.toFixed(1)} ${d.artifactDelta >= 0 ? '+' : '-'} ${Math.abs(d.artifactDelta).toFixed(1)} = <strong>${d.raw.toFixed(1)}</strong>
+                        </div>
+                        <div class="math-step-line dim">
+                            Cross-repo bonuses and their roll-up effects are applied after the structural total.
+                        </div>
                     </div>
                 `}
                 <div class="math-step">
-                    <div class="math-step-label">Step ${stepScale} — scale against the highest-scoring hunk in this diff</div>
+                    <div class="math-step-label">Step ${d.stepScale} — scale against the highest-scoring hunk in this diff</div>
                     <div class="math-step-line">
-                        ${max
-                            ? html`${(raw || 0).toFixed(1)} ÷ ${max.toFixed(1)} × 100 = <strong>${(norm || 0).toFixed(1)}</strong>`
+                        ${d.max
+                            ? html`${(d.raw || 0).toFixed(1)} ÷ ${d.max.toFixed(1)} × 100 = <strong>${(d.norm || 0).toFixed(1)}</strong>`
                             : html`no hunk in this diff scored above 0 for this dimension, so this is <strong>0</strong>`}
                     </div>
-                    ${max > 0 && html`
+                    ${d.max > 0 && html`
                         <div class="math-step-line dim">
-                            ${isSelf
-                                ? `${max.toFixed(1)} is this very hunk's own score - it's the highest for this dimension anywhere in this diff.`
-                                : `${max.toFixed(1)} is the highest score for this dimension anywhere in this diff, from ${maxSource.file ? fileBaseName(maxSource.file) : 'another hunk'}${maxSource.header ? ` (${maxSource.header})` : ''}.`}
+                            ${d.maxInferred
+                                ? `${d.max.toFixed(1)} is the highest score for this dimension in this diff, recovered from the recorded 0-100 rank.`
+                                : d.isSelf
+                                    ? `${d.max.toFixed(1)} is this very hunk's own score - it's the highest for this dimension anywhere in this diff.`
+                                    : `${d.max.toFixed(1)} is the highest score for this dimension anywhere in this diff, from ${d.maxSource.file ? fileBaseName(d.maxSource.file) : 'another hunk'}${d.maxSource.header ? ` (${d.maxSource.header})` : ''}.`}
                         </div>
                     `}
                 </div>
             </div>
         `;
-        return { node, nextStep: n };
+        return node;
     }
 
     // MathModeView is the "show your work" alternative to the dimension
@@ -713,57 +711,28 @@ export async function createBlastRadiusPanel() {
     // through to the final Combined score, numbered and labeled, so the
     // score can be checked by hand rather than trusted as a rollup.
     function MathModeView({ detail }) {
-        const symbols = detail.Symbols || [];
-        const weights = detail.Weights && typeof detail.Weights.BlastRadius === 'number'
-            ? detail.Weights
-            : { BlastRadius: 0.6, ReviewPriority: 0.4 };
-
-        function dimensionInputs(categories) {
-            const symbolLines = symbols
-                .map((sym) => ({
-                    name: sym.Name || shortName(sym.QualifiedName),
-                    signals: (sym.Signals || []).filter((s) => categories.has(s.Category)),
-                }))
-                .filter((l) => l.signals.length > 0);
-            const hunkSigs = (detail.Signals || []).filter((s) => categories.has(s.Category));
-            return { symbolLines, hunkSigs };
-        }
-
-        const blastNorm = detail.BlastRadiusNorm || 0;
-        const priorityNorm = detail.ReviewPriorityNorm || 0;
-        const blastInputs = dimensionInputs(BLAST_CATEGORIES);
-        const priorityInputs = dimensionInputs(PRIORITY_CATEGORIES);
-        // self identifies *this* hunk so renderMathDimension can tell "the
-        // highest score is this very hunk" apart from "it's some other hunk
-        // over there" - see HunkReport.MaxBlastRadiusHunkFile/Header in
-        // blastradius.go, which track exactly which hunk set each max.
-        const self = { file: detail.FilePath, header: detail.Header };
-
-        const { node: blastNode, nextStep: afterBlast } = renderMathDimension(
-            1, 'Blast Radius', blastInputs.symbolLines, blastInputs.hunkSigs,
-            detail.BlastRadiusRaw, detail.MaxBlastRadiusRaw, blastNorm,
-            { file: detail.MaxBlastRadiusHunkFile, header: detail.MaxBlastRadiusHunkHeader }, self,
-        );
-        const { node: priorityNode, nextStep: afterPriority } = renderMathDimension(
-            afterBlast, 'Review Priority', priorityInputs.symbolLines, priorityInputs.hunkSigs,
-            detail.ReviewPriorityRaw, detail.MaxReviewPriorityRaw, priorityNorm,
-            { file: detail.MaxReviewPriorityHunkFile, header: detail.MaxReviewPriorityHunkHeader }, self,
-        );
-
-        const hygiene = typeof detail.HygieneMultiplier === 'number' ? detail.HygieneMultiplier : 1.0;
-        const blastShare = weights.BlastRadius * blastNorm;
-        const priorityShare = weights.ReviewPriority * priorityNorm;
-        const blended = blastShare + priorityShare;
-        const structural = blended * hygiene; // == detail.Combined (the pre-severity score)
-        const severityScore = typeof detail.FindingSeverity === 'number' ? detail.FindingSeverity : 0;
-        const severityLabel = detail.FindingSeverityLabel || null;
-        const severityCounts = detail.FindingSeverityCounts || { critical: 0, warning: 0, info: 0 };
-        const severityShare = SEVERITY_WEIGHT * severityScore;
-        const final = blendRiskScore(structural, severityScore);
-        const stepBlend = afterPriority;
-        const stepHygiene = afterPriority + 1;
-        const stepSeverity = afterPriority + 2;
-        const stepFinalBlend = afterPriority + 3;
+        const mm = buildMathMode(detail);
+        const {
+            blast,
+            priority,
+            weights,
+            blastShare,
+            priorityShare,
+            blended,
+            hygieneMultiplier: hygiene,
+            structural,
+            severityScore,
+            severityLabel,
+            severityCounts,
+            severityShare,
+            final,
+            stepBlend,
+            stepHygiene,
+            stepSeverity,
+            stepFinalBlend,
+        } = mm;
+        const blastNode = renderMathDimension(blast);
+        const priorityNode = renderMathDimension(priority);
 
         const sevParts = [];
         if (severityCounts.critical > 0) sevParts.push(`${severityCounts.critical} critical`);
@@ -782,7 +751,7 @@ export async function createBlastRadiusPanel() {
                     <div class="math-step">
                         <div class="math-step-label">Step ${stepBlend} — blend Blast Radius and Review Priority</div>
                         <div class="math-step-line">
-                            (${weights.BlastRadius.toFixed(2)} × ${blastNorm.toFixed(1)}) + (${weights.ReviewPriority.toFixed(2)} × ${priorityNorm.toFixed(1)})
+                            (${weights.BlastRadius.toFixed(2)} × ${blast.norm.toFixed(1)}) + (${weights.ReviewPriority.toFixed(2)} × ${priority.norm.toFixed(1)})
                             = ${blastShare.toFixed(1)} + ${priorityShare.toFixed(1)} = <strong>${blended.toFixed(1)}</strong>
                         </div>
                     </div>
