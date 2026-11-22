@@ -39,6 +39,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | ReviewSubmit | api | Base64 diff review payload, review metadata | Submit review request to LiveReview endpoint | High | Confidentiality and integrity risk for source diff payload in transit | Compensated by authenticated API path and bounded endpoint model; residual risk acceptable with TLS assumptions | [network/review_operations.go](review_operations.go#L6) |
 | ReviewPoll | api | Review status payload and comments | Poll asynchronous review completion | High | Availability risk from polling loop and timeout behavior | Compensated by timeout-bound polling with cancellation support; residual risk acceptable | [network/review_operations.go](review_operations.go#L16) |
 | ReviewTrackCLIUsage | api | Telemetry event payload | Best-effort CLI usage tracking | Low | Low impact telemetry data transmission risk | Compensated by best-effort non-blocking behavior; acceptable risk | [network/review_operations.go](review_operations.go#L11) |
+| ReviewCrossRepoMatches | api | Touched symbols' outbound HTTP call sites (route, method, handler) | Ask LiveReview to match local outbound calls against routes declared by the review's related repositories | Medium | Related-repo topology and route metadata exposure risk | Compensated by read-only, org-scoped endpoint, bounded request, and best-effort failure handling; residual risk acceptable | [network/review_operations.go](review_operations.go#L32) |
 
 ## Inventory: Setup, Auth, And Connector APIs
 
@@ -60,8 +61,8 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 
 | Operation | Mode | Data Handled | Purpose | Severity | Risk Acknowledgement | Compensation Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ReviewProxyRequest | api | Generic forwarded payloads with API key auth | Proxy events/webhook-style calls to configured endpoint | Medium | Medium abuse risk due to forwarding flexibility | Partially compensated by API key auth; Suggestion: document allowed method/path policy for deployments | [network/review_operations.go](review_operations.go#L42) |
-| ReviewForwardJSONWithBearer | api | JSON body, bearer token, org context | Forward authenticated JSON requests across setup flows | Medium | Medium risk from header/context propagation mistakes | Compensated by explicit bearer plus org-context request construction; acceptable risk | [network/review_operations.go](review_operations.go#L48) |
+| ReviewProxyRequest | api | Generic forwarded payloads with API key auth | Proxy events/webhook-style calls to configured endpoint | Medium | Medium abuse risk due to forwarding flexibility | Partially compensated by API key auth; Suggestion: document allowed method/path policy for deployments | [network/review_operations.go](review_operations.go#L50) |
+| ReviewForwardJSONWithBearer | api | JSON body, bearer token, org context | Forward authenticated JSON requests across setup flows | Medium | Medium risk from header/context propagation mistakes | Compensated by explicit bearer plus org-context request construction; acceptable risk | [network/review_operations.go](review_operations.go#L56) |
 
 ## Inventory: Self-Update Network Operations
 
@@ -84,7 +85,7 @@ This document tracks network-side operations in git-lrc as an auditable inventor
 | SetupUIConfigURL | api | Base URL | Build UI config URL | Low | Low risk | Compensated by public endpoint utility; acceptable risk | [network/endpoints.go](endpoints.go#L25) |
 | SetupAuthSetupStatusURL | api | Base URL plus endpoint normalization inputs | Build self-hosted setup-status endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L29) |
 | SetupAuthSetupURL | api | Base URL plus endpoint normalization inputs | Build self-hosted initial-admin setup endpoint URL | Medium | Medium risk if normalization logic diverges from endpoint assumptions | Compensated by centralized URL builder utility; acceptable risk | [network/endpoints.go](endpoints.go#L33) |
-| PollReview | api | Review IDs, status payloads, timeout state | Timeout-bounded polling orchestration in review runtime | High | High availability/latency risk if review service is degraded | Compensated by bounded timeout and interval controls; residual risk acceptable | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L226) |
+| PollReview | api | Review IDs, status payloads, timeout state | Timeout-bounded polling orchestration in review runtime | High | High availability/latency risk if review service is degraded | Compensated by bounded timeout and interval controls; residual risk acceptable | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L251) |
 | formatJSONParseError | api | Response body text for parse diagnostics | Improve operator diagnostics when endpoint/port mismatches occur | Low | Low risk diagnostic utility behavior | Compensated by safer error interpretation path; acceptable risk | [internal/reviewapi/helpers.go](../internal/reviewapi/helpers.go#L144) |
 
 ## Control Signals For Security Review
