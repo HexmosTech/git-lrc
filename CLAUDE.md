@@ -3,15 +3,41 @@
 This is the canonical, verified sequence for cutting a release. All commands
 run from the repo root via the top-level `Makefile`.
 
+## Release sequencing is mandatory
+
+Scanning and releasing are two separate phases, and they are serialized. This
+rule is not advisory: never scan and release at the same time, and never cut a
+release that contains an unresolved scanner finding.
+
+1. **Finish every scanner before starting any release work.** Run one scanner
+   at a time, each to completion, with CPU/memory caps on constrained
+   machines. Do not start `make bump`, a tag, a binary upload, or a release
+   note while a scan is still running.
+2. **A red scan blocks the release.** Fix the finding, or record an explicit
+   documented false-positive triage, before any release step.
+3. **One repository at a time.** Complete git-lrc's scan-then-release cycle
+   before starting LiveReview's (or vice versa). The two repositories must
+   never be scanned or released in parallel from the same session.
+4. **One release at a time.** Only after that repository's scanners have all
+   finished green: bump, tag, upload binaries, then publish release notes.
+
+If a scanner is running, the only correct next action is to wait for its
+result.
+
 ## Prerequisites
 
 - **Local security scanners pass, run before cutting the release, not
   discovered after.** CI re-runs these on push, but by release time the
   tag and uploaded binaries are already the artifact that ships - catch a
-  real finding before that, not after:
+  real finding before that, not after. Follow "Release sequencing is
+  mandatory" above: one scanner at a time, all of them finished, before any
+  release step:
   - `make security-govulncheck` (Go stdlib/dependency CVEs)
   - `make security-osv` (requires `osv-scanner` installed locally)
   - `make security-gitleaks` (requires `gitleaks` installed locally)
+  - semgrep static analysis (the repo has no make target; CI runs
+    `semgrep ci`, so locally run `semgrep scan --config auto --jobs 1` over
+    the changed paths and report the coverage)
   A real finding blocks the release until fixed or explicitly triaged as a
   false positive. A finding caused by the *scanner's own infra* (e.g. a
   rate-limited GitHub API call resolving "latest" for the scanner itself,

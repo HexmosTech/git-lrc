@@ -60,3 +60,19 @@ fire-and-forget from the CLI, using the same API key + `review_id` already obtai
 the initial review submission (`internal/reviewapi/helpers.go`). Never let an artifact
 upload failure affect the review itself — log and move on, matching how blast-radius
 scoring already treats its own failures as non-fatal.
+
+
+# Rule 5: Never scan and release at the same time
+
+Scanning and releasing are separate, serialized phases, in this repo and in LiveReview.
+
+- Run one scanner at a time, each to completion, before starting any release work. No
+  `make bump`, tag, binary upload, or release-note edit while a scan is still running.
+- A real scanner finding blocks the release until it is fixed or explicitly triaged as a
+  documented false positive.
+- Finish one repository's scan-then-release cycle before starting the other repository's.
+  Never scan or release both repos in parallel.
+- One release at a time: bump, tag, upload binaries, then publish notes.
+
+If a scanner is running, the only correct next action is to wait for its result.
+See `CLAUDE.md` ("Release sequencing is mandatory") for the concrete sequence.
