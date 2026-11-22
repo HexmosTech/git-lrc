@@ -150,6 +150,28 @@ class LRCBuilder:
         
         return True
 
+    def check_release_branch(self):
+        """Releases are always cut from main.
+
+        A tag on a feature branch publishes commits that main does not
+        contain yet, so users get code that has not landed on the mainline.
+        Merge the branch into main first, then release from main.
+        """
+        if os.environ.get("ALLOW_RELEASE_FROM_BRANCH") == "1":
+            self.log("ALLOW_RELEASE_FROM_BRANCH=1: skipping mainline branch check.")
+            return
+        code, stdout, _ = self.run_command(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            check=False,
+        )
+        branch = stdout.strip() if code == 0 else ""
+        if branch != "main":
+            print(f"Error: releases must be cut from 'main', not '{branch or 'unknown'}'.")
+            print("Merge first: git checkout main && git merge --ff-only <branch>")
+            print("Then release from main. Set ALLOW_RELEASE_FROM_BRANCH=1 only for an")
+            print("intentional, documented exception.")
+            sys.exit(1)
+
     def get_commit_id(self) -> str:
         """Get current Git commit ID (short SHA)"""
         _, stdout, _ = self.run_command(["git", "rev-parse", "--short=7", "HEAD"])
@@ -558,6 +580,8 @@ class LRCBuilder:
             print("Error: Repository has uncommitted changes")
             print("Please commit or stash changes before bumping version")
             sys.exit(1)
+
+        self.check_release_branch()
         
         # Get current version
         current_version = self.get_version_from_source()
@@ -636,6 +660,7 @@ class LRCBuilder:
             version = INTERNAL_RELEASE_VERSION
             manifest_name = INTERNAL_RELEASE_MANIFEST_NAME
         else:
+            self.check_release_branch()
             version = self.get_version_from_source()
             manifest_name = PUBLIC_RELEASE_MANIFEST_NAME
 

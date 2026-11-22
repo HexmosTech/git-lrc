@@ -73,6 +73,11 @@ Scanning and releasing are separate, serialized phases, in this repo and in Live
 - Finish one repository's scan-then-release cycle before starting the other repository's.
   Never scan or release both repos in parallel.
 - One release at a time: bump, tag, upload binaries, then publish notes.
+- **Release from `main`, never from a feature branch.** Merge the feature branch into
+  `main` first (fast-forward when possible), push `main`, and only then bump/tag/upload
+  from `main`. A tag on a feature branch publishes code that `main` does not contain.
+  `scripts/lrc_build.py` enforces this and refuses to bump or release off `main`
+  (`ALLOW_RELEASE_FROM_BRANCH=1` is the deliberate, documented override).
 
 If a scanner is running, the only correct next action is to wait for its result.
 See `CLAUDE.md` ("Release sequencing is mandatory") for the concrete sequence.

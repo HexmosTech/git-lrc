@@ -20,6 +20,14 @@ release that contains an unresolved scanner finding.
    never be scanned or released in parallel from the same session.
 4. **One release at a time.** Only after that repository's scanners have all
    finished green: bump, tag, upload binaries, then publish release notes.
+5. **Release from `main`, never from a feature branch.** Merge the feature
+   branch into `main` first (`git checkout main && git merge --ff-only
+   <branch>`), push `main`, and only then run `make bump` / `make release` /
+   `make release-gh` from `main`. A tag created on a feature branch publishes
+   commits that `main` does not contain yet. `scripts/lrc_build.py` checks the
+   current branch and refuses to bump or publish off `main`;
+   `ALLOW_RELEASE_FROM_BRANCH=1` is the only override and must be justified in
+   the release report.
 
 If a scanner is running, the only correct next action is to wait for its
 result.
