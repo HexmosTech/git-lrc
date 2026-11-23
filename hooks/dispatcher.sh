@@ -1,7 +1,7 @@
 __LRC_MARKER_BEGIN__
 # lrc_version: __LRC_VERSION__
 # LiveReview global dispatcher for __HOOK_NAME__
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && { pwd -P || pwd; })"
 GIT_DIR="$(git rev-parse --git-dir 2>/dev/null || echo .git)"
 GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null || echo "$GIT_DIR")"
 LRC_DIR="$SCRIPT_DIR/lrc"
@@ -27,7 +27,9 @@ if [ $LRC_STATUS -ne 0 ]; then
 	exit $LRC_STATUS
 fi
 
-if [ -x "$LOCAL_HOOK" ]; then
+if [ -x "$LOCAL_HOOK" ] &&
+	LOCAL_DIR="$(cd "$(dirname "$LOCAL_HOOK")" 2>/dev/null && { pwd -P || pwd; })" &&
+	[ "$LOCAL_DIR/$(basename "$LOCAL_HOOK")" != "$SCRIPT_DIR/$(basename "$0")" ]; then
 	"$LOCAL_HOOK" "$@"
 	LOCAL_STATUS=$?
 	if [ $LOCAL_STATUS -ne 0 ]; then
