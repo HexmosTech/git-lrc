@@ -18,16 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 REPO="${REPO:-/home/shrsv/bin/LiveReview}"
-RANGE="${RANGE:-HEAD~8...HEAD}"
-PORT="${PORT:-8130}"
-OUT="${OUT:-$REPO_ROOT/tools/uidev/fixtures}"
-TIMEOUT_SECS="${TIMEOUT_SECS:-600}"
-
-LOG="$(mktemp /tmp/lrc-capture-XXXX.log)"
-
-if [[ -z "${LRC:-}" ]]; then
-    LRC="$(mktemp /tmp/lrc-capture-bin-XXXX)"
-    echo "Building lrc from $REPO_ROOT ..."
+RANGE="${RANGE:-HEAD~8...HEAD}"m $REPO_ROOT ..."
     (cd "$REPO_ROOT" && go build -o "$LRC" .)
 fi
 
