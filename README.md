@@ -353,6 +353,27 @@ the engine — scoring stays off. Disable explicitly with `--blast-radius=false`
 
 ### Cross-repo impact (related repositories)
 
+Most real systems are microservices. Many repos talk to each other over APIs, not just one.
+Connect your repos as **Related Repos**. This gives LiveReview that multi-repo context.
+Cross-repo impact matching, below, is the first concrete thing it powers.
+
+| Find impact beyond this repo | Visualize impact across repos |
+|:---:|:---:|
+| <img src="./gfx/cross-repo-impact-1.png" width="340"/> | <img src="./gfx/cross-repo-impact-2.png" width="340"/> |
+
+#### Language & Framework Support
+
+How much of a repo's call graph and service boundaries LiveReview can link, by language:
+
+| Support | Languages / frameworks |
+|---|---|
+| Best support | Lua, Kotlin, C++, Perl, Objective-C, Groovy, C, Bash, Zig, Swift, CSS, SCSS, HTML, YAML, TOML, HCL, Dockerfile |
+| Good support | TypeScript, TSX, JavaScript, Python, Go, Rust, Java, R, Dart, Erlang, Elixir, Scala, Ruby, PHP, C#, SQL |
+| Basic support | OCaml, Haskell |
+| Also indexed | 130+ more, including Vue, Svelte, Astro, Solidity, Protobuf, GraphQL, JSON, Markdown, Makefile and Nix |
+
+Cross-repo links detected: `HTTP routes`, `gRPC`, `GraphQL`, `tRPC`, `async / channel`.
+
 When the repository is connected to LiveReview and has **Related Repos** configured
 (Explore → Repository → Settings → Related Repos), a local review also asks LiveReview
 to match the touched symbols' outbound HTTP calls against routes declared by those
