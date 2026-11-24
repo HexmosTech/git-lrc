@@ -5,9 +5,25 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func scriptCommand(name string, args ...string) *exec.Cmd {
+	switch runtime.GOOS {
+	case "darwin", "freebsd":
+		scriptArgs := append([]string{"-q", "/dev/null", name}, args...)
+		return exec.Command("script", scriptArgs...)
+	default:
+		quoted := make([]string, 0, len(args)+1)
+		quoted = append(quoted, "'"+strings.ReplaceAll(name, "'", `'\''`)+"'")
+		for _, arg := range args {
+			quoted = append(quoted, "'"+strings.ReplaceAll(arg, "'", `'\''`)+"'")
+		}
+		return exec.Command("script", "-qec", strings.Join(quoted, " "), "/dev/null")
+	}
+}
 
 func testTemplateConfig() TemplateConfig {
 	return TemplateConfig{
@@ -240,9 +256,15 @@ exit 0
 	}
 	run(repoDir, nil, "git", "add", "note.txt")
 
-	env := append(os.Environ(), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	cmdText := "git -c core.hooksPath=.git/myhooks -c commit.cleanup=strip commit"
-	cmd := exec.Command("script", "-qec", cmdText, "/dev/null")
+	env := make([]string, 0, len(os.Environ())+1)
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "GIT_EDITOR=") {
+			continue
+		}
+		env = append(env, entry)
+	}
+	env = append(env, "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cmd := scriptCommand("git", "-c", "core.hooksPath=.git/myhooks", "-c", "commit.cleanup=strip", "commit")
 	cmd.Dir = repoDir
 	cmd.Env = env
 	output, err := cmd.CombinedOutput()
@@ -347,8 +369,7 @@ exit 0
 	run(repoDir, nil, "git", "add", "note.txt")
 
 	env := append(os.Environ(), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	cmdText := "sh " + filepath.Join(hooksDir, "prepare-commit-msg") + " " + commitMsgFile
-	cmd := exec.Command("script", "-qec", cmdText, "/dev/null")
+	cmd := scriptCommand("sh", filepath.Join(hooksDir, "prepare-commit-msg"), commitMsgFile)
 	cmd.Dir = repoDir
 	cmd.Env = env
 	output, err := cmd.CombinedOutput()
@@ -367,4 +388,44 @@ exit 0
 	if _, err := os.Stat(overrideMarker); err != nil {
 		t.Fatalf("expected editor override marker to exist, stat error = %v", err)
 	}
+}
+
+func TestDispatcherChainsOnlyDistinctLocalHook(t *testing.T) {
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	local := filepath.Join(repo, ".git/hooks/pre-commit")
+	managed := filepath.Join(repo, ".git/hooks/lrc")
+	if err := os.MkdirAll(managed, 0755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(path, body string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(body), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dispatcher := "#!/bin/sh\n[ -z \"$LRC_TEST_DISPATCHING\" ] || exit 99\nexport LRC_TEST_DISPATCHING=1\n" + GenerateDispatcherHook("pre-commit", testTemplateConfig()) + "\necho user\n"
+	write(local, dispatcher)
+	write(filepath.Join(managed, "pre-commit"), "#!/bin/sh\necho managed\n")
+	run := func(path, want string, status int) {
+		t.Helper()
+		cmd := exec.Command("sh", path)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		if cmd.ProcessState == nil || cmd.ProcessState.ExitCode() != status || string(out) != want {
+			t.Fatalf("hook returned %v, output %q, want status %d and %q", err, out, status, want)
+		}
+	}
+	run(".git/hooks/pre-commit", "managed\nuser\n", 0)
+	if err := os.Mkdir(filepath.Join(repo, ".git/lrc"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	write(filepath.Join(repo, ".git/lrc/disabled"), "")
+	run(local, "user\n", 0)
+	global := filepath.Join(t.TempDir(), "pre-commit")
+	write(global, dispatcher)
+	write(local, "#!/bin/sh\necho chained\nexit 7\n")
+	run(global, "chained\n", 7)
 }

@@ -294,28 +294,16 @@ func uninstallGitHookSurface(c *cli.Context) error {
 		meta, _ = readHooksMeta(absHooksPath)
 	}
 
+	var removed int
 	if localUninstall {
-		if err := uninstallEditorWrapper(gitDir); err != nil {
-			fmt.Printf("⚠️  Warning: failed to uninstall local editor wrapper: %v\n", err)
-		}
+		removed = uninstallLocalGitHooks(absHooksPath, gitDir)
 	} else {
 		if err := uninstallGlobalEditorWrapper(filepath.Join(absHooksPath, "lrc")); err != nil {
 			fmt.Printf("⚠️  Warning: failed to uninstall global editor wrapper: %v\n", err)
 		}
+		removed = uninstallManagedGitHooks(absHooksPath)
 	}
 
-	removed := 0
-	for _, hookName := range managedHooks {
-		hookPath := filepath.Join(absHooksPath, hookName)
-		if err := uninstallHook(hookPath, hookName); err != nil {
-			fmt.Printf("⚠️  Warning: failed to uninstall %s: %v\n", hookName, err)
-		} else {
-			removed++
-		}
-	}
-
-	_ = storage.RemoveManagedHooksDir(absHooksPath)
-	_ = storage.RemoveHooksBackupDir(absHooksPath)
 	if !localUninstall {
 		_ = removeHooksMeta(absHooksPath)
 	}
@@ -357,6 +345,17 @@ func uninstallGitHookSurface(c *cli.Context) error {
 	}
 
 	if !localUninstall {
+		if requestedPath == "" {
+			if root, localGitDir, commonDir, err := resolveRepoContext(); err == nil {
+				localPath, err := resolveRepoHooksPath(root, commonDir)
+				if err != nil {
+					return err
+				}
+				if !pathsEqual(localPath, absHooksPath) && hasLocalGitHooks(localPath, localGitDir) {
+					uninstallLocalGitHooks(localPath, localGitDir)
+				}
+			}
+		}
 		cleanEmptyHooksDir(absHooksPath)
 	}
 
@@ -367,6 +366,45 @@ func uninstallGitHookSurface(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+func hasLocalGitHooks(path, gitDir string) bool {
+	if fileExists(filepath.Join(gitDir, editorWrapperScript)) || fileExists(filepath.Join(path, "lrc")) || fileExists(filepath.Join(path, ".lrc_backups")) {
+		return true
+	}
+	for _, name := range managedHooks {
+		if hookHasManagedSection(filepath.Join(path, name)) {
+			return true
+		}
+	}
+	return false
+}
+
+func uninstallLocalGitHooks(path, gitDir string) int {
+	if err := uninstallEditorWrapper(gitDir); err != nil {
+		fmt.Printf("⚠️  Warning: failed to uninstall local editor wrapper: %v\n", err)
+	}
+	return uninstallManagedGitHooks(path)
+}
+
+func uninstallManagedGitHooks(absHooksPath string) int {
+	removed := 0
+	for _, hookName := range managedHooks {
+		hookPath := filepath.Join(absHooksPath, hookName)
+		if err := uninstallHook(hookPath, hookName); err != nil {
+			fmt.Printf("⚠️  Warning: failed to uninstall %s: %v\n", hookName, err)
+		} else {
+			removed++
+		}
+	}
+
+	if err := storage.RemoveManagedHooksDir(absHooksPath); err != nil {
+		fmt.Printf("⚠️  Warning: failed to remove managed hooks directory %s: %v\n", filepath.Join(absHooksPath, "lrc"), err)
+	}
+	if err := storage.RemoveHooksBackupDir(absHooksPath); err != nil {
+		fmt.Printf("⚠️  Warning: failed to remove hooks backup directory %s: %v\n", filepath.Join(absHooksPath, ".lrc_backups"), err)
+	}
+	return removed
 }
 
 // runHooksUninstall removes Git and/or Claude hook integrations depending on the selected surface.
